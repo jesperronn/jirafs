@@ -32,6 +32,7 @@ MINIMAL_DOCS = {
     "docs/credential-sources.md": "# Q\n",
     "docs/project-selection-cli.md": "# R\n",
     "docs/implementation-packets.md": "# S\n",
+    "docs/ralph-loop-implementation-tasks.md": "# T\n",
 }
 
 MINIMAL_SCRIPTS = {

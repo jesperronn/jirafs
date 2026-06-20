@@ -46,6 +46,7 @@ used for analysis, agent workflows, and team process improvement.
 - [Credential Sources](docs/credential-sources.md)
 - [Project Selection CLI](docs/project-selection-cli.md)
 - [Implementation Packets](docs/implementation-packets.md)
+- [Ralph Loop Implementation Tasks](docs/ralph-loop-implementation-tasks.md)
 
 ## Implementation Direction
 
@@ -74,6 +75,7 @@ The execution plan for that work now lives in:
 - [Credential Sources](docs/credential-sources.md)
 - [Project Selection CLI](docs/project-selection-cli.md)
 - [Implementation Packets](docs/implementation-packets.md)
+- [Ralph Loop Implementation Tasks](docs/ralph-loop-implementation-tasks.md)
 
 ## Language Direction
 

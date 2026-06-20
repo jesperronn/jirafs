@@ -27,6 +27,7 @@ DOC_FILES = [
     "docs/credential-sources.md",
     "docs/project-selection-cli.md",
     "docs/implementation-packets.md",
+    "docs/ralph-loop-implementation-tasks.md",
 ]
 
 SCRIPT_FILES = [
