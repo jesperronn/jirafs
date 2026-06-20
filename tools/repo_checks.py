@@ -19,6 +19,10 @@ DOC_FILES = [
     "docs/parallel-workstreams.md",
     "docs/verification-policy.md",
     "docs/development-rules.md",
+    "docs/mirror-model.md",
+    "docs/settings-and-context.md",
+    "docs/project-selection-cli.md",
+    "docs/implementation-packets.md",
 ]
 
 SCRIPT_FILES = [

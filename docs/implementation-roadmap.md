@@ -15,22 +15,38 @@ docs as the source of truth for:
 Implementation should proceed by freezing contracts before building features on
 top of them. The main dependency chain is:
 
-1. document and registry contracts
-2. codec and resolver
-3. Jira read path
-4. planner
-5. sync applier
-6. draft/template flow
-7. bulk export, archive, and board projections
+1. settings, context, and mirror contracts
+2. document and registry contracts
+3. codec and resolver
+4. Jira read path
+5. planner
+6. sync applier
+7. draft/template flow
+8. bulk export, archive, and board projections
 
 This roadmap should be read together with:
 
 - [Parallel Workstreams](parallel-workstreams.md)
 - [Verification Policy](verification-policy.md)
+- [Mirror Model](mirror-model.md)
+- [Settings And Context](settings-and-context.md)
+- [Project Selection CLI](project-selection-cli.md)
 
 ## Architectural Checkpoints
 
 These checkpoints gate work across milestones. Do not bypass them.
+
+### Checkpoint 0: Settings And Context Contract Is Frozen
+
+Freeze the operator-level configuration and project resolution rules first.
+
+Exit condition:
+
+- `~/.jirafs/settings.toml` shape is fixed for the first implementation
+- project resolution precedence is fixed
+- mirror directory ownership is fixed
+- current-project memory rules are fixed
+- commands know when to prompt versus fail
 
 ### Checkpoint A: Document Contract Is Frozen
 
@@ -118,6 +134,45 @@ Parallel work:
   parallel once the package layout is chosen.
 - Forbidden: feature modules must not invent their own ad hoc test harnesses or
   command dispatch patterns.
+
+### Milestone 0.5: Settings, Context, And Mirror Bootstrap
+
+Objective:
+Establish the operator-level configuration model before issue export and sync
+work begins.
+
+Deliverables:
+
+- settings loader for `~/.jirafs/settings.toml`
+- project and instance model validation
+- context resolver for `--project`, cwd detection, and remembered state
+- initial mirror scope model and mirror membership state
+
+Sequencing:
+
+1. Implement settings parsing and validation.
+2. Implement project resolution precedence.
+3. Implement current-project memory read and write.
+4. Implement mirror scope definitions and mirror directory resolution.
+
+Architectural checkpoint:
+
+- Must satisfy Checkpoint 0 before Milestone 4 begins.
+
+Acceptance criteria:
+
+- multiple Jira instances and projects can be configured
+- one project can point at a mirror directory outside any code repo
+- cwd-based project detection works from configured local folders
+- non-interactive unresolved project selection fails clearly
+- interactive unresolved project selection can prompt from known projects
+
+Parallel work:
+
+- Allowed: settings parsing and CLI project-selection UX can proceed in
+  parallel once one shared context model is agreed.
+- Forbidden: export, board, or mirror-refresh code must not invent private
+  project resolution rules.
 
 ### Milestone 1: Canonical Models and Schema Enforcement
 
@@ -243,6 +298,8 @@ Deliverables:
   queries, and metadata refresh
 - export command for a single issue first
 - registry refresh command for the initial registry set
+- mirror refresh for at least one named scope such as `my-issues` or
+  `current-sprint`
 
 Sequencing:
 
@@ -251,6 +308,7 @@ Sequencing:
 3. Write exported issue docs through the codec.
 4. Write registry refresh outputs through registry models.
 5. Add CLI integration for `export issue` and `registry refresh`.
+6. Add live mirror refresh for one shallow scope.
 
 Acceptance criteria:
 
@@ -259,6 +317,8 @@ Acceptance criteria:
 - export populates sync metadata required for later conflict detection
 - registry refresh writes valid registry files for the supported entity types
 - re-exporting the same unchanged issue produces stable local output
+- mirror refresh can populate a shallow live working set without recursively
+  importing every linked issue
 
 Parallel work:
 

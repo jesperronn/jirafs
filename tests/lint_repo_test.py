@@ -24,6 +24,10 @@ MINIMAL_DOCS = {
     "docs/parallel-workstreams.md": "# I\n",
     "docs/verification-policy.md": "# J\n",
     "docs/development-rules.md": "# K\n",
+    "docs/mirror-model.md": "# L\n",
+    "docs/settings-and-context.md": "# M\n",
+    "docs/project-selection-cli.md": "# N\n",
+    "docs/implementation-packets.md": "# O\n",
 }
 
 MINIMAL_SCRIPTS = {

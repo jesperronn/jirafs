@@ -10,6 +10,8 @@ It must be usable without Codex or another agent layer.
 
 Suggested top-level commands:
 
+- `jirafs use`
+- `jirafs mirror`
 - `jirafs init`
 - `jirafs export`
 - `jirafs plan`
@@ -28,6 +30,33 @@ Examples:
 ```text
 jirafs init
 jirafs init --jira-url https://jira.example.com
+jirafs init --project PLAT --mirror-dir ~/jira/platform
+```
+
+## Use
+
+Sets, clears, or shows the current Jira project context.
+
+Examples:
+
+```text
+jirafs use
+jirafs use platform
+jirafs use --clear
+```
+
+## Mirror
+
+Refreshes and manages named live mirror scopes.
+
+Examples:
+
+```text
+jirafs mirror refresh current-sprint
+jirafs mirror refresh my-issues
+jirafs mirror refresh --all
+jirafs mirror archive-sweep
+jirafs mirror status
 ```
 
 ## Export
@@ -41,6 +70,7 @@ jirafs export issue ABC-123
 jirafs export sprint current
 jirafs export jql 'assignee = currentUser()'
 jirafs export backlog
+jirafs export selected ABC-123 OPS-9
 ```
 
 ## Plan
@@ -76,6 +106,7 @@ Examples:
 jirafs new story
 jirafs new bug --summary 'Export fails on stale refs'
 jirafs new epic --template jira/templates/epic.md
+jirafs new story --project PLAT
 ```
 
 ## Registry
@@ -101,6 +132,7 @@ jirafs board
 jirafs board --sprint current
 jirafs board --group-by assignee
 jirafs board --group-by epic
+jirafs board --project PLAT
 ```
 
 ## Archive
@@ -128,10 +160,16 @@ Configuration should support:
 
 - Jira base URL
 - auth method
+- multiple Jira instances
+- project definitions
+- mirror directories
+- current-project memory
+- local folder detection
 - project defaults
 - board ids
 - custom field mappings
 - section-to-field mappings
 
-The current design direction is a local config file rather than only
-environment variables, while still allowing env overrides for secrets.
+The current design direction is a global config file at
+`~/.jirafs/settings.toml`, while still allowing environment or secret-manager
+references for credentials.

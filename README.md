@@ -38,6 +38,10 @@ used for analysis, agent workflows, and team process improvement.
 - [Parallel Workstreams](docs/parallel-workstreams.md)
 - [Verification Policy](docs/verification-policy.md)
 - [Development Rules](docs/development-rules.md)
+- [Mirror Model](docs/mirror-model.md)
+- [Settings And Context](docs/settings-and-context.md)
+- [Project Selection CLI](docs/project-selection-cli.md)
+- [Implementation Packets](docs/implementation-packets.md)
 
 ## Implementation Direction
 
@@ -49,6 +53,8 @@ The preferred implementation order is:
 4. Implement local diff/plan.
 5. Implement safe sync for a small editable field set.
 6. Add templates, bulk export, archive snapshots, and board projections.
+7. Add global settings, project selection, and mirror scope management as
+   first-class behavior.
 
 The execution plan for that work now lives in:
 
@@ -56,6 +62,10 @@ The execution plan for that work now lives in:
 - [Parallel Workstreams](docs/parallel-workstreams.md)
 - [Verification Policy](docs/verification-policy.md)
 - [Development Rules](docs/development-rules.md)
+- [Mirror Model](docs/mirror-model.md)
+- [Settings And Context](docs/settings-and-context.md)
+- [Project Selection CLI](docs/project-selection-cli.md)
+- [Implementation Packets](docs/implementation-packets.md)
 
 ## Language Direction
 
