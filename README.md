@@ -69,11 +69,48 @@ The execution plan for that work now lives in:
 
 ## Language Direction
 
-The current preference is Python for the first implementation:
+`jirafs` is now planned as a Go implementation.
 
-- strong YAML/JSON/Markdown tooling
-- fast iteration while the schema is still moving
-- simple CLI packaging
+Why Go:
 
-Go remains a plausible future choice if single-binary distribution becomes a
-higher priority than iteration speed.
+- single static binary distribution
+- minimal runtime assumptions on the operator machine
+- lower packaging and interpreter drift risk
+- strong long-term fit for a durable CLI utility
+
+The architecture and workflow docs remain valid; the implementation language
+changes, not the product model.
+
+## Dependency Policy
+
+`jirafs` should stay conservative about dependencies.
+
+Default rules:
+
+- prefer the Go standard library when it is sufficient
+- add a third-party dependency only when it removes meaningful complexity or
+  avoids building risky parsing or CLI behavior ourselves
+- prefer small, stable, well-maintained libraries over large frameworks
+- prefer libraries with narrow scope and low transitive dependency counts
+- avoid dependencies that force a large application framework shape onto the
+  codebase
+
+Initial likely third-party categories:
+
+- TOML parsing
+- YAML parsing when needed for local mirror config files
+- Markdown frontmatter handling only if the standard library plus a small
+  parser is not enough
+- CLI command parsing if the standard library proves too bare for predictable UX
+
+What we want to avoid:
+
+- heavy framework-style CLI stacks
+- large indirect dependency trees for simple parsing problems
+- generator-driven codebases where handwritten code would stay clearer
+- dependencies that make static builds or cross-platform release packaging
+  harder
+
+The repository should keep the same verification standard regardless of
+language choice: high test coverage, strict local linting, and green CI before
+merge.

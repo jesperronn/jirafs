@@ -169,3 +169,4 @@ work.
 - keep branches and PRs narrow enough for parallel development
 - record verification evidence with exact commands and outcomes
 - do not interfere with unrelated in-flight work
+- keep Go dependencies conservative and justify every new external package

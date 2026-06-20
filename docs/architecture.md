@@ -26,6 +26,20 @@ The product has four layers:
 The CLI is the primary public interface. Agents and skills should orchestrate
 the CLI or reuse the same library rather than owning Jira logic themselves.
 
+## Implementation Language
+
+The implementation target is Go.
+
+That choice is driven by distribution and maintenance concerns more than raw
+prototyping speed:
+
+- `jirafs` should be installable as a single binary
+- operators should not need to manage an interpreter or virtual environment
+- release packaging should stay simple across machines
+- the codebase should avoid runtime dependency drift
+
+The architectural module split remains the same regardless of language.
+
 ## Filesystem Model
 
 Suggested filesystem layout:
@@ -99,6 +113,31 @@ The library should be split into modules with clear ownership:
 - sync applier
 - template engine
 - board/query projections
+
+## Dependency Constraints
+
+The implementation should stay conservative about dependencies.
+
+Rules:
+
+- prefer the standard library first
+- add third-party packages only for real leverage, not convenience alone
+- prefer narrow packages with small transitive graphs
+- avoid framework-heavy libraries for CLI, config, or HTTP work
+- keep static builds and cross-platform distribution easy
+
+This matters especially for:
+
+- TOML and YAML parsing
+- Markdown and frontmatter handling
+- CLI command routing
+- HTTP client behavior
+
+Each non-trivial dependency should justify:
+
+- why the standard library is insufficient
+- why the package is safer or simpler than a local implementation
+- what operational or maintenance cost it adds
 
 ### Schema
 

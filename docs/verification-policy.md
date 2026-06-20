@@ -68,6 +68,8 @@ expected gates are:
 - `bin/test` or equivalent full test command
 - focused test commands for the changed area
 - coverage command that reports total line coverage
+- language-native static analysis appropriate for Go, such as formatting,
+  vetting, and any selected linter wrapper used by `bin/lint`
 
 If a dedicated wrapper does not exist yet, the author must run the equivalent
 native commands and record them in the change description. Missing automation is
@@ -86,6 +88,12 @@ Coverage rules:
 
 If total coverage drops below 90%, the change is not ready to merge unless the
 change itself raises coverage and a documented exception is explicitly approved.
+
+For Go specifically, the same policy applies:
+
+- package-level tests are required for new behavior
+- integration tests are required across read/plan/sync boundaries when touched
+- coverage must be measured from the actual Go test suite, not approximated
 
 ## Verification By Change Class
 
