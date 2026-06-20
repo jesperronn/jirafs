@@ -21,6 +21,7 @@ DOC_FILES = [
     "docs/development-rules.md",
     "docs/mirror-model.md",
     "docs/settings-and-context.md",
+    "docs/credential-sources.md",
     "docs/project-selection-cli.md",
     "docs/implementation-packets.md",
 ]

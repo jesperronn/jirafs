@@ -26,8 +26,9 @@ MINIMAL_DOCS = {
     "docs/development-rules.md": "# K\n",
     "docs/mirror-model.md": "# L\n",
     "docs/settings-and-context.md": "# M\n",
-    "docs/project-selection-cli.md": "# N\n",
-    "docs/implementation-packets.md": "# O\n",
+    "docs/credential-sources.md": "# N\n",
+    "docs/project-selection-cli.md": "# O\n",
+    "docs/implementation-packets.md": "# P\n",
 }
 
 MINIMAL_SCRIPTS = {

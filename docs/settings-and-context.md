@@ -19,6 +19,9 @@ This file should answer four questions:
 4. What context should `jirafs` use right now when the user does not pass
    every flag explicitly?
 
+This file is the routing layer for configuration. It is not intended to be the
+main secret store.
+
 ## Scope
 
 This is global operator state, not per-mirror content.
@@ -39,6 +42,9 @@ It should not own:
 - registry snapshots
 - per-issue sync metadata
 - secrets stored in plain text by default
+
+Secret-bearing values should normally live in separate credential sources and be
+referenced from settings rather than embedded directly.
 
 ## Model
 
@@ -103,12 +109,17 @@ current_user = "jesper"
 [instances.work]
 base_url = "https://jira.example.com"
 auth_type = "atlassian_api_token"
-credential_ref = "keychain://jirafs/work"
+credential_refs = [
+  "file://~/.jirafs/credentials/work-user.toml",
+  "env://JIRAFS_WORK_API_TOKEN",
+]
 
 [instances.client_a]
 base_url = "https://client-a.atlassian.net"
-auth_type = "env"
-credential_ref = "env://JIRAFS_CLIENT_A_TOKEN"
+auth_type = "atlassian_api_token"
+credential_refs = [
+  "op://Engineering/client-a/jira-api-token",
+]
 
 [projects.platform]
 key = "PLAT"
@@ -143,8 +154,10 @@ local_dirs = [
 - `version` is required and guards future migration logic.
 - `instances.<name>.base_url` is required and must be absolute.
 - `instances.<name>.auth_type` is required.
-- `instances.<name>.credential_ref` is required unless an auth mode explicitly
-  says no credentials are needed.
+- `instances.<name>.credential_refs` is preferred and may contain one or more
+  references resolved in order.
+- `instances.<name>.credential_ref` may be retained as a compatibility alias if
+  the implementation wants a single-ref shorthand.
 - `projects.<name>.key` is required and should be the canonical Jira project
   key.
 - `projects.<name>.instance` must reference a declared instance.
@@ -163,11 +176,37 @@ Supported patterns can be implementation-defined, but the model should assume
 references such as:
 
 - `env://JIRAFS_WORK_TOKEN`
-- `keychain://jirafs/work`
-- `1password://Engineering/jirafs-work/api-token`
+- `file://~/.jirafs/credentials/work.toml`
+- `op://Engineering/jirafs-work/api-token`
+- `command://jirafs-credential-work`
 
 The CLI resolves the reference at runtime. The settings file should not require
 copying API tokens into TOML.
+
+For the first implementation, one instance should normally declare:
+
+- one credential source, or
+- a short ordered list of credential sources merged left-to-right
+
+That supports split configuration such as:
+
+- non-secret identity in one local file
+- token from an environment variable or secret manager
+
+Example:
+
+```toml
+[instances.work]
+base_url = "https://jira.example.com"
+auth_type = "atlassian_api_token"
+credential_refs = [
+  "file://~/.jirafs/credentials/work-user.toml",
+  "env://JIRAFS_WORK_API_TOKEN",
+]
+```
+
+See [Credential Sources](credential-sources.md) for the provider model and
+merge rules.
 
 ## Context Resolution
 
@@ -273,6 +312,7 @@ Settings loading should fail early on:
   unavoidable ambiguity
 - invalid or relative `base_url`
 - empty `mirror_dir`
+- invalid or unsupported credential reference schemes
 
 Commands should fail with context-specific errors when:
 

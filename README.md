@@ -40,6 +40,7 @@ used for analysis, agent workflows, and team process improvement.
 - [Development Rules](docs/development-rules.md)
 - [Mirror Model](docs/mirror-model.md)
 - [Settings And Context](docs/settings-and-context.md)
+- [Credential Sources](docs/credential-sources.md)
 - [Project Selection CLI](docs/project-selection-cli.md)
 - [Implementation Packets](docs/implementation-packets.md)
 
@@ -64,6 +65,7 @@ The execution plan for that work now lives in:
 - [Development Rules](docs/development-rules.md)
 - [Mirror Model](docs/mirror-model.md)
 - [Settings And Context](docs/settings-and-context.md)
+- [Credential Sources](docs/credential-sources.md)
 - [Project Selection CLI](docs/project-selection-cli.md)
 - [Implementation Packets](docs/implementation-packets.md)
 
