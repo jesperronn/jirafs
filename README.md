@@ -34,6 +34,10 @@ used for analysis, agent workflows, and team process improvement.
 - [Templates](docs/templates.md)
 - [CLI](docs/cli.md)
 - [Agent Integration](docs/agent-skill-integration.md)
+- [Implementation Roadmap](docs/implementation-roadmap.md)
+- [Parallel Workstreams](docs/parallel-workstreams.md)
+- [Verification Policy](docs/verification-policy.md)
+- [Development Rules](docs/development-rules.md)
 
 ## Implementation Direction
 
@@ -45,6 +49,13 @@ The preferred implementation order is:
 4. Implement local diff/plan.
 5. Implement safe sync for a small editable field set.
 6. Add templates, bulk export, archive snapshots, and board projections.
+
+The execution plan for that work now lives in:
+
+- [Implementation Roadmap](docs/implementation-roadmap.md)
+- [Parallel Workstreams](docs/parallel-workstreams.md)
+- [Verification Policy](docs/verification-policy.md)
+- [Development Rules](docs/development-rules.md)
 
 ## Language Direction
 
