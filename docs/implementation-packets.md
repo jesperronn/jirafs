@@ -15,8 +15,26 @@ Read this together with:
 
 - [Implementation Roadmap](implementation-roadmap.md)
 - [Parallel Workstreams](parallel-workstreams.md)
+- [Orchestration Model](orchestration-model.md)
 - [Verification Policy](verification-policy.md)
 - [Development Rules](development-rules.md)
+- [Validator Contract](validator-contract.md)
+
+## Packet Splitting Rule
+
+The packets in this document are orchestrator-level packets, not builder-level
+tasks.
+
+Before assigning a packet to a simple builder, the orchestrator should split it
+into smaller sub-packets that each have:
+
+- one path owner
+- one narrow behavior
+- one explicit validation target
+- one clear stop condition
+
+Do not hand a full packet to a builder if it still contains multiple seams or
+multiple proof targets.
 
 ## Packet P0: Settings Skeleton
 

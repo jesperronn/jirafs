@@ -9,6 +9,9 @@ They extend, but do not replace:
 
 - [Verification Policy](verification-policy.md)
 - [Parallel Workstreams](parallel-workstreams.md)
+- [Orchestration Model](orchestration-model.md)
+- [Code Style](code-style.md)
+- [Validator Contract](validator-contract.md)
 
 When these documents overlap, keep the stricter rule.
 
@@ -81,6 +84,9 @@ A handoff must let the next worker continue without guessing.
 - the exact commands already run
 - the results of those commands
 - the next smallest useful step for the receiving worker
+
+Use the standard handoff shape from
+[Orchestration Model](orchestration-model.md).
 
 ### Handoff Rules
 
@@ -170,3 +176,4 @@ work.
 - record verification evidence with exact commands and outcomes
 - do not interfere with unrelated in-flight work
 - keep Go dependencies conservative and justify every new external package
+- keep code simple enough to lint, test, refactor, and hand off easily

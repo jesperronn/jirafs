@@ -38,6 +38,8 @@ Architecture-affecting changes should also be checked against:
 - [Architecture](architecture.md)
 - [Implementation Roadmap](implementation-roadmap.md)
 - [Parallel Workstreams](parallel-workstreams.md)
+- [Validator Contract](validator-contract.md)
+- [Code Style](code-style.md)
 
 ## Required Local Loop
 
@@ -55,6 +57,7 @@ The author should repeat the narrowest possible loop while editing:
 
 - targeted test command after each logic change
 - targeted lint or typecheck after interface changes
+- targeted validator after each document or schema edit
 - full suite before asking for review
 
 Do not rely on review or CI to perform first-pass debugging.
@@ -70,6 +73,7 @@ expected gates are:
 - coverage command that reports total line coverage
 - language-native static analysis appropriate for Go, such as formatting,
   vetting, and any selected linter wrapper used by `bin/lint`
+- an autofix-capable formatting and lint path for local development
 
 If a dedicated wrapper does not exist yet, the author must run the equivalent
 native commands and record them in the change description. Missing automation is

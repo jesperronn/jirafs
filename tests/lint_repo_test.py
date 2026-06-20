@@ -22,13 +22,16 @@ MINIMAL_DOCS = {
     "docs/agent-skill-integration.md": "# G\n",
     "docs/implementation-roadmap.md": "# H\n",
     "docs/parallel-workstreams.md": "# I\n",
-    "docs/verification-policy.md": "# J\n",
-    "docs/development-rules.md": "# K\n",
-    "docs/mirror-model.md": "# L\n",
-    "docs/settings-and-context.md": "# M\n",
-    "docs/credential-sources.md": "# N\n",
-    "docs/project-selection-cli.md": "# O\n",
-    "docs/implementation-packets.md": "# P\n",
+    "docs/orchestration-model.md": "# J\n",
+    "docs/verification-policy.md": "# K\n",
+    "docs/development-rules.md": "# L\n",
+    "docs/code-style.md": "# M\n",
+    "docs/validator-contract.md": "# N\n",
+    "docs/mirror-model.md": "# O\n",
+    "docs/settings-and-context.md": "# P\n",
+    "docs/credential-sources.md": "# Q\n",
+    "docs/project-selection-cli.md": "# R\n",
+    "docs/implementation-packets.md": "# S\n",
 }
 
 MINIMAL_SCRIPTS = {
