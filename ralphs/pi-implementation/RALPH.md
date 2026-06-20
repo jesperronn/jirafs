@@ -4,9 +4,9 @@ commands:
   - name: git_status
     run: git status --short
   - name: task_ledger
-    run: sed -n '1,260p' docs/ralph-loop-implementation-tasks.md
+    run: cat docs/ralph-loop-implementation-tasks.md
   - name: recent_commits
-    run: git log --oneline -5
+    run: git log --oneline -3
   - name: tests
     run: bin/test
   - name: lint
@@ -14,39 +14,25 @@ commands:
 ---
 # jirafs Pi Implementation Loop
 
-You are implementing `jirafs` one small step at a time.
+Implement one `jirafs` task, then stop.
 
-Read the live task ledger and pick the first unchecked task whose dependencies
-are complete. Complete exactly one task in this iteration, update the task
-ledger checkbox only after validation passes, provide a handoff, then stop.
+Pick the first unchecked task whose deps are done in the ledger below.
 
-## Hard Rules
+Rules:
 
-- Run at most two delegate implementors at a time.
-- Keep the task path-local. Do not edit outside the owned paths unless the task
-  explicitly names that file or directory.
-- Add or update tests for all new code in the same iteration.
-- Run `bin/test` and `bin/lint` after the final diff.
-- Do not mark a task complete unless both `bin/test` and `bin/lint` pass.
-- Do not claim verification that was not run against the final diff.
-- If validation fails, fix the task before starting anything else.
-- If blocked, stop with a partial handoff and do not continue into another task.
+- One task per iteration. Do not start a second task.
+- Use at most two delegate implementors at once.
+- Stay inside owned paths except for explicitly named integration files.
+- New code needs tests in the same task.
+- Final gates: `bin/test` and `bin/lint`.
+- Mark `[x]` only after both gates pass.
+- Commit successful work after gates pass. Use conventional commit wording.
+- Do not commit blocked or failing work.
+- Handoff must include final gate results and commit hash.
+- Local model context is small: read only the docs needed for the chosen task.
 
-## Project Context
-
-- Product goal: local-first Jira workspace with structured Markdown issue files
-  and safe sync back to Jira.
-- Implementation language: Go.
-- Dependency policy: prefer the Go standard library; justify every new external
-  dependency.
-- Important docs:
-  - `docs/implementation-roadmap.md`
-  - `docs/implementation-packets.md`
-  - `docs/ralph-loop-implementation-tasks.md`
-  - `docs/orchestration-model.md`
-  - `docs/development-rules.md`
-  - `docs/verification-policy.md`
-  - `docs/code-style.md`
+Project: Go CLI for local-first Jira Markdown workspace. Prefer stdlib; justify
+new dependencies.
 
 ## Current Git Status
 
@@ -70,35 +56,35 @@ ledger checkbox only after validation passes, provide a handoff, then stop.
 
 ## Required Handoff
 
-Return exactly this structure:
+Return this:
 
 ```text
 Task:
-- one-sentence objective
+- <id and objective>
 
 Scope:
-- owned paths
-- explicit out-of-scope paths
+- <owned paths>
 
 Acceptance:
-- concrete behaviors now true
+- <what is now true>
 
 Validation:
-- `bin/test`: pass or fail, with final outcome
-- `bin/lint`: pass or fail, with final outcome
-- any targeted tests or manual checks
+- bin/test: <pass/fail>
+- bin/lint: <pass/fail>
+- other: <targeted tests/manual checks>
 
 Files changed:
-- exact paths
+- <paths>
+
+Commit:
+- <hash and subject, or none if partial/blocked>
 
 Status:
-- done, partial, or blocked
+- <done|partial|blocked>
 
 Next smallest step:
-- one follow-on action for the next builder or orchestrator
+- <one action>
 
 Risks:
-- open questions, contract pressure, or known gaps
+- <open issues or none>
 ```
-
-Stop after that handoff. Do not start a second task in the same iteration.
