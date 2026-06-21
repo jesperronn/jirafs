@@ -82,3 +82,138 @@ func TestNormalizeIssue(t *testing.T) {
 func ptrString(s string) *string {
 	return &s
 }
+
+func TestNormalizeLinkedIssues(t *testing.T) {
+	type args struct {
+		fields map[string]interface{}
+	}
+	tests := []struct {
+		name    string
+		args    args
+		wantLen int
+		wantKeys []string
+		wantTypes []string
+	}{
+		{
+			name: "nil fields",
+			args: args{fields: nil},
+			wantLen: 0,
+		},
+		{
+			name: "no issuelinks",
+			args: args{fields: map[string]interface{}{}},
+			wantLen: 0,
+		},
+		{
+			name: "empty issuelinks",
+			args: args{fields: map[string]interface{}{"issuelinks": []interface{}{}}},
+			wantLen: 0,
+		},
+		{
+			name: "outward link",
+			args: args{fields: map[string]interface{}{
+				"issuelinks": []interface{}{
+					map[string]interface{}{
+						"type": map[string]interface{}{"name": "blocks"},
+						"outwardIssue": map[string]interface{}{"key": "PROJ-456"},
+					},
+				},
+			}},
+			wantLen:   1,
+			wantKeys:  []string{"PROJ-456"},
+			wantTypes: []string{"blocks"},
+		},
+		{
+			name: "inward link",
+			args: args{fields: map[string]interface{}{
+				"issuelinks": []interface{}{
+					map[string]interface{}{
+						"type": map[string]interface{}{"name": "is blocked by"},
+						"issue": map[string]interface{}{"key": "PROJ-789"},
+					},
+				},
+			}},
+			wantLen:   1,
+			wantKeys:  []string{"PROJ-789"},
+			wantTypes: []string{"is blocked by"},
+		},
+		{
+			name: "multiple links dedup by key",
+			args: args{fields: map[string]interface{}{
+				"issuelinks": []interface{}{
+					map[string]interface{}{
+						"type": map[string]interface{}{"name": "blocks"},
+						"outwardIssue": map[string]interface{}{"key": "PROJ-456"},
+					},
+					map[string]interface{}{
+						"type": map[string]interface{}{"name": "is blocked by"},
+						"issue": map[string]interface{}{"key": "PROJ-456"},
+					},
+				},
+			}},
+			wantLen:   1,
+			wantKeys:  []string{"PROJ-456"},
+			wantTypes: []string{"blocks"},
+		},
+		{
+			name: "multiple distinct links",
+			args: args{fields: map[string]interface{}{
+				"issuelinks": []interface{}{
+					map[string]interface{}{
+						"type": map[string]interface{}{"name": "relates to"},
+						"outwardIssue": map[string]interface{}{"key": "PROJ-100"},
+					},
+					map[string]interface{}{
+						"type": map[string]interface{}{"name": "blocks"},
+						"outwardIssue": map[string]interface{}{"key": "PROJ-200"},
+					},
+				},
+			}},
+			wantLen:   2,
+			wantKeys:  []string{"PROJ-100", "PROJ-200"},
+			wantTypes: []string{"relates to", "blocks"},
+		},
+		{
+			name: "missing key is skipped",
+			args: args{fields: map[string]interface{}{
+				"issuelinks": []interface{}{
+					map[string]interface{}{
+						"type": map[string]interface{}{"name": "relates to"},
+					},
+				},
+			}},
+			wantLen: 0,
+		},
+		{
+			name: "missing link type defaults to empty",
+			args: args{fields: map[string]interface{}{
+				"issuelinks": []interface{}{
+					map[string]interface{}{
+						"outwardIssue": map[string]interface{}{"key": "PROJ-999"},
+					},
+				},
+			}},
+			wantLen:   1,
+			wantKeys:  []string{"PROJ-999"},
+			wantTypes: []string{""},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			issue := &schema.Issue{}
+			NormalizeLinkedIssues(issue, tt.args.fields)
+			if len(issue.LinkedIssues) != tt.wantLen {
+				t.Errorf("LinkedIssues len = %d, want %d; got %#v", len(issue.LinkedIssues), tt.wantLen, issue.LinkedIssues)
+				return
+			}
+			for i := range tt.wantKeys {
+				if string(issue.LinkedIssues[i].Key) != tt.wantKeys[i] {
+					t.Errorf("LinkedIssues[%d].Key = %q, want %q", i, issue.LinkedIssues[i].Key, tt.wantKeys[i])
+				}
+				if issue.LinkedIssues[i].Type != tt.wantTypes[i] {
+					t.Errorf("LinkedIssues[%d].Type = %q, want %q", i, issue.LinkedIssues[i].Type, tt.wantTypes[i])
+				}
+			}
+		})
+	}
+}
