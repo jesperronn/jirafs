@@ -51,7 +51,7 @@ func ParseIssue(content string) (Issue, *ParseError) {
 	var issue Issue
 
 	// Extract frontmatter from the content string.
-	frontmatter, _, pe := extractFrontmatter(content)
+	frontmatter, body, pe := extractFrontmatter(content)
 	if pe != nil {
 		return Issue{}, pe
 	}
@@ -138,6 +138,23 @@ func ParseIssue(content string) (Issue, *ParseError) {
 			ContentHash:   rawState.ContentHash,
 			SyncTime:      syncTime,
 			StateFile:     rawState.State,
+		}
+	}
+
+	// Populate Sections from body when present.
+	if body != "" {
+		blocks := splitSectionBlocks(body)
+		issue.Sections = make(map[FixedSectionName]string)
+		for _, b := range blocks {
+			name := FixedSectionName(b.Heading)
+			issue.Sections[name] = b.Body
+		}
+		// Ensure Description and Acceptance Criteria always exist.
+		if _, ok := issue.Sections[SecDescription]; !ok {
+			issue.Sections[SecDescription] = ""
+		}
+		if _, ok := issue.Sections[SecAcceptanceCriteria]; !ok {
+			issue.Sections[SecAcceptanceCriteria] = ""
 		}
 	}
 
