@@ -35,6 +35,18 @@ func IsResolveError(err error, code string) bool {
 	}
 }
 
+// ErrMissingRef returns a *ResolveError for a missing typed ref.
+// The error includes the ref type and the lookup value so callers
+// can report exactly what was searched for.
+func ErrMissingRef(refType, lookupValue string) *ResolveError {
+	return &ResolveError{
+		RefType: refType,
+		Ref:     lookupValue,
+		Code:    "missing_ref",
+		Msg:     fmt.Sprintf("no %s found for %s", refType, lookupValue),
+	}
+}
+
 var errMissingRef = errors.New("registry: missing_ref: typed ref is empty")
 
 // ParseTypedRef splits a typed ref like "user:jesper" into (type, key).
