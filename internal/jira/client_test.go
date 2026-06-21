@@ -576,3 +576,125 @@ func TestBuildAuthenticatedRequestNilRequest(t *testing.T) {
 		t.Errorf("error should mention nil request, got %q", err.Error())
 	}
 }
+
+func TestCurrentUserSuccess(t *testing.T) {
+	payload := map[string]interface{}{
+		"self":         "https://jira.example.com/rest/api/3/user?username=john.doe",
+		"key":          "john.doe",
+		"name":         "john.doe",
+		"emailAddress": "john@example.com",
+		"displayName":  "John Doe",
+		"active":       true,
+		"timeZone":     "America/New_York",
+		"accountType":  "atlassian",
+	}
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet {
+			t.Errorf("method = %s, want GET", r.Method)
+		}
+		wantPath := "/rest/api/3/myself"
+		if r.URL.Path != wantPath {
+			t.Errorf("path = %s, want %s", r.URL.Path, wantPath)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(payload)
+	}))
+	defer server.Close()
+
+	client := NewJiraClient(server.URL)
+	user, err := client.CurrentUser(context.Background())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if user == nil {
+		t.Fatal("expected non-nil user")
+	}
+	if user.Name != "john.doe" {
+		t.Errorf("name = %q, want %q", user.Name, "john.doe")
+	}
+	if user.DisplayName != "John Doe" {
+		t.Errorf("displayName = %q, want %q", user.DisplayName, "John Doe")
+	}
+	if user.EmailAddress != "john@example.com" {
+		t.Errorf("emailAddress = %q, want %q", user.EmailAddress, "john@example.com")
+	}
+	if !user.Active {
+		t.Error("expected active user")
+	}
+	if user.Timezone != "America/New_York" {
+		t.Errorf("timezone = %q, want %q", user.Timezone, "America/New_York")
+	}
+	if user.AccountType != "atlassian" {
+		t.Errorf("accountType = %q, want %q", user.AccountType, "atlassian")
+	}
+}
+
+func TestCurrentUserNotFound(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusNotFound)
+		w.Write([]byte(`{"errorMessages":["User does not exist"],"errors":{}}`))
+	}))
+	defer server.Close()
+
+	client := NewJiraClient(server.URL)
+	_, err := client.CurrentUser(context.Background())
+	if !IsClientError(err, ErrNotFound) {
+		t.Errorf("expected not_found error, got %v", err)
+	}
+}
+
+func TestCurrentUserAuthError(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusUnauthorized)
+		w.Write([]byte(`{"errorMessages":["Unauthorized"]}`))
+	}))
+	defer server.Close()
+
+	client := NewJiraClient(server.URL)
+	_, err := client.CurrentUser(context.Background())
+	if !IsClientError(err, ErrAuth) {
+		t.Errorf("expected auth error, got %v", err)
+	}
+}
+
+func TestCurrentUserHTTPError(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+		w.Write([]byte(`{"errorMessages":["Internal server error"]}`))
+	}))
+	defer server.Close()
+
+	client := NewJiraClient(server.URL)
+	_, err := client.CurrentUser(context.Background())
+	if !IsClientError(err, ErrHTTP) {
+		t.Errorf("expected http error, got %v", err)
+	}
+}
+
+func TestCurrentUserTransportError(t *testing.T) {
+	client := NewJiraClient("http://localhost:1")
+	ctx, cancel := context.WithTimeout(context.Background(), 100*1000000)
+	defer cancel()
+	_, err := client.CurrentUser(ctx)
+	if err == nil {
+		t.Fatal("expected error for connection refused")
+	}
+}
+
+func TestCurrentUserInvalidJSON(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.Write([]byte(`not json`))
+	}))
+	defer server.Close()
+
+	client := NewJiraClient(server.URL)
+	_, err := client.CurrentUser(context.Background())
+	if err == nil {
+		t.Fatal("expected error for invalid JSON")
+	}
+	if !IsClientError(err, ErrUnknown) {
+		t.Errorf("expected unknown error, got %v", err)
+	}
+}

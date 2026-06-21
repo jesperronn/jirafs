@@ -13,6 +13,18 @@ import (
 	"github.com/jirafs/jirafs/internal/schema"
 )
 
+// User represents the authenticated Jira user returned by the /myself endpoint.
+type User struct {
+	Self         string `json:"self"`
+	Key          string `json:"key"`
+	Name         string `json:"name"`
+	EmailAddress string `json:"emailAddress"`
+	DisplayName  string `json:"displayName"`
+	Active       bool   `json:"active"`
+	Timezone     string `json:"timeZone"`
+	AccountType  string `json:"accountType"`
+}
+
 // Client is the Jira API client interface for fetching and searching issues.
 // Implementations may talk to a real Jira REST API or a fake transport.
 type Client interface {
@@ -21,6 +33,9 @@ type Client interface {
 
 	// SearchIssues returns issues matching the given scope.
 	SearchIssues(ctx context.Context, scope string) ([]*schema.Issue, error)
+
+	// CurrentUser returns the authenticated user identity from the Jira API.
+	CurrentUser(ctx context.Context) (*User, error)
 }
 
 // jiraErrorDetails captures the structured error response from Jira.
@@ -155,4 +170,43 @@ func (c *JiraClient) FetchIssue(ctx context.Context, key string) (*schema.Issue,
 // Implementation is deferred to later tasks.
 func (c *JiraClient) SearchIssues(ctx context.Context, scope string) ([]*schema.Issue, error) {
 	return nil, NewUnknownErr("SearchIssues not yet implemented for JiraClient")
+}
+
+// CurrentUser calls the Jira /rest/api/3/myself endpoint to retrieve
+// the authenticated user's identity. It is used for scope resolution
+// when building JQL queries that depend on the current user.
+func (c *JiraClient) CurrentUser(ctx context.Context) (*User, error) {
+	url := c.baseURL + "/rest/api/3/myself"
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		return nil, NewTransportError("cannot create request: " + err.Error())
+	}
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return nil, NewTransportError("request failed: " + err.Error())
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode == http.StatusNotFound {
+		return nil, NewNotFoundError("myself")
+	}
+
+	if resp.StatusCode >= 400 && resp.StatusCode < 500 {
+		if resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden {
+			return nil, NewAuthError("HTTP " + fmt.Sprintf("%d", resp.StatusCode))
+		}
+		return nil, mapHTTPErr(resp)
+	}
+
+	if resp.StatusCode >= 500 {
+		return nil, mapHTTPErr(resp)
+	}
+
+	var u User
+	if err := json.NewDecoder(resp.Body).Decode(&u); err != nil {
+		return nil, NewUnknownErr("cannot parse user JSON: " + err.Error())
+	}
+
+	return &u, nil
 }

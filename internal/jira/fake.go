@@ -10,10 +10,11 @@ import (
 // FakeTransport is a fake Jira client for testing without a real network.
 // Callers set Issues and Err before invoking FetchIssue or SearchIssues.
 type FakeTransport struct {
-	mu      sync.RWMutex
-	issues  map[string]*schema.Issue // key -> issue
-	err     error                    // returned when ErrOn is set
-	errOn   string                   // "fetch" or "search"
+	mu            sync.RWMutex
+	issues        map[string]*schema.Issue // key -> issue
+	currentUser   *User                    // set by SetCurrentUser
+	err           error                    // returned when ErrOn is set
+	errOn         string                   // "fetch", "search", or "user"
 	issuesByScope map[string][]*schema.Issue // scope -> issues
 }
 
@@ -85,6 +86,34 @@ func (f *FakeTransport) SearchIssues(_ context.Context, scope string) ([]*schema
 		}
 	}
 	return issues, nil
+}
+
+// SetCurrentUser registers a user that CurrentUser will return.
+func (f *FakeTransport) SetCurrentUser(u *User) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.currentUser = u
+}
+
+// CurrentUser returns the registered current user, or the configured
+// error if ErrOn == "user". When no user is registered it returns a
+// default user derived from the first registered issue's assignee, or a
+// synthetic user with name "jirafs-test" when no issues exist.
+func (f *FakeTransport) CurrentUser(_ context.Context) (*User, error) {
+	f.mu.RLock()
+	defer f.mu.RUnlock()
+	if f.errOn == "user" {
+		return nil, f.err
+	}
+	if f.currentUser != nil {
+		return f.currentUser, nil
+	}
+	return &User{
+		Name:        "jirafs-test",
+		DisplayName: "Jirafs Test User",
+		EmailAddress: "jirafs-test@example.com",
+		Active:      true,
+	}, nil
 }
 
 // generateScopeIssues returns deterministic issues for known scopes.

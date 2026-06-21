@@ -233,3 +233,64 @@ func TestFakeTransportClearsErrorAfterRead(t *testing.T) {
 		t.Fatal("expected non-nil issue on second call")
 	}
 }
+
+func TestFakeTransportCurrentUserDefault(t *testing.T) {
+	fake := NewFakeTransport()
+
+	user, err := fake.CurrentUser(context.Background())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if user == nil {
+		t.Fatal("expected non-nil user")
+	}
+	if user.Name != "jirafs-test" {
+		t.Errorf("name = %q, want %q", user.Name, "jirafs-test")
+	}
+	if !user.Active {
+		t.Error("expected active user")
+	}
+}
+
+func TestFakeTransportCurrentUserSet(t *testing.T) {
+	fake := NewFakeTransport()
+	fake.SetCurrentUser(&User{
+		Name:        "jdoe",
+		DisplayName: "Jane Doe",
+		EmailAddress: "jdoe@example.com",
+		Active:      true,
+		Timezone:    "Europe/Copenhagen",
+		AccountType: "atlassian",
+	})
+
+	user, err := fake.CurrentUser(context.Background())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if user.Name != "jdoe" {
+		t.Errorf("name = %q, want %q", user.Name, "jdoe")
+	}
+	if user.DisplayName != "Jane Doe" {
+		t.Errorf("displayName = %q, want %q", user.DisplayName, "Jane Doe")
+	}
+	if user.EmailAddress != "jdoe@example.com" {
+		t.Errorf("emailAddress = %q, want %q", user.EmailAddress, "jdoe@example.com")
+	}
+	if user.Timezone != "Europe/Copenhagen" {
+		t.Errorf("timezone = %q, want %q", user.Timezone, "Europe/Copenhagen")
+	}
+	if user.AccountType != "atlassian" {
+		t.Errorf("accountType = %q, want %q", user.AccountType, "atlassian")
+	}
+}
+
+func TestFakeTransportCurrentUserWithError(t *testing.T) {
+	fake := NewFakeTransport()
+	wantErr := errors.New("auth failed")
+	fake.SetErr("user", wantErr)
+
+	_, err := fake.CurrentUser(context.Background())
+	if err != wantErr {
+		t.Errorf("expected %v, got %v", wantErr, err)
+	}
+}
