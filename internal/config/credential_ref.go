@@ -74,3 +74,19 @@ func ParseCredentialRef(ref string) (CredentialRef, error) {
 		Target: target,
 	}, nil
 }
+
+// ParseCredentialRefs parses a slice of raw credential ref strings into an
+// ordered slice of typed CredentialRef values. It preserves the input order
+// and returns the first error encountered (from the lowest-index entry).
+// An empty input returns an empty slice with no error.
+func ParseCredentialRefs(refs []string) ([]CredentialRef, error) {
+	out := make([]CredentialRef, 0, len(refs))
+	for _, ref := range refs {
+		parsed, err := ParseCredentialRef(ref)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, parsed)
+	}
+	return out, nil
+}
