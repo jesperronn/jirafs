@@ -397,28 +397,79 @@ func TestMirror_IsArchiveEligible(t *testing.T) {
 			{Key: "PROJ-200", Scope: "active"},
 		},
 	}
-	// Out-of-scope + resolved = eligible
-	if !m.IsArchiveEligible("PROJ-300", ResolvedStatusResolved) {
+	synced := schema.RemoteMetadata{
+		RemoteVersion:  "1",
+		ContentHash:    "abc",
+		ResolvedStatus: string(ResolvedStatusResolved),
+	}
+	// Out-of-scope + synced + resolved = eligible
+	if !m.IsArchiveEligible("PROJ-300", ResolvedStatusResolved, synced) {
 		t.Error("out-of-scope resolved issue should be archive-eligible")
 	}
 	// Explicitly imported + resolved = not eligible
-	if m.IsArchiveEligible("PROJ-100", ResolvedStatusResolved) {
+	if m.IsArchiveEligible("PROJ-100", ResolvedStatusResolved, synced) {
 		t.Error("explicitly imported issue should not be archive-eligible")
 	}
 	// Scope member + resolved = not eligible
-	if m.IsArchiveEligible("PROJ-200", ResolvedStatusResolved) {
+	if m.IsArchiveEligible("PROJ-200", ResolvedStatusResolved, synced) {
 		t.Error("scope member should not be archive-eligible")
 	}
 	// Out-of-scope + open = not eligible
-	if m.IsArchiveEligible("PROJ-300", ResolvedStatusOpen) {
+	if m.IsArchiveEligible("PROJ-300", ResolvedStatusOpen, synced) {
 		t.Error("out-of-scope open issue should not be archive-eligible")
 	}
 }
 
 func TestMirror_IsArchiveEligible_empty(t *testing.T) {
 	var m Mirror
-	// Empty mirror: out-of-scope + resolved = eligible
-	if !m.IsArchiveEligible("PROJ-123", ResolvedStatusResolved) {
+	// Empty mirror: out-of-scope + synced + resolved = eligible
+	synced := schema.RemoteMetadata{
+		RemoteVersion:  "1",
+		ContentHash:    "abc",
+		ResolvedStatus: string(ResolvedStatusResolved),
+	}
+	if !m.IsArchiveEligible("PROJ-123", ResolvedStatusResolved, synced) {
 		t.Error("empty mirror: out-of-scope resolved issue should be eligible")
+	}
+}
+
+func TestMirror_IsArchiveEligible_pinned(t *testing.T) {
+	m := Mirror{
+		Project: schema.TypedRef{Type: schema.RefProject, Value: "ABC"},
+	}
+	// Pinned issue is not eligible even if out-of-scope and resolved
+	remote := schema.RemoteMetadata{
+		RemoteVersion:  "1",
+		ContentHash:    "abc",
+		ResolvedStatus: string(ResolvedStatusResolved),
+		Pinned:         true,
+	}
+	if m.IsArchiveEligible("PROJ-123", ResolvedStatusResolved, remote) {
+		t.Error("pinned issue should not be archive-eligible")
+	}
+}
+
+func TestMirror_IsArchiveEligible_unsynced(t *testing.T) {
+	m := Mirror{
+		Project: schema.TypedRef{Type: schema.RefProject, Value: "ABC"},
+	}
+	// Unsynced issue (zero remote metadata) is not eligible
+	var zeroRemote schema.RemoteMetadata
+	if m.IsArchiveEligible("PROJ-123", ResolvedStatusResolved, zeroRemote) {
+		t.Error("unsynced issue should not be archive-eligible")
+	}
+}
+
+func TestMirror_IsArchiveEligible_synced_but_not_resolved(t *testing.T) {
+	m := Mirror{
+		Project: schema.TypedRef{Type: schema.RefProject, Value: "ABC"},
+	}
+	// Synced but open = not eligible
+	remote := schema.RemoteMetadata{
+		RemoteVersion: "1",
+		ContentHash:   "abc",
+	}
+	if m.IsArchiveEligible("PROJ-123", ResolvedStatusOpen, remote) {
+		t.Error("synced open issue should not be archive-eligible")
 	}
 }
