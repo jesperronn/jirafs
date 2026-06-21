@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"os"
 	"strings"
+
+	"github.com/pelletier/go-toml/v2"
 )
 
 // CredentialRef holds the parsed components of a credential reference string.
@@ -114,6 +116,75 @@ func ResolveEnvCredential(ref CredentialRef) (ResolvedCredential, error) {
 			ref.Target: value,
 		},
 	}, nil
+}
+
+// ResolveFileCredential reads the file at ref.Target (a file:// path),
+// parses it as TOML, and returns a ResolvedCredential with the parsed
+// string key-value pairs as Fields. If the file cannot be read or parsed,
+// it returns ErrCredentialResolve.
+func ResolveFileCredential(ref CredentialRef) (ResolvedCredential, error) {
+	if ref.Scheme != "file" {
+		return ResolvedCredential{}, NewSettingError(
+			ErrCredentialResolve,
+			fmt.Sprintf("expected file:// scheme, got %q", ref.Scheme),
+			"credential_ref", ref.Scheme+"://"+ref.Target,
+		)
+	}
+
+	path := ref.Target
+	if strings.HasPrefix(path, "~") {
+		home, err := os.UserHomeDir()
+		if err != nil {
+			return ResolvedCredential{}, NewSettingError(
+				ErrCredentialResolve,
+				fmt.Sprintf("cannot resolve home directory for path %q", path),
+				"credential_ref", "file://"+path,
+			)
+		}
+		path = home + path[1:]
+	}
+
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return ResolvedCredential{}, NewSettingError(
+			ErrCredentialResolve,
+			fmt.Sprintf("cannot read credential file %q: %s", path, err),
+			"credential_ref", "file://"+path,
+		)
+	}
+
+	fields, err := parseTOMLFields(data)
+	if err != nil {
+		return ResolvedCredential{}, NewSettingError(
+			ErrCredentialResolve,
+			fmt.Sprintf("cannot parse credential file %q: %s", path, err),
+			"credential_ref", "file://"+path,
+		)
+	}
+
+	return ResolvedCredential{
+		Scheme: "file",
+		Target: ref.Target,
+		Fields: fields,
+	}, nil
+}
+
+// parseTOMLFields parses a TOML byte slice and returns a map of top-level
+// string key-value pairs. Only scalar string values are included; other
+// types are skipped. Returns an error on TOML parse failure.
+func parseTOMLFields(data []byte) (map[string]string, error) {
+	var raw map[string]interface{}
+	if err := toml.Unmarshal(data, &raw); err != nil {
+		return nil, err
+	}
+
+	fields := make(map[string]string, len(raw))
+	for k, v := range raw {
+		if s, ok := v.(string); ok {
+			fields[k] = s
+		}
+	}
+	return fields, nil
 }
 
 // ParseCredentialRefs parses a slice of raw credential ref strings into an

@@ -1,6 +1,7 @@
 package config
 
 import (
+	"os"
 	"testing"
 )
 
@@ -200,6 +201,178 @@ func TestResolveEnvCredential(t *testing.T) {
 					tt.ref, tt.wantKey, got.Fields[tt.wantKey], tt.wantValue)
 			}
 		})
+	}
+}
+
+func TestResolveFileCredential(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// Create a valid TOML credential file
+	validTOML := `api_token = "file-token-123"
+api_secret = "file-secret-456"
+`
+	validPath := tmpDir + "/valid.toml"
+	if err := os.WriteFile(validPath, []byte(validTOML), 0644); err != nil {
+		t.Fatalf("write valid TOML: %v", err)
+	}
+
+	// Create an empty TOML file
+	emptyTOML := ""
+	emptyPath := tmpDir + "/empty.toml"
+	if err := os.WriteFile(emptyPath, []byte(emptyTOML), 0644); err != nil {
+		t.Fatalf("write empty TOML: %v", err)
+	}
+
+	// Create a non-TOML file
+	badContent := `not = [valid, toml`
+	badPath := tmpDir + "/bad.toml"
+	if err := os.WriteFile(badPath, []byte(badContent), 0644); err != nil {
+		t.Fatalf("write bad TOML: %v", err)
+	}
+
+	// Create a TOML with non-string values
+	nonStringTOML := `api_token = "string-val"
+port = 8080
+enabled = true
+`
+	nonStringPath := tmpDir + "/nonstring.toml"
+	if err := os.WriteFile(nonStringPath, []byte(nonStringTOML), 0644); err != nil {
+		t.Fatalf("write non-string TOML: %v", err)
+	}
+
+	tests := []struct {
+		name      string
+		ref       CredentialRef
+		wantErr   bool
+		wantCode  string
+		wantKeys  int
+		wantField map[string]string
+	}{
+		{
+			name: "valid TOML file resolves",
+			ref:  CredentialRef{Scheme: "file", Target: validPath},
+			wantErr: false,
+			wantKeys: 2,
+			wantField: map[string]string{
+				"api_token":  "file-token-123",
+				"api_secret": "file-secret-456",
+			},
+		},
+		{
+			name:    "non-existent file returns error",
+			ref:     CredentialRef{Scheme: "file", Target: tmpDir + "/nope.toml"},
+			wantErr: true,
+			wantCode: ErrCredentialResolve,
+		},
+		{
+			name:    "invalid TOML returns error",
+			ref:     CredentialRef{Scheme: "file", Target: badPath},
+			wantErr: true,
+			wantCode: ErrCredentialResolve,
+		},
+		{
+			name:    "non-file scheme returns error",
+			ref:     CredentialRef{Scheme: "env", Target: "SOME_VAR"},
+			wantErr: true,
+			wantCode: ErrCredentialResolve,
+		},
+		{
+			name: "empty TOML returns empty fields",
+			ref:  CredentialRef{Scheme: "file", Target: emptyPath},
+			wantErr: false,
+			wantKeys: 0,
+		},
+		{
+			name: "TOML with non-string values skips them",
+			ref:  CredentialRef{Scheme: "file", Target: nonStringPath},
+			wantErr: false,
+			wantKeys: 1,
+			wantField: map[string]string{
+				"api_token": "string-val",
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := ResolveFileCredential(tt.ref)
+
+			if tt.wantErr {
+				if err == nil {
+					t.Errorf("ResolveFileCredential(%+v) expected error, got nil", tt.ref)
+					return
+				}
+				if tt.wantCode != "" {
+					if !IsSettingError(err, tt.wantCode) {
+						t.Errorf("ResolveFileCredential(%+v) error code = %v, want %v",
+							tt.ref, err, tt.wantCode)
+					}
+				}
+				return
+			}
+
+			if err != nil {
+				t.Errorf("ResolveFileCredential(%+v) unexpected error = %v", tt.ref, err)
+				return
+			}
+
+			if got.Scheme != "file" {
+				t.Errorf("ResolveFileCredential(%+v).Scheme = %q, want %q",
+					tt.ref, got.Scheme, "file")
+			}
+			if got.Target != tt.ref.Target {
+				t.Errorf("ResolveFileCredential(%+v).Target = %q, want %q",
+					tt.ref, got.Target, tt.ref.Target)
+			}
+			if len(got.Fields) != tt.wantKeys {
+				t.Errorf("ResolveFileCredential(%+v).Fields length = %d, want %d",
+					tt.ref, len(got.Fields), tt.wantKeys)
+			}
+			for k, wantV := range tt.wantField {
+				if got.Fields[k] != wantV {
+					t.Errorf("ResolveFileCredential(%+v).Fields[%q] = %q, want %q",
+						tt.ref, k, got.Fields[k], wantV)
+				}
+			}
+		})
+	}
+}
+
+func TestResolveFileCredentialHomeDir(t *testing.T) {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		t.Skip("cannot determine home directory")
+	}
+
+	tmpDir := t.TempDir()
+	credFile := tmpDir + "/creds.toml"
+	credContent := `api_token = "home-test-token"
+`
+	if err := os.WriteFile(credFile, []byte(credContent), 0644); err != nil {
+		t.Fatalf("write test credential: %v", err)
+	}
+
+	// Build a ~-prefixed path from home + relative segment
+	rel := "/creds.toml"
+	relPath := "~" + rel
+	// Write the file in the real home dir for this test
+	realPath := home + rel
+	if err := os.WriteFile(realPath, []byte(credContent), 0644); err != nil {
+		t.Fatalf("write home credential: %v", err)
+	}
+	t.Cleanup(func() { os.Remove(realPath) })
+
+	ref := CredentialRef{Scheme: "file", Target: relPath}
+
+	got, err := ResolveFileCredential(ref)
+	if err != nil {
+		t.Fatalf("ResolveFileCredential(%q) unexpected error = %v", relPath, err)
+	}
+	if len(got.Fields) != 1 {
+		t.Fatalf("expected 1 field, got %d", len(got.Fields))
+	}
+	if got.Fields["api_token"] != "home-test-token" {
+		t.Errorf("api_token = %q, want %q", got.Fields["api_token"], "home-test-token")
 	}
 }
 
