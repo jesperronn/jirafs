@@ -211,10 +211,7 @@ func (r *Resolver) resolveCwd(cwd string) (*Context, error) {
 	}
 
 	if best == nil {
-		candidates := make([]string, 0, len(r.settings.Projects))
-		for name := range r.settings.Projects {
-			candidates = append(candidates, name)
-		}
+		candidates := sortedProjectNames(r.settings.Projects)
 		return nil, NewError(config.ErrNoProjectResolved,
 			fmt.Sprintf("no project matches cwd %q", cwd), candidates...)
 	}
@@ -226,10 +223,7 @@ func (r *Resolver) resolveCwd(cwd string) (*Context, error) {
 func (r *Resolver) resolveState() (*Context, error) {
 	stateName := r.settings.State.CurrentProject
 	if stateName == "" {
-		candidates := make([]string, 0, len(r.settings.Projects))
-		for name := range r.settings.Projects {
-			candidates = append(candidates, name)
-		}
+		candidates := sortedProjectNames(r.settings.Projects)
 		return nil, NewError(config.ErrNoProjectResolved,
 			"no project configured and no remembered project", candidates...)
 	}
@@ -365,4 +359,13 @@ func isPrefixOf(prefix, target string) bool {
 // depth returns the number of path components in p.
 func depth(p string) int {
 	return strings.Count(p, string(os.PathSeparator)) + 1
+}
+
+func sortedProjectNames(projects map[string]config.Project) []string {
+	names := make([]string, 0, len(projects))
+	for name := range projects {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	return names
 }

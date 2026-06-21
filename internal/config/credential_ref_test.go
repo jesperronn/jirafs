@@ -2,6 +2,7 @@ package config
 
 import (
 	"os"
+	"path/filepath"
 	"testing"
 )
 
@@ -659,6 +660,141 @@ func TestValidateResolvedCredential(t *testing.T) {
 
 			if err != nil {
 				t.Errorf("ValidateResolvedCredential(%q, %+v) unexpected error = %v", tt.authType, tt.cred, err)
+			}
+		})
+	}
+}
+
+func TestResolveInstanceCredentials(t *testing.T) {
+	tmpDir := t.TempDir()
+	credsFile := filepath.Join(tmpDir, "creds.toml")
+	if err := os.WriteFile(credsFile, []byte("api_token = \"file-token\"\n"), 0o644); err != nil {
+		t.Fatalf("setup: write creds file: %v", err)
+	}
+
+	t.Setenv("API_TOKEN_OVERRIDE", "env-token")
+
+	tests := []struct {
+		name         string
+		settings     *Settings
+		instanceName string
+		wantErr      bool
+		wantCode     string
+		wantBaseURL  string
+		wantAuthType string
+		wantFields   map[string]string
+	}{
+		{
+			name: "resolves and merges instance credentials",
+			settings: &Settings{
+				Instances: map[string]Instance{
+					"work": {
+						BaseURL:  "https://jira.example.com",
+						AuthType: "atlassian_api_token",
+						CredentialRefs: []string{
+							"file://" + credsFile,
+							"env://API_TOKEN_OVERRIDE",
+						},
+					},
+				},
+			},
+			instanceName: "work",
+			wantBaseURL:  "https://jira.example.com",
+			wantAuthType: "atlassian_api_token",
+			wantFields: map[string]string{
+				"api_token":          "file-token",
+				"API_TOKEN_OVERRIDE": "env-token",
+			},
+		},
+		{
+			name: "missing instance returns no usable instance",
+			settings: &Settings{
+				Instances: map[string]Instance{},
+			},
+			instanceName: "missing",
+			wantErr:      true,
+			wantCode:     ErrNoUsableInstance,
+		},
+		{
+			name: "missing credential refs returns no usable instance",
+			settings: &Settings{
+				Instances: map[string]Instance{
+					"work": {
+						BaseURL:  "https://jira.example.com",
+						AuthType: "atlassian_api_token",
+					},
+				},
+			},
+			instanceName: "work",
+			wantErr:      true,
+			wantCode:     ErrNoUsableInstance,
+		},
+		{
+			name: "invalid credential ref returns parse error",
+			settings: &Settings{
+				Instances: map[string]Instance{
+					"work": {
+						BaseURL:  "https://jira.example.com",
+						AuthType: "atlassian_api_token",
+						CredentialRefs: []string{
+							"vault://bad",
+						},
+					},
+				},
+			},
+			instanceName: "work",
+			wantErr:      true,
+			wantCode:     ErrInvalidCredentialRef,
+		},
+		{
+			name: "missing required auth field returns validation error",
+			settings: &Settings{
+				Instances: map[string]Instance{
+					"work": {
+						BaseURL:  "https://jira.example.com",
+						AuthType: "basic",
+						CredentialRefs: []string{
+							"env://API_TOKEN_OVERRIDE",
+						},
+					},
+				},
+			},
+			instanceName: "work",
+			wantErr:      true,
+			wantCode:     ErrMissingAuthField,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := tt.settings.ResolveInstanceCredentials(tt.instanceName)
+
+			if tt.wantErr {
+				if err == nil {
+					t.Fatalf("ResolveInstanceCredentials(%q) expected error, got nil", tt.instanceName)
+				}
+				if tt.wantCode != "" && !IsSettingError(err, tt.wantCode) {
+					t.Fatalf("ResolveInstanceCredentials(%q) error = %v, want code %q", tt.instanceName, err, tt.wantCode)
+				}
+				return
+			}
+
+			if err != nil {
+				t.Fatalf("ResolveInstanceCredentials(%q) unexpected error = %v", tt.instanceName, err)
+			}
+			if got.BaseURL != tt.wantBaseURL {
+				t.Fatalf("BaseURL = %q, want %q", got.BaseURL, tt.wantBaseURL)
+			}
+			if got.AuthType != tt.wantAuthType {
+				t.Fatalf("AuthType = %q, want %q", got.AuthType, tt.wantAuthType)
+			}
+			if len(got.Credential.Fields) != len(tt.wantFields) {
+				t.Fatalf("credential field count = %d, want %d", len(got.Credential.Fields), len(tt.wantFields))
+			}
+			for key, want := range tt.wantFields {
+				if got.Credential.Fields[key] != want {
+					t.Fatalf("credential field %q = %q, want %q", key, got.Credential.Fields[key], want)
+				}
 			}
 		})
 	}

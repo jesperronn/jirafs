@@ -737,7 +737,7 @@ mirror_dir = "/mirror/alpha"
 	}
 
 	r := NewResolver(s, "")
-	prompter := &mockPrompter{selected: 1} // select "growth" (index 1)
+	prompter := &mockPrompter{selected: 1} // select "growth" (sorted index 1)
 
 	ctx, err := r.InteractiveResolve("/tmp/nowhere", prompter)
 	if err != nil {
@@ -797,7 +797,7 @@ mirror_dir = "/mirror/grow"
 	}
 
 	r := NewResolver(s, "")
-	prompter := &mockPrompter{selected: 0} // select "platform" (index 0)
+	prompter := &mockPrompter{selected: 1} // select "platform" (sorted index 1)
 
 	ctx, err := r.InteractiveResolve("/tmp/nowhere", prompter)
 	if err != nil {
@@ -1012,7 +1012,7 @@ mirror_dir = "/mirror/grow"
 	}
 
 	r := NewResolver(s, "")
-	prompter := &mockPrompter{selected: 0} // select "platform"
+	prompter := &mockPrompter{selected: 1} // select "platform" (sorted index 1)
 
 	ctx, err := r.InteractiveResolve("/tmp/nowhere", prompter)
 	if err != nil {

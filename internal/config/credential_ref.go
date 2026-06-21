@@ -88,6 +88,14 @@ type ResolvedCredential struct {
 	Fields map[string]string // normalized auth fields
 }
 
+// ResolvedInstanceCredentials packages the instance-level connection details
+// Jira callers need after credential resolution is complete.
+type ResolvedInstanceCredentials struct {
+	BaseURL    string
+	AuthType   string
+	Credential ResolvedCredential
+}
+
 // ResolveEnvCredential reads the environment variable named by Target and
 // returns a ResolvedCredential with the variable name as the key and the
 // variable value as the value in Fields. If the variable is unset, it
@@ -285,4 +293,69 @@ func ParseCredentialRefs(refs []string) ([]CredentialRef, error) {
 		out = append(out, parsed)
 	}
 	return out, nil
+}
+
+// ResolveInstanceCredentials resolves, merges, and validates credentials for a
+// named instance from the loaded settings. It is the path-local API that Jira
+// callers should use instead of re-implementing credential resolution.
+func (s *Settings) ResolveInstanceCredentials(instanceName string) (ResolvedInstanceCredentials, error) {
+	inst, ok := s.Instances[instanceName]
+	if !ok {
+		return ResolvedInstanceCredentials{}, NewSettingError(
+			ErrNoUsableInstance,
+			fmt.Sprintf("instance %q not found", instanceName),
+			"instance",
+			instanceName,
+		)
+	}
+
+	if len(inst.CredentialRefs) == 0 {
+		return ResolvedInstanceCredentials{}, NewSettingError(
+			ErrNoUsableInstance,
+			fmt.Sprintf("instance %q has no credential_refs", instanceName),
+			"instances."+instanceName+".credential_refs",
+			"",
+		)
+	}
+
+	parsedRefs, err := ParseCredentialRefs(inst.CredentialRefs)
+	if err != nil {
+		return ResolvedInstanceCredentials{}, err
+	}
+
+	resolved := make([]ResolvedCredential, 0, len(parsedRefs))
+	for _, ref := range parsedRefs {
+		switch ref.Scheme {
+		case "env":
+			cred, err := ResolveEnvCredential(ref)
+			if err != nil {
+				return ResolvedInstanceCredentials{}, err
+			}
+			resolved = append(resolved, cred)
+		case "file":
+			cred, err := ResolveFileCredential(ref)
+			if err != nil {
+				return ResolvedInstanceCredentials{}, err
+			}
+			resolved = append(resolved, cred)
+		default:
+			return ResolvedInstanceCredentials{}, NewSettingError(
+				ErrInvalidCredentialRef,
+				fmt.Sprintf("unsupported credential ref scheme %q", ref.Scheme),
+				"credential_ref",
+				ref.Scheme+"://"+ref.Target,
+			)
+		}
+	}
+
+	merged := MergeCredentials(resolved)
+	if err := ValidateResolvedCredential(inst.AuthType, merged); err != nil {
+		return ResolvedInstanceCredentials{}, err
+	}
+
+	return ResolvedInstanceCredentials{
+		BaseURL:    inst.BaseURL,
+		AuthType:   inst.AuthType,
+		Credential: merged,
+	}, nil
 }
