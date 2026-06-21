@@ -267,6 +267,132 @@ state: draft
 	}
 }
 
+func TestParseIssue_parse_description_and_acceptance_sections(t *testing.T) {
+	content := `---
+key: ABC-123
+type: story
+project: project:ABC
+schema_version: "1"
+---
+## Description
+Some description text.
+
+## Acceptance Criteria
+- Criterion one
+- Criterion two
+`
+
+	issue, err := ParseIssue(content)
+	if err != nil {
+		t.Fatalf("ParseIssue returned error: %v", err)
+	}
+
+	if len(issue.Sections) != 2 {
+		t.Fatalf("Sections = %d, want 2", len(issue.Sections))
+	}
+
+	wantDesc := "Some description text."
+	if issue.Sections[SecDescription] != wantDesc {
+		t.Errorf("Sections[Description] = %q, want %q", issue.Sections[SecDescription], wantDesc)
+	}
+
+	wantAc := "- Criterion one\n- Criterion two"
+	if issue.Sections[SecAcceptanceCriteria] != wantAc {
+		t.Errorf("Sections[Acceptance Criteria] = %q, want %q",
+			issue.Sections[SecAcceptanceCriteria], wantAc)
+	}
+}
+
+func TestParseIssue_parse_multiple_sections(t *testing.T) {
+	content := `---
+key: ABC-1
+type: story
+project: project:ABC
+schema_version: "1"
+---
+## Description
+First section content.
+
+## Notes
+More notes here.
+
+## Acceptance Criteria
+Done when this is true.
+`
+
+	issue, err := ParseIssue(content)
+	if err != nil {
+		t.Fatalf("ParseIssue returned error: %v", err)
+	}
+
+	if len(issue.Sections) != 3 {
+		t.Fatalf("Sections = %d, want 3", len(issue.Sections))
+	}
+
+	if issue.Sections[SecDescription] != "First section content." {
+		t.Errorf("Description = %q, want %q",
+			issue.Sections[SecDescription], "First section content.")
+	}
+	if issue.Sections[SecNotes] != "More notes here." {
+		t.Errorf("Notes = %q, want %q",
+			issue.Sections[SecNotes], "More notes here.")
+	}
+	if issue.Sections[SecAcceptanceCriteria] != "Done when this is true." {
+		t.Errorf("Acceptance Criteria = %q, want %q",
+			issue.Sections[SecAcceptanceCriteria], "Done when this is true.")
+	}
+}
+
+func TestParseIssue_parse_empty_section_content(t *testing.T) {
+	content := `---
+key: ABC-1
+type: story
+project: project:ABC
+schema_version: "1"
+---
+## Description
+
+## Acceptance Criteria
+`
+
+	issue, err := ParseIssue(content)
+	if err != nil {
+		t.Fatalf("ParseIssue returned error: %v", err)
+	}
+
+	if issue.Sections[SecDescription] != "" {
+		t.Errorf("Description = %q, want empty", issue.Sections[SecDescription])
+	}
+	if issue.Sections[SecAcceptanceCriteria] != "" {
+		t.Errorf("Acceptance Criteria = %q, want empty", issue.Sections[SecAcceptanceCriteria])
+	}
+}
+
+func TestParseIssue_parse_multiline_section(t *testing.T) {
+	content := `---
+key: ABC-1
+type: story
+project: project:ABC
+schema_version: "1"
+---
+## Description
+Line one.
+Line two.
+Line three.
+`
+
+	issue, err := ParseIssue(content)
+	if err != nil {
+		t.Fatalf("ParseIssue returned error: %v", err)
+	}
+
+	want := "Line one.\nLine two.\nLine three."
+	if issue.Sections[SecDescription] != want {
+		t.Errorf("Description = %q, want %q",
+			issue.Sections[SecDescription], want)
+	}
+}
+
 func TestParseIssue_empty_sections(t *testing.T) {
 	content := `---
 key: SEC-1
@@ -284,9 +410,15 @@ schema_version: "1"
 		t.Fatalf("ParseIssue returned error: %v", err)
 	}
 
-	// B030a does not parse sections yet; Sections should be nil.
-	if issue.Sections != nil {
-		t.Errorf("Sections should be nil for B030a, got %v", issue.Sections)
+	// B031a parses sections; empty section bodies are still populated.
+	if len(issue.Sections) != 2 {
+		t.Fatalf("Sections = %d, want 2", len(issue.Sections))
+	}
+	if issue.Sections[SecDescription] != "" {
+		t.Errorf("Sections[Description] = %q, want empty", issue.Sections[SecDescription])
+	}
+	if issue.Sections[SecAcceptanceCriteria] != "" {
+		t.Errorf("Sections[Acceptance Criteria] = %q, want empty", issue.Sections[SecAcceptanceCriteria])
 	}
 }
 
