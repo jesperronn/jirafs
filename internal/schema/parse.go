@@ -8,6 +8,34 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
+// ParseErrorKind identifies the category of a frontmatter parse failure.
+type ParseErrorKind string
+
+const (
+	// ErrKindNoFrontmatter means the content had no frontmatter delimiters.
+	ErrKindNoFrontmatter ParseErrorKind = "no_frontmatter"
+	// ErrKindNoClosingDelimiter means the frontmatter had no closing delimiter.
+	ErrKindNoClosingDelimiter ParseErrorKind = "no_closing_delimiter"
+	// ErrKindInvalidYAML means the frontmatter was not valid YAML.
+	ErrKindInvalidYAML ParseErrorKind = "invalid_yaml"
+	// ErrKindInvalidProjectRef means the project field was not a valid typed ref.
+	ErrKindInvalidProjectRef ParseErrorKind = "invalid_project_ref"
+	// ErrKindInvalidSyncTime means the sync_time field was not a valid RFC3339 date.
+	ErrKindInvalidSyncTime ParseErrorKind = "invalid_sync_time"
+)
+
+// ParseError is a structured error returned by ParseIssue when frontmatter
+// validation fails. The Kind field identifies the failure category so callers
+// can handle specific error conditions programmatically.
+type ParseError struct {
+	Kind ParseErrorKind
+	Msg  string
+}
+
+func (e *ParseError) Error() string {
+	return string(e.Kind) + ": " + e.Msg
+}
+
 // ParseIssue parses the YAML frontmatter of an issue file content string
 // and returns a populated Issue. It handles synced and draft issue
 // frontmatter including identity, machine-owned fields, remote metadata,
@@ -16,17 +44,23 @@ import (
 // The frontmatter is expected to be delimited by "---" at the start and
 // end of the content. Everything between the delimiters is parsed as YAML
 // into the Issue's Identity, MachineOwned, RemoteMetadata, and State fields.
-func ParseIssue(content string) (Issue, error) {
+//
+// On failure, ParseIssue returns a *ParseError whose Kind identifies the
+// failure category (ErrKindNoFrontmatter, ErrKindInvalidYAML, etc.).
+func ParseIssue(content string) (Issue, *ParseError) {
 	var issue Issue
 
 	// Extract frontmatter from the content string.
-	frontmatter, err := extractFrontmatter(content)
-	if err != nil {
-		return Issue{}, fmt.Errorf("parse issue: %w", err)
+	frontmatter, pe := extractFrontmatter(content)
+	if pe != nil {
+		return Issue{}, pe
 	}
 
 	if frontmatter == "" {
-		return issue, fmt.Errorf("parse issue: no frontmatter found")
+		return issue, &ParseError{
+			Kind: ErrKindNoFrontmatter,
+			Msg:  "no frontmatter found",
+		}
 	}
 
 	// Parse the identity fields.
@@ -36,7 +70,10 @@ func ParseIssue(content string) (Issue, error) {
 		Project string `yaml:"project"`
 	}
 	if err := yaml.Unmarshal([]byte(frontmatter), &rawIdentity); err != nil {
-		return Issue{}, fmt.Errorf("parse issue: invalid YAML: %w", err)
+		return Issue{}, &ParseError{
+			Kind: ErrKindInvalidYAML,
+			Msg:  err.Error(),
+		}
 	}
 
 	issue.Identity = IssueIdentity{
@@ -48,7 +85,10 @@ func ParseIssue(content string) (Issue, error) {
 	if rawIdentity.Project != "" {
 		pr, err := ParseTypedRef(rawIdentity.Project)
 		if err != nil {
-			return Issue{}, fmt.Errorf("parse issue: invalid project ref: %w", err)
+			return Issue{}, &ParseError{
+				Kind: ErrKindInvalidProjectRef,
+				Msg:  err.Error(),
+			}
 		}
 		issue.Identity.Project = pr
 	}
@@ -58,7 +98,10 @@ func ParseIssue(content string) (Issue, error) {
 		SchemaVersion string `yaml:"schema_version"`
 	}
 	if err := yaml.Unmarshal([]byte(frontmatter), &rawMachine); err != nil {
-		return Issue{}, fmt.Errorf("parse issue: invalid YAML: %w", err)
+		return Issue{}, &ParseError{
+			Kind: ErrKindInvalidYAML,
+			Msg:  err.Error(),
+		}
 	}
 	issue.MachineOwned = MachineOwned{
 		SchemaVersion: rawMachine.SchemaVersion,
@@ -72,15 +115,22 @@ func ParseIssue(content string) (Issue, error) {
 		SyncTime      string `yaml:"sync_time"`
 	}
 	if err := yaml.Unmarshal([]byte(frontmatter), &rawState); err != nil {
-		return Issue{}, fmt.Errorf("parse issue: invalid YAML: %w", err)
+		return Issue{}, &ParseError{
+			Kind: ErrKindInvalidYAML,
+			Msg:  err.Error(),
+		}
 	}
 	issue.RemoteMetadata.StateFile = rawState.State
 	if rawState.RemoteVersion != "" || rawState.ContentHash != "" || rawState.SyncTime != "" {
 		var syncTime time.Time
+		var parseErr error
 		if rawState.SyncTime != "" {
-			syncTime, err = time.Parse(time.RFC3339, rawState.SyncTime)
-			if err != nil {
-				return Issue{}, fmt.Errorf("parse issue: invalid sync_time %q: %w", rawState.SyncTime, err)
+			syncTime, parseErr = time.Parse(time.RFC3339, rawState.SyncTime)
+			if parseErr != nil {
+				return Issue{}, &ParseError{
+					Kind: ErrKindInvalidSyncTime,
+					Msg:  fmt.Sprintf("invalid sync_time %q: %s", rawState.SyncTime, parseErr.Error()),
+				}
 			}
 		}
 		issue.RemoteMetadata = RemoteMetadata{
@@ -96,18 +146,24 @@ func ParseIssue(content string) (Issue, error) {
 
 // extractFrontmatter extracts the YAML frontmatter from the content string.
 // It returns the content between the opening and closing "---" delimiters,
-// or an error if no valid frontmatter is found.
-func extractFrontmatter(content string) (string, error) {
+// or a *ParseError if no valid frontmatter is found.
+func extractFrontmatter(content string) (string, *ParseError) {
 	trimmed := strings.TrimSpace(content)
 	if !strings.HasPrefix(trimmed, "---") {
-		return "", fmt.Errorf("no frontmatter delimiter")
+		return "", &ParseError{
+			Kind: ErrKindNoFrontmatter,
+			Msg:  "no frontmatter delimiter",
+		}
 	}
 
 	// Find the closing delimiter.
 	rest := trimmed[3:]
 	idx := strings.Index(rest, "---")
 	if idx < 0 {
-		return "", fmt.Errorf("no closing frontmatter delimiter")
+		return "", &ParseError{
+			Kind: ErrKindNoClosingDelimiter,
+			Msg:  "no closing frontmatter delimiter",
+		}
 	}
 
 	return strings.TrimSpace(rest[:idx]), nil

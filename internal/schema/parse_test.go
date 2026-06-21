@@ -125,7 +125,10 @@ func TestParseIssue_no_frontmatter(t *testing.T) {
 	if err == nil {
 		t.Fatal("ParseIssue should return error for no frontmatter")
 	}
-	if !strings.Contains(err.Error(), "no frontmatter") {
+	if err.Kind != ErrKindNoFrontmatter {
+		t.Errorf("ParseError.Kind = %q, want %q", err.Kind, ErrKindNoFrontmatter)
+	}
+	if !strings.Contains(err.Msg, "frontmatter") {
 		t.Errorf("error should mention frontmatter, got: %v", err)
 	}
 }
@@ -140,7 +143,10 @@ project: project:ABC`
 	if err == nil {
 		t.Fatal("ParseIssue should return error for no closing delimiter")
 	}
-	if !strings.Contains(err.Error(), "closing") {
+	if err.Kind != ErrKindNoClosingDelimiter {
+		t.Errorf("ParseError.Kind = %q, want %q", err.Kind, ErrKindNoClosingDelimiter)
+	}
+	if !strings.Contains(err.Msg, "closing") {
 		t.Errorf("error should mention closing delimiter, got: %v", err)
 	}
 }
@@ -154,8 +160,11 @@ key: [invalid yaml
 	if err == nil {
 		t.Fatal("ParseIssue should return error for invalid YAML")
 	}
-	if !strings.Contains(err.Error(), "invalid YAML") {
-		t.Errorf("error should mention invalid YAML, got: %v", err)
+	if err.Kind != ErrKindInvalidYAML {
+		t.Errorf("ParseError.Kind = %q, want %q", err.Kind, ErrKindInvalidYAML)
+	}
+	if err.Msg == "" {
+		t.Error("ParseError.Msg should not be empty")
 	}
 }
 
@@ -171,8 +180,11 @@ schema_version: "1"
 	if err == nil {
 		t.Fatal("ParseIssue should return error for invalid project ref")
 	}
-	if !strings.Contains(err.Error(), "project ref") {
-		t.Errorf("error should mention project ref, got: %v", err)
+	if err.Kind != ErrKindInvalidProjectRef {
+		t.Errorf("ParseError.Kind = %q, want %q", err.Kind, ErrKindInvalidProjectRef)
+	}
+	if err.Msg == "" {
+		t.Error("ParseError.Msg should not be empty")
 	}
 }
 
@@ -189,7 +201,13 @@ sync_time: "not-a-date"
 	if err == nil {
 		t.Fatal("ParseIssue should return error for invalid sync_time")
 	}
-	if !strings.Contains(err.Error(), "sync_time") {
+	if err.Kind != ErrKindInvalidSyncTime {
+		t.Errorf("ParseError.Kind = %q, want %q", err.Kind, ErrKindInvalidSyncTime)
+	}
+	if err.Msg == "" {
+		t.Error("ParseError.Msg should not be empty")
+	}
+	if !strings.Contains(err.Msg, "sync_time") {
 		t.Errorf("error should mention sync_time, got: %v", err)
 	}
 }
