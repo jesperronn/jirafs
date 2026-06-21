@@ -18,7 +18,7 @@ Completed dependency IDs archived in [Ralph Task Archive](ralph-task-archive.md)
 `B001`.
 
 - [x] B050a | B021a | Define Jira client interface and request/response error type.
-- [ ] B050b | B050a | Add fake transport for JSON tests without network.
+- [x] B050b | B050a | Add fake transport for JSON tests without network.
 - [ ] B051a | B050b | Fetch one issue payload by key into remote data.
 - [ ] B051b | B051a | Map Jira fetch errors to structured client errors.
 - [ ] B052a | B021b,B051a | Normalize summary, description, labels, and assignee into issue model.
