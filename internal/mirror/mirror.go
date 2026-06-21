@@ -2,8 +2,19 @@
 package mirror
 
 import (
+	"gopkg.in/yaml.v3"
+
 	"github.com/jirafs/jirafs/internal/schema"
 )
+
+// UnmarshalMirror parses YAML data into a Mirror.
+func UnmarshalMirror(data []byte) (*Mirror, error) {
+	var m Mirror
+	if err := yaml.Unmarshal(data, &m); err != nil {
+		return nil, err
+	}
+	return &m, nil
+}
 
 // ImportReason represents why an issue was explicitly imported into a mirror.
 type ImportReason string

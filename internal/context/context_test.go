@@ -120,13 +120,13 @@ func TestStdinPromptReaderPromptSelectNoInput(t *testing.T) {
 
 func TestIsContextError(t *testing.T) {
 	var target *Error
-	if isContextError(nil, &target) {
-		t.Fatal("isContextError(nil) = true, want false")
+	if IsContextError(nil, &target) {
+		t.Fatal("IsContextError(nil) = true, want false")
 	}
 
 	err := fmt.Errorf("wrapped: %w", NewError("code", "message"))
-	if !isContextError(err, &target) {
-		t.Fatal("isContextError(wrapped) = false, want true")
+	if !IsContextError(err, &target) {
+		t.Fatal("IsContextError(wrapped) = false, want true")
 	}
 	if target == nil || target.Code != "code" {
 		t.Fatalf("target = %#v, want context error", target)

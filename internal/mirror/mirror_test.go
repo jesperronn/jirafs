@@ -473,3 +473,49 @@ func TestMirror_IsArchiveEligible_synced_but_not_resolved(t *testing.T) {
 		t.Error("synced open issue should not be archive-eligible")
 	}
 }
+
+func TestUnmarshalMirror(t *testing.T) {
+	data := []byte(`project:
+  type: project
+  value: TEST
+issues:
+  - key: TEST-1
+    reason: manual
+scopes:
+  - name: active
+    type: jql
+    target: status=Active
+`)
+	m, err := UnmarshalMirror(data)
+	if err != nil {
+		t.Fatalf("UnmarshalMirror: %v", err)
+	}
+	if m.Project.Value != "TEST" {
+		t.Errorf("Project = %q, want TEST", m.Project.Value)
+	}
+	if len(m.Issues) != 1 || m.Issues[0].Key != "TEST-1" {
+		t.Errorf("Issues = %#v, want [{TEST-1 manual}]", m.Issues)
+	}
+	if len(m.Scopes) != 1 || m.Scopes[0].Name != "active" {
+		t.Errorf("Scopes = %#v, want [{active jql status=Active}]", m.Scopes)
+	}
+}
+
+func TestUnmarshalMirror_Empty(t *testing.T) {
+	data := []byte(``)
+	m, err := UnmarshalMirror(data)
+	if err != nil {
+		t.Fatalf("UnmarshalMirror: %v", err)
+	}
+	if m == nil || !m.IsZero() {
+		t.Errorf("UnmarshalMirror(empty) = %#v, want zero mirror", m)
+	}
+}
+
+func TestUnmarshalMirror_InvalidYAML(t *testing.T) {
+	data := []byte(`: : invalid yaml {{{`)
+	_, err := UnmarshalMirror(data)
+	if err == nil {
+		t.Error("UnmarshalMirror(invalid) = nil, want error")
+	}
+}

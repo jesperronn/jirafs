@@ -163,13 +163,7 @@ Summary: Third issue
 	os.Setenv("HOME", homeDir)
 	defer os.Setenv("HOME", oldHome)
 
-	// Capture output to verify eligible issues are reported.
-	type output struct {
-		exit int
-	}
-	_ = output{}
-
-	exit = RunMirror([]string{"archive-sweep", "--project", "test"})
+	exit := RunMirror([]string{"archive-sweep", "--project", "test"})
 	if exit != 0 {
 		t.Errorf("RunMirror([\"archive-sweep\", \"--project\", \"test\"]) = %d, want 0", exit)
 	}
@@ -426,6 +420,86 @@ remote_metadata:
 
 Summary: Out-of-scope issue
 `)
+
+	oldHome := os.Getenv("HOME")
+	os.Setenv("HOME", homeDir)
+	defer os.Setenv("HOME", oldHome)
+
+	exit := RunMirror([]string{"archive-sweep", "--project", "test"})
+	if exit != 0 {
+		t.Errorf("exit = %d, want 0", exit)
+	}
+}
+
+// TestLoadMirrorYAML_NoMirrorFile verifies that loadMirrorYAML returns an
+// empty mirror when no mirror file exists.
+func TestLoadMirrorYAML_NoMirrorFile(t *testing.T) {
+	tmpDir := t.TempDir()
+	m, err := loadMirrorYAML(tmpDir)
+	if err != nil {
+		t.Fatalf("loadMirrorYAML: %v", err)
+	}
+	if m == nil || m.Project.Value != "" {
+		t.Errorf("loadMirrorYAML(empty dir) = %#v, want empty mirror", m)
+	}
+}
+
+// TestLoadMirrorYAML_YamlExtension verifies that loadMirrorYAML finds
+// mirror.yaml when mirror.yml does not exist.
+func TestLoadMirrorYAML_YamlExtension(t *testing.T) {
+	tmpDir := t.TempDir()
+	mirrorYAML := `project:
+  type: project
+  value: TEST
+`
+	if err := os.WriteFile(filepath.Join(tmpDir, "mirror.yaml"), []byte(mirrorYAML), 0o644); err != nil {
+		t.Fatalf("WriteFile mirror.yaml: %v", err)
+	}
+	m, err := loadMirrorYAML(tmpDir)
+	if err != nil {
+		t.Fatalf("loadMirrorYAML: %v", err)
+	}
+	if m == nil || m.Project.Value != "TEST" {
+		t.Errorf("loadMirrorYAML = %#v, want project TEST", m)
+	}
+}
+
+// TestLoadMirrorYAML_InvalidYAML verifies that loadMirrorYAML returns an
+// error when the mirror file contains invalid YAML.
+func TestLoadMirrorYAML_InvalidYAML(t *testing.T) {
+	tmpDir := t.TempDir()
+	invalidYAML := `: : invalid {{{ yaml`
+	if err := os.WriteFile(filepath.Join(tmpDir, "mirror.yml"), []byte(invalidYAML), 0o644); err != nil {
+		t.Fatalf("WriteFile mirror.yml: %v", err)
+	}
+	_, err := loadMirrorYAML(tmpDir)
+	if err == nil {
+		t.Fatal("loadMirrorYAML(invalid) = nil, want error")
+	}
+}
+
+// TestLoadMirrorArchiveSweep_UnparseableIssue verifies that issues with
+// invalid frontmatter are skipped without error.
+func TestLoadMirrorArchiveSweep_UnparseableIssue(t *testing.T) {
+	tmpDir := t.TempDir()
+	homeDir := writeSettings(t, tmpDir)
+	writeMirror(t, tmpDir)
+
+	localDir := filepath.Join(tmpDir, "local")
+	if err := os.MkdirAll(localDir, 0o755); err != nil {
+		t.Fatalf("MkdirAll local: %v", err)
+	}
+
+	// Write a file with invalid frontmatter.
+	if err := os.WriteFile(filepath.Join(localDir, "INVALID.md"), []byte(`---
+key:
+  invalid: yaml
+---
+
+Summary: Invalid issue
+`), 0o644); err != nil {
+		t.Fatalf("WriteFile INVALID.md: %v", err)
+	}
 
 	oldHome := os.Getenv("HOME")
 	os.Setenv("HOME", homeDir)

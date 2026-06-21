@@ -259,7 +259,7 @@ func (r *Resolver) InteractiveResolve(cwd string, prompter PromptReader) (*Conte
 	}
 
 	var ce *Error
-	if !isContextError(err, &ce) {
+	if !IsContextError(err, &ce) {
 		return nil, err
 	}
 	if ce.Code != config.ErrNoProjectResolved {
@@ -308,8 +308,8 @@ func (r *Resolver) InteractiveResolve(cwd string, prompter PromptReader) (*Conte
 		fmt.Sprintf("selected project %q not found in settings", selected))
 }
 
-// isContextError unwraps err looking for a *Error and assigns it to target.
-func isContextError(err error, target **Error) bool {
+// IsContextError unwraps err looking for a *Error and assigns it to target.
+func IsContextError(err error, target **Error) bool {
 	if err == nil {
 		return false
 	}
