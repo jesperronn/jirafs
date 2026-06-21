@@ -376,6 +376,112 @@ func TestResolveFileCredentialHomeDir(t *testing.T) {
 	}
 }
 
+func TestMergeCredentialSources(t *testing.T) {
+	tests := []struct {
+		name     string
+		sources  []ResolvedCredential
+		wantScheme string
+		wantTarget string
+		wantKeys map[string]string
+	}{
+		{
+			name:     "empty slice returns nil fields",
+			sources:  []ResolvedCredential{},
+			wantScheme: "",
+			wantTarget: "",
+			wantKeys: nil,
+		},
+		{
+			name: "nil slice returns nil fields",
+			sources: nil,
+			wantScheme: "",
+			wantTarget: "",
+			wantKeys: nil,
+		},
+		{
+			name: "single source preserved",
+			sources: []ResolvedCredential{
+				{Scheme: "env", Target: "MY_TOKEN", Fields: map[string]string{"api_token": "env-val"}},
+			},
+			wantScheme: "env",
+			wantTarget: "MY_TOKEN",
+			wantKeys:   map[string]string{"api_token": "env-val"},
+		},
+		{
+			name: "two sources merge keys",
+			sources: []ResolvedCredential{
+				{Scheme: "env", Target: "VAR1", Fields: map[string]string{"api_token": "env-val"}},
+				{Scheme: "file", Target: "creds.toml", Fields: map[string]string{"api_secret": "file-secret"}},
+			},
+			wantScheme: "file",
+			wantTarget: "creds.toml",
+			wantKeys:   map[string]string{"api_token": "env-val", "api_secret": "file-secret"},
+		},
+		{
+			name: "later source overrides earlier key",
+			sources: []ResolvedCredential{
+				{Scheme: "env", Target: "VAR1", Fields: map[string]string{"api_token": "env-val"}},
+				{Scheme: "file", Target: "creds.toml", Fields: map[string]string{"api_token": "file-val"}},
+			},
+			wantScheme: "file",
+			wantTarget: "creds.toml",
+			wantKeys:   map[string]string{"api_token": "file-val"},
+		},
+		{
+			name: "three sources merge with override",
+			sources: []ResolvedCredential{
+				{Scheme: "env", Target: "VAR1", Fields: map[string]string{"api_token": "env-val", "user": "env-user"}},
+				{Scheme: "env", Target: "VAR2", Fields: map[string]string{"api_secret": "env-secret"}},
+				{Scheme: "file", Target: "creds.toml", Fields: map[string]string{"api_token": "file-val", "api_secret": "file-secret"}},
+			},
+			wantScheme: "file",
+			wantTarget: "creds.toml",
+			wantKeys:   map[string]string{"api_token": "file-val", "user": "env-user", "api_secret": "file-secret"},
+		},
+		{
+			name: "empty fields in middle source",
+			sources: []ResolvedCredential{
+				{Scheme: "env", Target: "VAR1", Fields: map[string]string{"api_token": "env-val"}},
+				{Scheme: "file", Target: "empty.toml", Fields: map[string]string{}},
+				{Scheme: "env", Target: "VAR2", Fields: map[string]string{"api_secret": "env-secret"}},
+			},
+			wantScheme: "env",
+			wantTarget: "VAR2",
+			wantKeys:   map[string]string{"api_token": "env-val", "api_secret": "env-secret"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := MergeCredentialSources(tt.sources)
+
+			if got.Scheme != tt.wantScheme {
+				t.Errorf("MergeCredentialSources().Scheme = %q, want %q", got.Scheme, tt.wantScheme)
+			}
+			if got.Target != tt.wantTarget {
+				t.Errorf("MergeCredentialSources().Target = %q, want %q", got.Target, tt.wantTarget)
+			}
+
+			if tt.wantKeys == nil {
+				if got.Fields != nil {
+					t.Errorf("MergeCredentialSources().Fields = %v, want nil", got.Fields)
+				}
+				return
+			}
+
+			if len(got.Fields) != len(tt.wantKeys) {
+				t.Errorf("MergeCredentialSources().Fields length = %d, want %d", len(got.Fields), len(tt.wantKeys))
+			}
+
+			for k, wantV := range tt.wantKeys {
+				if got.Fields[k] != wantV {
+					t.Errorf("MergeCredentialSources().Fields[%q] = %q, want %q", k, got.Fields[k], wantV)
+				}
+			}
+		})
+	}
+}
+
 func TestParseCredentialRefs(t *testing.T) {
 	tests := []struct {
 		name    string
