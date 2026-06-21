@@ -94,6 +94,14 @@ func (m MachineOwned) IsZero() bool {
 	return m.SchemaVersion == ""
 }
 
+// LinkedIssue is a shallow reference to a linked Jira issue.
+type LinkedIssue struct {
+	// Key is the linked issue's key (e.g. "PROJ-456").
+	Key IssueKey `yaml:"key"`
+	// Type is the Jira link type (e.g. "blocks", "is blocked by", "relates to").
+	Type string `yaml:"type"`
+}
+
 // Issue represents a parsed issue file with identity, machine-owned fields,
 // remote metadata, and section content.
 type Issue struct {
@@ -104,6 +112,7 @@ type Issue struct {
 	Description    string
 	Labels         []string
 	Assignee       *string
+	LinkedIssues   []LinkedIssue `yaml:"linked_issues,omitempty"`
 	// Sections holds the body sections keyed by their fixed section name.
 	// Only populated by ParseIssue when section parsing is enabled.
 	Sections map[FixedSectionName]string

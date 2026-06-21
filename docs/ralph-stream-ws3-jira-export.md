@@ -22,7 +22,7 @@ Completed dependency IDs archived in [Ralph Task Archive](ralph-task-archive.md)
 - [x] B051a | B050b | Fetch one issue payload by key into remote data.
 - [x] B051b | B051a | Map Jira fetch errors to structured client errors.
 - [x] B052a | B021b,B051a | Normalize summary, description, labels, and assignee into issue model.
-- [ ] B052b | B052a | Normalize linked issues as shallow typed refs.
+- [x] B052b | B052a | Normalize linked issues as shallow typed refs.
 - [x] B053a | B050b | Search fake `my-issues` scope with deterministic keys.
 - [ ] B053b | B053a | Search fake `current-sprint` scope with deterministic keys.
 

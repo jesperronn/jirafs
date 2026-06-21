@@ -145,6 +145,7 @@ func (c *JiraClient) FetchIssue(ctx context.Context, key string) (*schema.Issue,
 			}
 		}
 		export.NormalizeIssue(issue, jr.Fields)
+		export.NormalizeLinkedIssues(issue, jr.Fields)
 	}
 
 	return issue, nil
