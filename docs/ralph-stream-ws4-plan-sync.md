@@ -35,3 +35,61 @@ Integration handoff after each commit:
 
 - Run `bin/integrate_stream_commit`.
 - Report stream, commit, rebase/test/lint/push results from the helper output.
+
+## B064b Implementation Notes
+
+Goal:
+
+- reject stale state before any mutation
+- reject invalid status transitions before any mutation
+- keep the work in `internal/sync/**` except for a minimal
+  `internal/schema/conflict.go` change if a new structured conflict type is
+  required
+
+Read first:
+
+1. `docs/sync-model.md`
+2. `docs/implementation-roadmap.md`
+3. `internal/sync/sync.go`
+4. `internal/sync/sync_test.go`
+
+Expected behavior:
+
+- Reuse the existing sync-layer plan validation added by `B062a`, `B062b`,
+  `B063a`, `B063b`, and `B064a`.
+- Sync must fail before mutation when the current remote state no longer
+  matches the assumptions behind the approved plan.
+- Sync must fail before mutation when a status change operation represents an
+  invalid transition.
+- When validation fails, sync must return structured conflicts and leave the
+  remote issue unchanged.
+
+Stale-state scope:
+
+- remote version changed
+- content hash changed
+- recomputed operations no longer match the provided plan
+
+Implementation guidance:
+
+1. Keep validation ahead of all mutation.
+2. Build on `validatePlan(...)` instead of duplicating stale-state logic.
+3. Add a dedicated transition validator, for example
+   `validateTransitions(local, remote, ops)`.
+4. Inspect only status-changing operations for transition validation.
+5. Do not silently apply a real status change as a plain field write unless it
+   is explicitly allowed by the current sync rules.
+6. If no workflow transition metadata exists yet, implement the smallest local
+   rule that preserves the invariant. A valid minimal behavior is to allow a
+   no-op status update and reject an actual status change with a structured
+   conflict.
+
+Minimum test cases:
+
+- stale remote version conflicts before mutation
+- stale content hash conflicts before mutation
+- recomputed plan mismatch conflicts before mutation
+- invalid status transition conflicts before mutation
+- invalid transition leaves remote unchanged
+- non-status field update still succeeds when all validations pass
+- no-op status update is allowed if the implementation chooses that rule
