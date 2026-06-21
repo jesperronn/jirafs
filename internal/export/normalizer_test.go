@@ -2,6 +2,7 @@ package export
 
 import (
 	"testing"
+	"time"
 
 	"github.com/jirafs/jirafs/internal/schema"
 )
@@ -81,6 +82,138 @@ func TestNormalizeIssue(t *testing.T) {
 
 func ptrString(s string) *string {
 	return &s
+}
+
+func TestExportIssue(t *testing.T) {
+	tests := []struct {
+		name    string
+		issue   schema.Issue
+		wantLen int
+	}{
+		{
+			name: "synced issue with all fields",
+			issue: schema.Issue{
+				Identity: schema.IssueIdentity{
+					Key:     "PROJ-42",
+					Type:    "story",
+					Project: schema.TypedRef{Type: schema.RefProject, Value: "PROJ"},
+				},
+				MachineOwned: schema.MachineOwned{SchemaVersion: "1"},
+				RemoteMetadata: schema.RemoteMetadata{
+					StateFile:     "synced",
+					RemoteVersion: "7",
+					ContentHash:   "abc123",
+					SyncTime:      mustParseTime("2026-06-21T14:30:00Z"),
+				},
+				Summary:    "Test summary",
+				Labels:     []string{"bug", "urgent"},
+				Assignee:   ptrString("alice"),
+				LinkedIssues: []schema.LinkedIssue{
+					{Key: "PROJ-1", Type: "blocks"},
+					{Key: "PROJ-2", Type: "relates to"},
+				},
+			},
+			wantLen: 1,
+		},
+		{
+			name: "draft issue minimal",
+			issue: schema.Issue{
+				Identity: schema.IssueIdentity{
+					Key:     "DRF-1",
+					Type:    "task",
+					Project: schema.TypedRef{Type: schema.RefProject, Value: "DRF"},
+				},
+				MachineOwned: schema.MachineOwned{SchemaVersion: "1"},
+			},
+			wantLen: 1,
+		},
+		{
+			name: "empty issue produces frontmatter with key and type",
+			issue: schema.Issue{
+				Identity: schema.IssueIdentity{
+					Key:     "EMPTY-1",
+					Type:    "task",
+					Project: schema.TypedRef{Type: schema.RefProject, Value: "EMPTY"},
+				},
+			},
+			wantLen: 1,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := ExportIssue(&tt.issue)
+			if got == "" {
+				t.Fatal("ExportIssue returned empty string")
+			}
+			// Verify round-trip: parse the rendered output back.
+			parsed, pe := schema.ParseIssue(got)
+			if pe != nil {
+				t.Fatalf("ParseIssue failed on exported output: %s", pe.Error())
+			}
+			// Identity must survive round-trip.
+			if parsed.Identity.Key != tt.issue.Identity.Key {
+				t.Errorf("key = %q, want %q", parsed.Identity.Key, tt.issue.Identity.Key)
+			}
+			if parsed.Identity.Type != tt.issue.Identity.Type {
+				t.Errorf("type = %q, want %q", parsed.Identity.Type, tt.issue.Identity.Type)
+			}
+			if parsed.Identity.Project != tt.issue.Identity.Project {
+				t.Errorf("project = %v, want %v", parsed.Identity.Project, tt.issue.Identity.Project)
+			}
+			if parsed.MachineOwned.SchemaVersion != tt.issue.MachineOwned.SchemaVersion {
+				t.Errorf("schema_version = %q, want %q",
+					parsed.MachineOwned.SchemaVersion, tt.issue.MachineOwned.SchemaVersion)
+			}
+			if parsed.Summary != tt.issue.Summary {
+				t.Errorf("summary = %q, want %q", parsed.Summary, tt.issue.Summary)
+			}
+			if len(parsed.Labels) != len(tt.issue.Labels) {
+				t.Errorf("labels len = %d, want %d", len(parsed.Labels), len(tt.issue.Labels))
+			}
+			for i := range parsed.Labels {
+				if parsed.Labels[i] != tt.issue.Labels[i] {
+					t.Errorf("labels[%d] = %q, want %q", i, parsed.Labels[i], tt.issue.Labels[i])
+				}
+			}
+			if (parsed.Assignee == nil) != (tt.issue.Assignee == nil) ||
+				(parsed.Assignee != nil && tt.issue.Assignee != nil && *parsed.Assignee != *tt.issue.Assignee) {
+				t.Errorf("assignee = %v, want %v", parsed.Assignee, tt.issue.Assignee)
+			}
+			if len(parsed.LinkedIssues) != len(tt.issue.LinkedIssues) {
+				t.Errorf("linked_issues len = %d, want %d", len(parsed.LinkedIssues), len(tt.issue.LinkedIssues))
+			}
+			for i := range parsed.LinkedIssues {
+				if parsed.LinkedIssues[i].Key != tt.issue.LinkedIssues[i].Key {
+					t.Errorf("linked_issues[%d].key = %q, want %q",
+						i, parsed.LinkedIssues[i].Key, tt.issue.LinkedIssues[i].Key)
+				}
+				if parsed.LinkedIssues[i].Type != tt.issue.LinkedIssues[i].Type {
+					t.Errorf("linked_issues[%d].type = %q, want %q",
+						i, parsed.LinkedIssues[i].Type, tt.issue.LinkedIssues[i].Type)
+				}
+			}
+			// Remote metadata round-trip.
+			if parsed.RemoteMetadata.StateFile != tt.issue.RemoteMetadata.StateFile {
+				t.Errorf("state = %q, want %q", parsed.RemoteMetadata.StateFile, tt.issue.RemoteMetadata.StateFile)
+			}
+			if parsed.RemoteMetadata.RemoteVersion != tt.issue.RemoteMetadata.RemoteVersion {
+				t.Errorf("remote_version = %q, want %q",
+					parsed.RemoteMetadata.RemoteVersion, tt.issue.RemoteMetadata.RemoteVersion)
+			}
+			if parsed.RemoteMetadata.ContentHash != tt.issue.RemoteMetadata.ContentHash {
+				t.Errorf("content_hash = %q, want %q",
+					parsed.RemoteMetadata.ContentHash, tt.issue.RemoteMetadata.ContentHash)
+			}
+		})
+	}
+}
+
+func mustParseTime(s string) time.Time {
+	t, err := time.Parse(time.RFC3339, s)
+	if err != nil {
+		panic(err)
+	}
+	return t
 }
 
 func TestNormalizeLinkedIssues(t *testing.T) {

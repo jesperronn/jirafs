@@ -70,6 +70,14 @@ func NormalizeLinkedIssues(issue *schema.Issue, fields map[string]interface{}) {
 	issue.LinkedIssues = result
 }
 
+// ExportIssue renders a populated *schema.Issue through the canonical codec
+// (schema.RenderIssue) and returns the resulting YAML frontmatter + sections
+// as a string. The output is suitable for writing directly to a local issue
+// file and will round-trip through schema.ParseIssue.
+func ExportIssue(issue *schema.Issue) string {
+	return schema.RenderIssue(*issue)
+}
+
 // NormalizeIssue extracts summary, description, labels, and assignee from a
 // Jira fields map and writes them into the issue model.
 func NormalizeIssue(issue *schema.Issue, fields map[string]interface{}) {

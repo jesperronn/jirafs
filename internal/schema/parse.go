@@ -143,6 +143,27 @@ func ParseIssue(content string) (Issue, *ParseError) {
 		}
 	}
 
+	// Parse editable fields written by RenderIssue.
+	var rawEditable struct {
+		Summary      string            `yaml:"summary"`
+		Labels       []string          `yaml:"labels"`
+		Assignee     string            `yaml:"assignee"`
+		LinkedIssues []LinkedIssue     `yaml:"linked_issues"`
+	}
+	_ = yaml.Unmarshal([]byte(frontmatter), &rawEditable)
+	if rawEditable.Summary != "" {
+		issue.Summary = rawEditable.Summary
+	}
+	if len(rawEditable.Labels) > 0 {
+		issue.Labels = rawEditable.Labels
+	}
+	if rawEditable.Assignee != "" {
+		issue.Assignee = &rawEditable.Assignee
+	}
+	if len(rawEditable.LinkedIssues) > 0 {
+		issue.LinkedIssues = rawEditable.LinkedIssues
+	}
+
 	// Populate Sections from body when present.
 	if body != "" {
 		blocks := splitSectionBlocks(body)
