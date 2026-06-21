@@ -1,17 +1,11 @@
 ---
-agent: pi
+agent: opencode
 credit: false
 commands:
   - name: git_status
     run: git status --short
   - name: stream_ledger
     run: cat docs/ralph-stream-ws2-settings-references.md
-  - name: recent_commits
-    run: git log --oneline -3
-  - name: tests
-    run: bin/test
-  - name: lint
-    run: bin/lint
 ---
 # jirafs WS2 Ralph Loop
 
@@ -45,18 +39,6 @@ After committing, run `bin/integrate_stream_commit`.
 ## Stream Ledger
 
 {{ commands.stream_ledger }}
-
-## Recent Commits
-
-{{ commands.recent_commits }}
-
-## Current Test Output
-
-{{ commands.tests }}
-
-## Current Lint Output
-
-{{ commands.lint }}
 
 ## Required Handoff
 
