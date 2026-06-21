@@ -57,6 +57,18 @@ func ParseCredentialRef(ref string) (CredentialRef, error) {
 		)
 	}
 
+	switch scheme {
+	case "env", "file":
+		// Supported schemes — allow through.
+	default:
+		return CredentialRef{}, NewSettingError(
+			ErrInvalidCredentialRef,
+			fmt.Sprintf("unsupported credential ref scheme %q: only env:// and file:// are allowed", scheme),
+			"credential_ref",
+			ref,
+		)
+	}
+
 	return CredentialRef{
 		Scheme: scheme,
 		Target: target,

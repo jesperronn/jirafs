@@ -35,11 +35,16 @@ func TestParseCredentialRef(t *testing.T) {
 			wantErr:    false,
 		},
 		{
-			name:       "custom scheme",
-			input:      "vault://secret/jira",
-			wantScheme: "vault",
-			wantTarget: "secret/jira",
-			wantErr:    false,
+			name:      "unsupported scheme vault",
+			input:     "vault://secret/jira",
+			wantErr:   true,
+			wantCode:  ErrInvalidCredentialRef,
+		},
+		{
+			name:      "unsupported scheme ssh",
+			input:     "ssh://git@github.com/jirafs/jirafs.git",
+			wantErr:   true,
+			wantCode:  ErrInvalidCredentialRef,
 		},
 		{
 			name:      "empty string",
