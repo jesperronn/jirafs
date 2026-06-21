@@ -1,0 +1,193 @@
+package context
+
+import (
+	"fmt"
+	"os"
+	"path/filepath"
+	"strings"
+
+	"github.com/jirafs/jirafs/internal/config"
+)
+
+// Context holds the resolved project information.
+type Context struct {
+	// Name is the config name of the resolved project.
+	Name string
+
+	// Key is the Jira project key.
+	Key string
+
+	// MirrorDir is the expanded mirror directory path.
+	MirrorDir string
+
+	// Instance is the Jira instance name.
+	Instance string
+}
+
+// Error is returned when project resolution fails.
+type Error struct {
+	Code       string
+	Message    string
+	Candidates []string // optional: project names that were considered
+}
+
+func (e *Error) Error() string {
+	return "jirafs/context: " + e.Code + ": " + e.Message
+}
+
+// NewError creates a new Error with the given code and message.
+func NewError(code, message string) *Error {
+	return &Error{Code: code, Message: message}
+}
+
+// Resolver resolves the active project from multiple sources.
+type Resolver struct {
+	settings *config.Settings
+	explicit string // explicit --project flag value
+}
+
+// NewResolver creates a new Resolver.
+func NewResolver(settings *config.Settings, explicit string) *Resolver {
+	return &Resolver{
+		settings: settings,
+		explicit: explicit,
+	}
+}
+
+// Resolve returns the active project context. It walks the sources in
+// precedence order: explicit flag, cwd mapping, remembered state.
+func (r *Resolver) Resolve(cwd string) (*Context, error) {
+	// 1. Explicit --project flag (highest precedence).
+	if r.explicit != "" {
+		return r.resolveExplicit()
+	}
+
+	// 2. Cwd mapping (most-specific match).
+	if ctx, err := r.resolveCwd(cwd); err == nil {
+		return ctx, nil
+	}
+
+	// 3. Remembered state (lowest precedence).
+	return r.resolveState()
+}
+
+// resolveExplicit looks up the project by explicit flag value.
+// The value can be either the config name or the Jira project key.
+func (r *Resolver) resolveExplicit() (*Context, error) {
+	// Try config name first.
+	if proj, ok := r.settings.Projects[r.explicit]; ok {
+		return &Context{
+			Name:      r.explicit,
+			Key:       proj.Key,
+			MirrorDir: proj.MirrorDir,
+			Instance:  proj.Instance,
+		}, nil
+	}
+
+	// Try Jira project key.
+	for name, proj := range r.settings.Projects {
+		if proj.Key == r.explicit {
+			return &Context{
+				Name:      name,
+				Key:       proj.Key,
+				MirrorDir: proj.MirrorDir,
+				Instance:  proj.Instance,
+			}, nil
+		}
+	}
+
+	return nil, NewError(config.ErrUnknownProject,
+		fmt.Sprintf("project %q not found in settings", r.explicit))
+}
+
+// resolveCwd maps the current working directory to a project by matching
+// against mirror_dir and local_dirs prefixes. Returns the most-specific
+// (longest prefix) match.
+func (r *Resolver) resolveCwd(cwd string) (*Context, error) {
+	abs, err := filepath.Abs(cwd)
+	if err != nil {
+		return nil, NewError(config.ErrMissingField,
+			fmt.Sprintf("cannot resolve current directory: %s", cwd))
+	}
+
+	// Normalize for prefix matching.
+	abs = filepath.Clean(abs)
+
+	var best *Context
+	var bestLen int
+
+	for name, proj := range r.settings.Projects {
+		// Check mirror_dir.
+		mirror := filepath.Clean(proj.MirrorDir)
+		if isPrefixOf(mirror, abs) {
+			d := depth(mirror)
+			if d > bestLen {
+				bestLen = d
+				best = &Context{
+					Name:      name,
+					Key:       proj.Key,
+					MirrorDir: proj.MirrorDir,
+					Instance:  proj.Instance,
+				}
+			}
+		}
+
+		// Check local_dirs.
+		for _, ld := range proj.LocalDirs {
+			local := filepath.Clean(ld)
+			if isPrefixOf(local, abs) {
+				d := depth(local)
+				if d > bestLen {
+					bestLen = d
+					best = &Context{
+						Name:      name,
+						Key:       proj.Key,
+						MirrorDir: proj.MirrorDir,
+						Instance:  proj.Instance,
+					}
+				}
+			}
+		}
+	}
+
+	if best == nil {
+		return nil, NewError(config.ErrNoProjectResolved,
+			fmt.Sprintf("no project matches cwd %q", cwd))
+	}
+
+	return best, nil
+}
+
+// resolveState returns the remembered project from settings state.
+func (r *Resolver) resolveState() (*Context, error) {
+	stateName := r.settings.State.CurrentProject
+	if stateName == "" {
+		return nil, NewError(config.ErrNoProjectResolved,
+			"no project configured and no remembered project")
+	}
+
+	proj, ok := r.settings.Projects[stateName]
+	if !ok {
+		return nil, NewError(config.ErrUnknownProject,
+			fmt.Sprintf("remembered project %q not found in settings", stateName))
+	}
+
+	return &Context{
+		Name:      stateName,
+		Key:       proj.Key,
+		MirrorDir: proj.MirrorDir,
+		Instance:  proj.Instance,
+	}, nil
+}
+
+// isPrefixOf reports whether prefix is a directory prefix of target.
+// "a/b" is a prefix of "a/b/c" but not of "a/bc".
+func isPrefixOf(prefix, target string) bool {
+	// Ensure target starts with prefix + separator.
+	return target == prefix || len(target) > len(prefix) && target[:len(prefix)+1] == prefix+string(os.PathSeparator)
+}
+
+// depth returns the number of path components in p.
+func depth(p string) int {
+	return strings.Count(p, string(os.PathSeparator)) + 1
+}
