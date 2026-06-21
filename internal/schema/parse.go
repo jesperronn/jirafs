@@ -9,12 +9,13 @@ import (
 )
 
 // ParseIssue parses the YAML frontmatter of an issue file content string
-// and returns a populated Issue. It handles synced issue frontmatter
-// including identity, machine-owned fields, and remote metadata.
+// and returns a populated Issue. It handles synced and draft issue
+// frontmatter including identity, machine-owned fields, remote metadata,
+// and state.
 //
 // The frontmatter is expected to be delimited by "---" at the start and
 // end of the content. Everything between the delimiters is parsed as YAML
-// into the Issue's Identity, MachineOwned, and RemoteMetadata fields.
+// into the Issue's Identity, MachineOwned, RemoteMetadata, and State fields.
 func ParseIssue(content string) (Issue, error) {
 	var issue Issue
 
@@ -63,27 +64,30 @@ func ParseIssue(content string) (Issue, error) {
 		SchemaVersion: rawMachine.SchemaVersion,
 	}
 
-	// Parse remote metadata.
-	var rawRemote struct {
+	// Parse state and remote metadata.
+	var rawState struct {
+		State         string `yaml:"state"`
 		RemoteVersion string `yaml:"remote_version"`
 		ContentHash   string `yaml:"content_hash"`
 		SyncTime      string `yaml:"sync_time"`
 	}
-	if err := yaml.Unmarshal([]byte(frontmatter), &rawRemote); err != nil {
+	if err := yaml.Unmarshal([]byte(frontmatter), &rawState); err != nil {
 		return Issue{}, fmt.Errorf("parse issue: invalid YAML: %w", err)
 	}
-	if rawRemote.RemoteVersion != "" || rawRemote.ContentHash != "" || rawRemote.SyncTime != "" {
+	issue.RemoteMetadata.StateFile = rawState.State
+	if rawState.RemoteVersion != "" || rawState.ContentHash != "" || rawState.SyncTime != "" {
 		var syncTime time.Time
-		if rawRemote.SyncTime != "" {
-			syncTime, err = time.Parse(time.RFC3339, rawRemote.SyncTime)
+		if rawState.SyncTime != "" {
+			syncTime, err = time.Parse(time.RFC3339, rawState.SyncTime)
 			if err != nil {
-				return Issue{}, fmt.Errorf("parse issue: invalid sync_time %q: %w", rawRemote.SyncTime, err)
+				return Issue{}, fmt.Errorf("parse issue: invalid sync_time %q: %w", rawState.SyncTime, err)
 			}
 		}
 		issue.RemoteMetadata = RemoteMetadata{
-			RemoteVersion: rawRemote.RemoteVersion,
-			ContentHash:   rawRemote.ContentHash,
+			RemoteVersion: rawState.RemoteVersion,
+			ContentHash:   rawState.ContentHash,
 			SyncTime:      syncTime,
+			StateFile:     rawState.State,
 		}
 	}
 
