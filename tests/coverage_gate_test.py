@@ -131,7 +131,7 @@ class MainTest(unittest.TestCase):
         fake_result = type("Result", (), {"wasSuccessful": lambda self: True})()
 
         with patch.object(
-            coverage_gate, "run_go_tests_with_coverage", return_value=(5, 10, "go row")
+            coverage_gate, "run_go_tests_with_coverage", return_value=(5, 10, "go total: 5/10 statements (50.0%)")
         ):
             with patch.object(
                 coverage_gate, "run_suite_with_trace", return_value=(fake_result, object())
@@ -139,9 +139,10 @@ class MainTest(unittest.TestCase):
                 with patch.object(
                     coverage_gate,
                     "python_coverage_summary",
-                    return_value=(5, 10, ["python row"]),
+                    return_value=(5, 10, ["tools.coverage_gate: 5/10 lines (50.0%)"]),
                 ):
-                    exit_code = coverage_gate.main(["90"])
+                    with patch("sys.stdout") as mock_stdout:
+                        exit_code = coverage_gate.main(["90"])
 
         self.assertEqual(exit_code, 1)
 
@@ -149,7 +150,7 @@ class MainTest(unittest.TestCase):
         fake_result = type("Result", (), {"wasSuccessful": lambda self: True})()
 
         with patch.object(
-            coverage_gate, "run_go_tests_with_coverage", return_value=(9, 10, "go row")
+            coverage_gate, "run_go_tests_with_coverage", return_value=(9, 10, "go total: 9/10 statements (90.0%)")
         ):
             with patch.object(
                 coverage_gate, "run_suite_with_trace", return_value=(fake_result, object())
@@ -157,9 +158,10 @@ class MainTest(unittest.TestCase):
                 with patch.object(
                     coverage_gate,
                     "python_coverage_summary",
-                    return_value=(9, 10, ["python row"]),
+                    return_value=(9, 10, ["tools.coverage_gate: 9/10 lines (90.0%)"]),
                 ):
-                    exit_code = coverage_gate.main(["90"])
+                    with patch("sys.stdout") as mock_stdout:
+                        exit_code = coverage_gate.main(["90"])
 
         self.assertEqual(exit_code, 0)
 

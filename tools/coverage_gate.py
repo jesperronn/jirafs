@@ -157,14 +157,13 @@ def main(argv: list[str] | None = None) -> int:
     total_executable = go_total + py_total
     total = 100.0 if total_executable == 0 else (total_hit / total_executable) * 100.0
 
-    print(go_row)
-    for row in rows:
-        print(row)
-    python_percent = 100.0 if py_total == 0 else (py_hit / py_total) * 100.0
-    print(f"python total: {py_hit}/{py_total} lines ({python_percent:.1f}%)")
-    print(f"total: {total:.1f}%")
-
     if total < minimum:
+        print(go_row)
+        for row in rows:
+            print(row)
+        python_percent = 100.0 if py_total == 0 else (py_hit / py_total) * 100.0
+        print(f"python total: {py_hit}/{py_total} lines ({python_percent:.1f}%)")
+        print(f"total: {total:.1f}%")
         print(
             f"coverage gate failed: total {total:.1f}% is below required {minimum:.1f}%",
             file=sys.stderr,
