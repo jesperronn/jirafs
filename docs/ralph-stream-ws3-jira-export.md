@@ -25,7 +25,7 @@ Completed dependency IDs archived in [Ralph Task Archive](ralph-task-archive.md)
 - [x] B052b | B052a | Normalize linked issues as shallow typed refs.
 - [x] B053a | B050b | Search fake `my-issues` scope with deterministic keys.
 - [x] B053b | B053a | Search fake `current-sprint` scope with deterministic keys.
-- [ ] B054a | B017f,B050b | Build authenticated Jira requests from resolved credentials.
+- [ ] B054a | B017h,B050b | Build authenticated Jira requests from resolved credentials.
 - [ ] B054b | B054a | Add current-user lookup helper for scope resolution.
 - [ ] B055a | B054a,B053a | Implement real Jira search for `my-issues`.
 - [ ] B055b | B054b,B053b | Implement real Jira search for `current-sprint`.

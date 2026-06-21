@@ -34,6 +34,8 @@ Completed dependency IDs archived in [Ralph Task Archive](ralph-task-archive.md)
 - [x] B031c | B031b | Reject unknown section headings explicitly.
 - [x] B032a | B031b | Render frontmatter with stable field order.
 - [x] B032b | B032a | Render fixed sections with stable section order.
+- [ ] B033a | B032b | Add synced issue round-trip golden fixture.
+- [ ] B033b | B033a | Add draft issue round-trip golden fixture.
 
 Integration handoff after each commit:
 
