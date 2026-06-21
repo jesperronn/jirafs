@@ -9,10 +9,11 @@ const (
 	EditableFieldDescription EditableField = "description"
 	EditableFieldLabels      EditableField = "labels"
 	EditableFieldAssignee    EditableField = "assignee"
+	EditableFieldStatus      EditableField = "status"
+	EditableFieldSprint      EditableField = "sprint"
+	EditableFieldFixVersions EditableField = "fix_versions"
 	EditableFieldParent      EditableField = "parent"
 	EditableFieldEpic        EditableField = "epic"
-	EditableFieldFixVersions EditableField = "fix_versions"
-	EditableFieldSprint      EditableField = "sprint"
 )
 
 // PermissionCategory represents a permission category for issue fields.
@@ -112,6 +113,9 @@ type Issue struct {
 	Description    string
 	Labels         []string
 	Assignee       *string
+	Status         string
+	Sprint         string
+	FixVersions    []string
 	LinkedIssues   []LinkedIssue `yaml:"linked_issues,omitempty"`
 	// Sections holds the body sections keyed by their fixed section name.
 	// Only populated by ParseIssue when section parsing is enabled.
