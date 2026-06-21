@@ -5,8 +5,13 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 )
+
+func contains(s, substr string) bool {
+	return strings.Contains(s, substr)
+}
 
 func TestNewJiraClient(t *testing.T) {
 	client := NewJiraClient("https://jira.example.com")
@@ -209,6 +214,151 @@ func TestFetchIssueWithNoIssueType(t *testing.T) {
 	}
 	if issue.Identity.Type != "" {
 		t.Errorf("expected empty type, got %q", issue.Identity.Type)
+	}
+}
+
+func TestMapHTTPErrWithErrorMessage(t *testing.T) {
+	body := `{"errorMessages":["Permission denied","Board not found"],"errors":{}}`
+	resp := httptest.NewRecorder()
+	resp.Body = nil // will be set by server
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusBadRequest)
+		w.Write([]byte(body))
+	}))
+	defer server.Close()
+
+	client := NewJiraClient(server.URL)
+	_, err := client.FetchIssue(context.Background(), "PROJ-123")
+	if err == nil {
+		t.Fatal("expected error")
+	}
+	if !IsClientError(err, ErrHTTP) {
+		t.Errorf("expected http error, got %v", err)
+	}
+	wantMsg := "Permission denied"
+	if !contains(err.Error(), wantMsg) {
+		t.Errorf("error should contain %q, got %q", wantMsg, err.Error())
+	}
+}
+
+func TestMapHTTPErrWithErrorsMap(t *testing.T) {
+	body := `{"errorMessages":[],"errors":{"summary":"must not be empty"}}`
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusBadRequest)
+		w.Write([]byte(body))
+	}))
+	defer server.Close()
+
+	client := NewJiraClient(server.URL)
+	_, err := client.FetchIssue(context.Background(), "PROJ-123")
+	if err == nil {
+		t.Fatal("expected error")
+	}
+	if !IsClientError(err, ErrHTTP) {
+		t.Errorf("expected http error, got %v", err)
+	}
+	if !contains(err.Error(), "summary") {
+		t.Errorf("error message should mention field 'summary', got %q", err.Error())
+	}
+}
+
+func TestMapHTTPErrEmptyBody(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+		// no body
+	}))
+	defer server.Close()
+
+	client := NewJiraClient(server.URL)
+	_, err := client.FetchIssue(context.Background(), "PROJ-123")
+	if err == nil {
+		t.Fatal("expected error")
+	}
+	if !IsClientError(err, ErrHTTP) {
+		t.Errorf("expected http error, got %v", err)
+	}
+	if err.Error() != "jira: http: HTTP error" {
+		t.Errorf("error = %q, want %q", err.Error(), "jira: http: HTTP error")
+	}
+}
+
+func TestMapHTTPErrEmptyJSON(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+		w.Write([]byte(`{}`))
+	}))
+	defer server.Close()
+
+	client := NewJiraClient(server.URL)
+	_, err := client.FetchIssue(context.Background(), "PROJ-123")
+	if err == nil {
+		t.Fatal("expected error")
+	}
+	if !IsClientError(err, ErrHTTP) {
+		t.Errorf("expected http error, got %v", err)
+	}
+	if err.Error() != "jira: http: HTTP error" {
+		t.Errorf("error = %q, want %q", err.Error(), "jira: http: HTTP error")
+	}
+}
+
+func TestFetchIssueWithErrorMessage(t *testing.T) {
+	body := `{"errorMessages":["Issue does not exist"],"errors":{}}`
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusBadRequest)
+		w.Write([]byte(body))
+	}))
+	defer server.Close()
+
+	client := NewJiraClient(server.URL)
+	_, err := client.FetchIssue(context.Background(), "PROJ-123")
+	if err == nil {
+		t.Fatal("expected error")
+	}
+	if !IsClientError(err, ErrHTTP) {
+		t.Errorf("expected http error, got %v", err)
+	}
+	if !contains(err.Error(), "Issue does not exist") {
+		t.Errorf("error should contain Jira message, got %q", err.Error())
+	}
+}
+
+func TestFetchIssueServerErrorMessage(t *testing.T) {
+	body := `{"errorMessages":["Internal server error occurred"],"errors":{}}`
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+		w.Write([]byte(body))
+	}))
+	defer server.Close()
+
+	client := NewJiraClient(server.URL)
+	_, err := client.FetchIssue(context.Background(), "PROJ-123")
+	if err == nil {
+		t.Fatal("expected error")
+	}
+	if !IsClientError(err, ErrHTTP) {
+		t.Errorf("expected http error, got %v", err)
+	}
+	if !contains(err.Error(), "Internal server error occurred") {
+		t.Errorf("error should contain Jira message, got %q", err.Error())
+	}
+}
+
+func TestFetchIssueAuthErrorWithErrorMessage(t *testing.T) {
+	body := `{"errorMessages":["You are not authorized to use this credential"],"errors":{}}`
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusForbidden)
+		w.Write([]byte(body))
+	}))
+	defer server.Close()
+
+	client := NewJiraClient(server.URL)
+	_, err := client.FetchIssue(context.Background(), "PROJ-123")
+	if err == nil {
+		t.Fatal("expected error")
+	}
+	if !IsClientError(err, ErrAuth) {
+		t.Errorf("expected auth error, got %v", err)
 	}
 }
 

@@ -22,12 +22,49 @@ type Client interface {
 	SearchIssues(ctx context.Context, scope string) ([]*schema.Issue, error)
 }
 
+// jiraErrorDetails captures the structured error response from Jira.
+// Jira returns {"errorMessages": [...], "errors": {...}} on failure.
+type jiraErrorDetails struct {
+	ErrorMessages []string            `json:"errorMessages"`
+	Errors        map[string]string   `json:"errors"`
+}
+
 // jiraIssueResponse is the JSON structure returned by the Jira REST API
 // for a single issue GET request.
 type jiraIssueResponse struct {
 	ID     string                 `json:"id"`
 	Key    string                 `json:"key"`
 	Fields map[string]interface{} `json:"fields"`
+}
+
+// mapHTTPErr reads the response body and maps the HTTP status to a
+// structured ClientError, preferring Jira error details when available.
+func mapHTTPErr(resp *http.Response) *ClientError {
+	var details jiraErrorDetails
+	if err := json.NewDecoder(resp.Body).Decode(&details); err != nil {
+		// Body is not JSON or empty; fall back to status code.
+		return NewHTTPErr(resp.StatusCode, "HTTP error")
+	}
+
+	// Build a message from Jira's structured error fields.
+	var msg string
+	if len(details.ErrorMessages) > 0 {
+		msg = details.ErrorMessages[0]
+		if len(details.ErrorMessages) > 1 {
+			msg += "; " + details.ErrorMessages[1]
+		}
+	} else if len(details.Errors) > 0 {
+		// Collect field-specific error messages.
+		fields := make([]string, 0, len(details.Errors))
+		for field := range details.Errors {
+			fields = append(fields, field)
+		}
+		msg = fmt.Sprintf("validation error(s) on: %v", fields)
+	} else {
+		msg = "HTTP error"
+	}
+
+	return NewHTTPErr(resp.StatusCode, msg)
 }
 
 // JiraClient is a real Jira REST API client that fetches and searches
@@ -77,11 +114,11 @@ func (c *JiraClient) FetchIssue(ctx context.Context, key string) (*schema.Issue,
 		if resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden {
 			return nil, NewAuthError("HTTP " + fmt.Sprintf("%d", resp.StatusCode))
 		}
-		return nil, NewHTTPErr(resp.StatusCode, "HTTP error")
+		return nil, mapHTTPErr(resp)
 	}
 
 	if resp.StatusCode >= 500 {
-		return nil, NewHTTPErr(resp.StatusCode, "HTTP error")
+		return nil, mapHTTPErr(resp)
 	}
 
 	var jr jiraIssueResponse
