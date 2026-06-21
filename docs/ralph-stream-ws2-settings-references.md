@@ -28,6 +28,12 @@ Completed dependency IDs archived in [Ralph Task Archive](ralph-task-archive.md)
 - [x] B041b | B041a,B040b | Resolve status, sprint, and fix-version typed refs to Jira ids.
 - [x] B042a | B041a | Missing refs include type and lookup value.
 - [x] B042b | B042a | Ambiguous refs include candidate context.
+- [ ] B017a | B012 | Define credential provider parsing for ordered `credential_refs`.
+- [ ] B017b | B017a | Resolve `env://VAR_NAME` credentials into normalized auth fields.
+- [ ] B017c | B017a | Resolve `file://path` credentials into normalized auth fields.
+- [ ] B017d | B017b,B017c | Merge ordered credential sources with later-source override.
+- [ ] B017e | B017d | Validate required resolved auth fields by instance `auth_type`.
+- [ ] B017f | B017e | Expose resolved instance credentials through a path-local API for Jira callers.
 
 Integration handoff after each commit:
 
