@@ -21,3 +21,4 @@ Completed task IDs stay here so active ralph ledgers can stay small.
 - [x] B020a | B001 | `internal/schema/**`, `tests/schema/**` | Define typed-ref type constants and validation.
 - [x] B020b | B020a | `internal/schema/**`, `tests/schema/**` | Parse and render typed refs with structured invalid-format errors.
 - [x] B020c | B020b | `internal/schema/**`, `tests/schema/**` | Add typed-ref equality, zero-value, and round-trip tests.
+- [x] B023a | B020c | `internal/registry/**`, `tests/registry/**` | Define user and project registry models.
