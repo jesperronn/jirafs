@@ -2,6 +2,7 @@ package registry
 
 import (
 	"errors"
+	"fmt"
 	"strings"
 )
 
@@ -81,4 +82,57 @@ func ResolveProject(typedRef string, projects map[string]Project) (key string, f
 		return "", false
 	}
 	return p.Key, true
+}
+
+// ResolveStatus looks up a status typed ref in the statuses registry and
+// returns the status name. Returns ("", false) when the ref is not found.
+//
+// Typed ref format: "status:<key>"
+//
+// Example: "status:in-progress" → "In Progress"
+func ResolveStatus(typedRef string, statuses map[string]Status) (name string, found bool) {
+	if typedRef == "" {
+		return "", false
+	}
+	s, ok := statuses[typedRef]
+	if !ok {
+		return "", false
+	}
+	return s.Name, true
+}
+
+// ResolveSprint looks up a sprint typed ref in the sprints registry and
+// returns the Jira-assigned sprint ID as a string. Returns ("", false) when
+// the ref is not found.
+//
+// Typed ref format: "sprint:<id>"
+//
+// Example: "sprint:12345" → "12345"
+func ResolveSprint(typedRef string, sprints map[string]Sprint) (id string, found bool) {
+	if typedRef == "" {
+		return "", false
+	}
+	s, ok := sprints[typedRef]
+	if !ok {
+		return "", false
+	}
+	return fmt.Sprintf("%d", s.ID), true
+}
+
+// ResolveFixVersion looks up a fix-version typed ref in the fix-version
+// registry and returns the version name. Returns ("", false) when the ref
+// is not found.
+//
+// Typed ref format: "fix-version:<name>"
+//
+// Example: "fix-version:1.4.0" → "1.4.0"
+func ResolveFixVersion(typedRef string, fixVersions map[string]FixVersion) (name string, found bool) {
+	if typedRef == "" {
+		return "", false
+	}
+	fv, ok := fixVersions[typedRef]
+	if !ok {
+		return "", false
+	}
+	return fv.Name, true
 }
