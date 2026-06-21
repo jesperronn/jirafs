@@ -7,4 +7,8 @@ cd "${REPO_ROOT}"
 
 export PYTHONPATH="${REPO_ROOT}"
 
+# Run Go tests
+go test ./...
+
+# Run Python tests with coverage gate
 python3 tools/coverage_gate.py 90
