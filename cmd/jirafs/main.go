@@ -31,21 +31,68 @@ func main() {
 	}
 }
 
-// runUse handles the `jirafs use --project <KEY>` command.
+// runUse handles the `jirafs use` command. It supports three modes:
+//
+//  1. `jirafs use` (no args) → show the current project.
+//  2. `jirafs use --clear` → clear the remembered current project.
+//  3. `jirafs use <project_key>` or `jirafs use --project <KEY>` → set it.
+//
 // It loads the user's settings, validates the project exists, updates the
-// remembered current_project in state, writes it back, and prints a confirmation.
+// remembered current_project in state, writes it back, and prints a message.
 // Returns an exit code (0 on success, 1 on error).
 func runUse(args []string) int {
 	fs := flag.NewFlagSet("use", flag.ExitOnError)
 	project := fs.String("project", "", "project key to set as current")
+	clear := fs.Bool("clear", false, "clear the remembered current project")
 	if err := fs.Parse(args); err != nil {
 		fmt.Fprintf(os.Stderr, "jirafs use: invalid flags: %v\n", err)
 		return 1
 	}
 
-	if *project == "" {
-		fmt.Fprintf(os.Stderr, "jirafs use: --project is required\n")
+	// --clear takes priority.
+	if *clear {
+		if *project != "" {
+			fmt.Fprintf(os.Stderr, "jirafs use: --project and --clear are mutually exclusive\n")
+			return 1
+		}
+		s, err := config.Load()
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "jirafs use: cannot load settings: %v\n", err)
+			return 1
+		}
+		s.State.CurrentProject = ""
+		if err := s.SaveState(); err != nil {
+			fmt.Fprintf(os.Stderr, "jirafs use: cannot save state: %v\n", err)
+			return 1
+		}
+		fmt.Println("jirafs: current project cleared")
+		return 0
+	}
+
+	// Determine the project key from --project flag or positional args.
+	var key string
+	if *project != "" {
+		key = *project
+	} else if len(fs.Args()) == 1 {
+		key = fs.Args()[0]
+	} else if len(fs.Args()) > 1 {
+		fmt.Fprintf(os.Stderr, "jirafs use: too many positional arguments\n")
 		return 1
+	}
+
+	// No project given → show current state.
+	if key == "" {
+		s, err := config.Load()
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "jirafs use: cannot load settings: %v\n", err)
+			return 1
+		}
+		if s.State.CurrentProject == "" {
+			fmt.Println("jirafs: no current project set")
+		} else {
+			fmt.Printf("jirafs: current project is %q\n", s.State.CurrentProject)
+		}
+		return 0
 	}
 
 	s, err := config.Load()
@@ -54,18 +101,18 @@ func runUse(args []string) int {
 		return 1
 	}
 
-	if _, ok := s.Projects[*project]; !ok {
-		fmt.Fprintf(os.Stderr, "jirafs use: project %q not found in settings\n", *project)
+	if _, ok := s.Projects[key]; !ok {
+		fmt.Fprintf(os.Stderr, "jirafs use: project %q not found in settings\n", key)
 		return 1
 	}
 
-	s.State.CurrentProject = *project
+	s.State.CurrentProject = key
 	if err := s.SaveState(); err != nil {
 		fmt.Fprintf(os.Stderr, "jirafs use: cannot save state: %v\n", err)
 		return 1
 	}
 
-	fmt.Printf("jirafs: current project set to %q\n", *project)
+	fmt.Printf("jirafs: current project set to %q\n", key)
 	return 0
 }
 
