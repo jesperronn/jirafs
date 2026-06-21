@@ -51,7 +51,7 @@ func ParseIssue(content string) (Issue, *ParseError) {
 	var issue Issue
 
 	// Extract frontmatter from the content string.
-	frontmatter, pe := extractFrontmatter(content)
+	frontmatter, _, pe := extractFrontmatter(content)
 	if pe != nil {
 		return Issue{}, pe
 	}
@@ -144,13 +144,18 @@ func ParseIssue(content string) (Issue, *ParseError) {
 	return issue, nil
 }
 
+type sectionBlock struct {
+	Heading string
+	Body    string
+}
+
 // extractFrontmatter extracts the YAML frontmatter from the content string.
 // It returns the content between the opening and closing "---" delimiters,
 // or a *ParseError if no valid frontmatter is found.
-func extractFrontmatter(content string) (string, *ParseError) {
+func extractFrontmatter(content string) (string, string, *ParseError) {
 	trimmed := strings.TrimSpace(content)
 	if !strings.HasPrefix(trimmed, "---") {
-		return "", &ParseError{
+		return "", "", &ParseError{
 			Kind: ErrKindNoFrontmatter,
 			Msg:  "no frontmatter delimiter",
 		}
@@ -160,11 +165,51 @@ func extractFrontmatter(content string) (string, *ParseError) {
 	rest := trimmed[3:]
 	idx := strings.Index(rest, "---")
 	if idx < 0 {
-		return "", &ParseError{
+		return "", "", &ParseError{
 			Kind: ErrKindNoClosingDelimiter,
 			Msg:  "no closing frontmatter delimiter",
 		}
 	}
 
-	return strings.TrimSpace(rest[:idx]), nil
+	frontmatter := strings.TrimSpace(rest[:idx])
+	body := strings.TrimSpace(rest[idx+3:])
+	return frontmatter, body, nil
+}
+
+func splitSectionBlocks(body string) []sectionBlock {
+	if strings.TrimSpace(body) == "" {
+		return nil
+	}
+
+	lines := strings.Split(body, "\n")
+	var blocks []sectionBlock
+	var current *sectionBlock
+
+	for _, line := range lines {
+		if strings.HasPrefix(line, "## ") {
+			if current != nil {
+				current.Body = strings.TrimSpace(current.Body)
+				blocks = append(blocks, *current)
+			}
+			current = &sectionBlock{
+				Heading: strings.TrimSpace(strings.TrimPrefix(line, "## ")),
+			}
+			continue
+		}
+		if current == nil {
+			continue
+		}
+		if current.Body == "" {
+			current.Body = line
+			continue
+		}
+		current.Body += "\n" + line
+	}
+
+	if current != nil {
+		current.Body = strings.TrimSpace(current.Body)
+		blocks = append(blocks, *current)
+	}
+
+	return blocks
 }

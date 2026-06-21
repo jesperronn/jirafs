@@ -29,7 +29,7 @@ Completed dependency IDs archived in [Ralph Task Archive](ralph-task-archive.md)
 - [x] B030a | B021c | Parse valid synced issue frontmatter into schema model.
 - [x] B030b | B030a | Parse valid draft issue frontmatter into schema model.
 - [x] B030c | B030b | Return structured errors for invalid frontmatter.
-- [ ] B031a | B030a | Split issue body into ordered `##` section blocks after frontmatter.
+- [x] B031a | B030a | Split issue body into ordered `##` section blocks after frontmatter.
 - [ ] B031b | B031a | Populate `Issue.Sections` for `Description` and `Acceptance Criteria`, including empty sections.
 - [ ] B031c | B031b | Reject unknown section headings explicitly.
 - [ ] B032a | B031b | Render frontmatter with stable field order.

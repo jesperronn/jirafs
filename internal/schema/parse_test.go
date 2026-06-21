@@ -290,6 +290,86 @@ schema_version: "1"
 	}
 }
 
+func TestExtractFrontmatter_returnsBodyAfterClosingDelimiter(t *testing.T) {
+	content := `---
+key: ABC-123
+type: story
+project: project:ABC
+---
+## Description
+Line one.
+`
+
+	frontmatter, body, err := extractFrontmatter(content)
+	if err != nil {
+		t.Fatalf("extractFrontmatter returned error: %v", err)
+	}
+
+	if !strings.Contains(frontmatter, "key: ABC-123") {
+		t.Fatalf("frontmatter = %q, want key field", frontmatter)
+	}
+	if body != "## Description\nLine one." {
+		t.Fatalf("body = %q, want %q", body, "## Description\nLine one.")
+	}
+}
+
+func TestSplitSectionBlocks_preservesOrderedH2Blocks(t *testing.T) {
+	body := `## Description
+First line.
+Still description.
+
+## Acceptance Criteria
+- one
+- two
+
+## Notes
+Trailing note.`
+
+	got := splitSectionBlocks(body)
+	want := []sectionBlock{
+		{
+			Heading: "Description",
+			Body:    "First line.\nStill description.",
+		},
+		{
+			Heading: "Acceptance Criteria",
+			Body:    "- one\n- two",
+		},
+		{
+			Heading: "Notes",
+			Body:    "Trailing note.",
+		},
+	}
+
+	if len(got) != len(want) {
+		t.Fatalf("len(section blocks) = %d, want %d", len(got), len(want))
+	}
+
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("section block %d = %+v, want %+v", i, got[i], want[i])
+		}
+	}
+}
+
+func TestSplitSectionBlocks_keepsEmptySectionBodies(t *testing.T) {
+	body := `## Description
+
+## Acceptance Criteria
+`
+
+	got := splitSectionBlocks(body)
+	if len(got) != 2 {
+		t.Fatalf("len(section blocks) = %d, want 2", len(got))
+	}
+	if got[0].Heading != "Description" || got[0].Body != "" {
+		t.Fatalf("first section = %+v, want empty Description body", got[0])
+	}
+	if got[1].Heading != "Acceptance Criteria" || got[1].Body != "" {
+		t.Fatalf("second section = %+v, want empty Acceptance Criteria body", got[1])
+	}
+}
+
 func TestParseErrorError(t *testing.T) {
 	err := (&ParseError{
 		Kind: ErrKindInvalidYAML,
