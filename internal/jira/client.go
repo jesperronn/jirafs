@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"net/http"
 
+	"github.com/jirafs/jirafs/internal/export"
 	"github.com/jirafs/jirafs/internal/schema"
 )
 
@@ -143,6 +144,7 @@ func (c *JiraClient) FetchIssue(ctx context.Context, key string) (*schema.Issue,
 				}
 			}
 		}
+		export.NormalizeIssue(issue, jr.Fields)
 	}
 
 	return issue, nil

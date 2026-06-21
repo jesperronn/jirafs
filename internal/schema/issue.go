@@ -100,6 +100,10 @@ type Issue struct {
 	Identity       IssueIdentity
 	MachineOwned   MachineOwned
 	RemoteMetadata RemoteMetadata
+	Summary        string
+	Description    string
+	Labels         []string
+	Assignee       *string
 	// Sections holds the body sections keyed by their fixed section name.
 	// Only populated by ParseIssue when section parsing is enabled.
 	Sections map[FixedSectionName]string
