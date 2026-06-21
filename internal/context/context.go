@@ -194,6 +194,13 @@ func (r *Resolver) resolveState() (*Context, error) {
 	}, nil
 }
 
+// SaveCurrentProject persists the given project name as the remembered
+// current project in the settings state.
+func (r *Resolver) SaveCurrentProject(name string) error {
+	r.settings.State.CurrentProject = name
+	return r.settings.SaveState()
+}
+
 // isAmbiguous reports whether err is an ErrAmbiguousMatch error.
 func isAmbiguous(err error) bool {
 	if err == nil {
