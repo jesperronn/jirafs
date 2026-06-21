@@ -1,5 +1,6 @@
 ---
 agent: pi
+credit: false
 commands:
   - name: git_status
     run: git status --short
