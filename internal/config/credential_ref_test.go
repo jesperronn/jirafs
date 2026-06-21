@@ -113,3 +113,98 @@ func TestParseCredentialRef(t *testing.T) {
 		})
 	}
 }
+
+func TestParseCredentialRefs(t *testing.T) {
+	tests := []struct {
+		name    string
+		input   []string
+		want    []CredentialRef
+		wantErr bool
+	}{
+		{
+			name:  "empty slice",
+			input: []string{},
+			want:  []CredentialRef{},
+		},
+		{
+			name:  "nil slice",
+			input: nil,
+			want:  []CredentialRef{},
+		},
+		{
+			name:  "single env ref",
+			input: []string{"env://MY_API_TOKEN"},
+			want: []CredentialRef{
+				{Scheme: "env", Target: "MY_API_TOKEN"},
+			},
+		},
+		{
+			name:  "single file ref",
+			input: []string{"file://~/.jirafs/creds.toml"},
+			want: []CredentialRef{
+				{Scheme: "file", Target: "~/.jirafs/creds.toml"},
+			},
+		},
+		{
+			name:  "ordered multi refs",
+			input: []string{"env://API_TOKEN", "env://API_SECRET", "file://creds.toml"},
+			want: []CredentialRef{
+				{Scheme: "env", Target: "API_TOKEN"},
+				{Scheme: "env", Target: "API_SECRET"},
+				{Scheme: "file", Target: "creds.toml"},
+			},
+		},
+		{
+			name:    "first entry invalid",
+			input:   []string{"vault://bad", "env://OK"},
+			wantErr: true,
+		},
+		{
+			name:    "middle entry invalid",
+			input:   []string{"env://OK", "vault://bad", "env://OK2"},
+			wantErr: true,
+		},
+		{
+			name:    "last entry invalid",
+			input:   []string{"env://OK", "file://ok.toml", "ssh://bad"},
+			wantErr: true,
+		},
+		{
+			name:    "empty string in middle",
+			input:   []string{"env://OK", "", "env://OK2"},
+			wantErr: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := ParseCredentialRefs(tt.input)
+
+			if tt.wantErr {
+				if err == nil {
+					t.Errorf("ParseCredentialRefs(%v) expected error, got nil", tt.input)
+				}
+				return
+			}
+
+			if err != nil {
+				t.Errorf("ParseCredentialRefs(%v) unexpected error = %v", tt.input, err)
+				return
+			}
+
+			if len(got) != len(tt.want) {
+				t.Errorf("ParseCredentialRefs(%v) length = %d, want %d", tt.input, len(got), len(tt.want))
+				return
+			}
+
+			for i := range got {
+				if got[i].Scheme != tt.want[i].Scheme {
+					t.Errorf("ParseCredentialRefs(%v)[%d].Scheme = %q, want %q", tt.input, i, got[i].Scheme, tt.want[i].Scheme)
+				}
+				if got[i].Target != tt.want[i].Target {
+					t.Errorf("ParseCredentialRefs(%v)[%d].Target = %q, want %q", tt.input, i, got[i].Target, tt.want[i].Target)
+				}
+			}
+		})
+	}
+}
