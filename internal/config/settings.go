@@ -1,0 +1,232 @@
+package config
+
+import (
+	"os"
+	"path/filepath"
+	"strings"
+
+	"github.com/pelletier/go-toml/v2"
+)
+
+// Instance holds one Jira site definition.
+type Instance struct {
+	BaseURL       string   `toml:"base_url"`
+	AuthType      string   `toml:"auth_type"`
+	CredentialRefs []string `toml:"credential_refs"`
+}
+
+// State holds remembered operator context.
+type State struct {
+	CurrentProject string `toml:"current_project"`
+	CurrentUser    string `toml:"current_user"`
+}
+
+// Project holds one project definition.
+type Project struct {
+	Key        string   `toml:"key"`
+	Instance   string   `toml:"instance"`
+	MirrorDir  string   `toml:"mirror_dir"`
+	LocalDirs  []string `toml:"local_dirs"`
+	DefaultUser string  `toml:"default_user"`
+}
+
+// Settings is the top-level parsed settings document.
+type Settings struct {
+	Version   int                    `toml:"version"`
+	Instances map[string]Instance    `toml:"-"`
+	Projects  map[string]Project     `toml:"-"`
+	State     State                  `toml:"state"`
+}
+
+// SettingsTOML is the raw TOML mapping used during unmarshalling.
+type SettingsTOML struct {
+	Version   int                    `toml:"version"`
+	Instances map[string]Instance    `toml:"instances"`
+	Projects  map[string]Project     `toml:"projects"`
+	State     State                  `toml:"state"`
+}
+
+const (
+	// settingsDir is the dot-directory under $HOME where jirafs stores settings.
+	settingsDir = ".jirafs"
+
+	// settingsFile is the TOML file inside settingsDir.
+	settingsFile = "settings.toml"
+)
+
+// Load reads ~/.jirafs/settings.toml, parses it, validates it, and expands
+// all paths. It returns a fully populated Settings on success.
+func Load() (*Settings, error) {
+	s, err := loadSettings()
+	if err != nil {
+		return nil, err
+	}
+	if err := s.validate(); err != nil {
+		return nil, err
+	}
+	if err := s.expandPaths(); err != nil {
+		return nil, err
+	}
+	return s, nil
+}
+
+// loadSettings reads and decodes the settings TOML file.
+func loadSettings() (*Settings, error) {
+	path, err := settingsPath()
+	if err != nil {
+		return nil, NewSettingError(ErrMissingField, "home directory is not set", "home", "")
+	}
+
+	data, err := os.ReadFile(path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, NewSettingError(ErrMissingField, "settings file not found: "+path, "path", path)
+		}
+		return nil, NewSettingError(ErrMissingField, "cannot read settings file: "+err.Error(), "path", path)
+	}
+
+	var raw SettingsTOML
+	if err := toml.Unmarshal(data, &raw); err != nil {
+		return nil, NewSettingError(ErrMissingField, "invalid TOML: "+err.Error(), "file", path)
+	}
+
+	s := &Settings{
+		Version:   raw.Version,
+		Instances: raw.Instances,
+		Projects:  raw.Projects,
+		State:     raw.State,
+	}
+	return s, nil
+}
+
+// settingsPath returns the absolute path to ~/.jirafs/settings.toml.
+func settingsPath() (string, error) {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(home, settingsDir, settingsFile), nil
+}
+
+// validate checks the parsed settings for structural correctness.
+func (s *Settings) validate() error {
+	if s.Version != 1 {
+		return NewSettingError(ErrMissingField, "only version 1 is supported, got "+string(rune('0'+s.Version)), "version", "")
+	}
+
+	// Validate instances first so URL errors surface before project errors.
+	for name, inst := range s.Instances {
+		if inst.BaseURL == "" {
+			return NewSettingError(ErrMissingField, "base_url is required", "instances."+name+".base_url", "")
+		}
+		if !strings.HasPrefix(inst.BaseURL, "http://") && !strings.HasPrefix(inst.BaseURL, "https://") {
+			return NewSettingError(ErrInvalidURL, "must be an absolute URL starting with http:// or https://", "instances."+name+".base_url", inst.BaseURL)
+		}
+		if inst.AuthType == "" {
+			return NewSettingError(ErrMissingField, "auth_type is required", "instances."+name+".auth_type", "")
+		}
+	}
+
+	if len(s.Instances) == 0 {
+		return NewSettingError(ErrMissingField, "at least one instance is required", "instances", "")
+	}
+
+	// Validate projects.
+	for name, proj := range s.Projects {
+		if proj.Key == "" {
+			return NewSettingError(ErrMissingField, "key is required", "projects."+name+".key", "")
+		}
+		if proj.Instance == "" {
+			return NewSettingError(ErrMissingField, "instance is required", "projects."+name+".instance", "")
+		}
+		if _, ok := s.Instances[proj.Instance]; !ok {
+			return NewSettingError(ErrUnknownInstance, "instance %q not found", "projects."+name+".instance", proj.Instance)
+		}
+		if proj.MirrorDir == "" {
+			return NewSettingError(ErrMissingField, "mirror_dir is required", "projects."+name+".mirror_dir", "")
+		}
+	}
+
+	if len(s.Projects) == 0 {
+		return NewSettingError(ErrMissingField, "at least one project is required", "projects", "")
+	}
+
+	// Validate state references.
+	if s.State.CurrentProject != "" {
+		if _, ok := s.Projects[s.State.CurrentProject]; !ok {
+			return NewSettingError(ErrUnknownProject, "project %q not found", "state.current_project", s.State.CurrentProject)
+		}
+	}
+
+	return nil
+}
+
+// expandPaths expands tilde and environment variable references in all paths.
+func (s *Settings) expandPaths() error {
+	for name, proj := range s.Projects {
+		// Expand mirror_dir.
+		expanded, err := expandPath(proj.MirrorDir)
+		if err != nil {
+			return NewSettingError(ErrMissingField, "cannot expand mirror_dir: "+err.Error(),
+				"projects."+name+".mirror_dir", proj.MirrorDir)
+		}
+		if expanded == "" {
+			return NewSettingError(ErrEmptyMirrorDir, "mirror_dir must not be empty after expansion",
+				"projects."+name+".mirror_dir", proj.MirrorDir)
+		}
+
+		// Expand local_dirs.
+		expandedDirs := make([]string, 0, len(proj.LocalDirs))
+		for _, d := range proj.LocalDirs {
+			ed, err := expandPath(d)
+			if err != nil {
+				return NewSettingError(ErrMissingField, "cannot expand local_dir: "+err.Error(),
+					"projects."+name+".local_dirs", d)
+			}
+			if ed != "" {
+				expandedDirs = append(expandedDirs, ed)
+			}
+		}
+
+		// Write back the updated project.
+		s.Projects[name] = Project{
+			Key:        proj.Key,
+			Instance:   proj.Instance,
+			MirrorDir:  expanded,
+			LocalDirs:  expandedDirs,
+			DefaultUser: proj.DefaultUser,
+		}
+	}
+	return nil
+}
+
+// expandPath expands ~ and $VAR references in a single path string.
+func expandPath(p string) (string, error) {
+	if p == "" {
+		return "", nil
+	}
+
+	// Expand ~ at the start.
+	if strings.HasPrefix(p, "~/") || p == "~" {
+		home, err := os.UserHomeDir()
+		if err != nil {
+			return "", err
+		}
+		if p == "~" {
+			return home, nil
+		}
+		return filepath.Join(home, p[2:]), nil
+	}
+
+	// Expand environment variables like $VAR or ${VAR}.
+	expanded := os.Expand(p, func(varName string) string {
+		return os.Getenv(varName)
+	})
+
+	// If no expansion happened (no $VAR found), return as-is.
+	if expanded == p {
+		return p, nil
+	}
+
+	return expanded, nil
+}
