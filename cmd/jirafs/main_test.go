@@ -3,8 +3,14 @@ package main
 import (
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"testing"
+)
+
+const (
+	settingsDir  = ".jirafs"
+	settingsFile = "settings.toml"
 )
 
 func TestPrintHelp(t *testing.T) {
@@ -70,6 +76,173 @@ func runMainHelper(t *testing.T, args ...string) helperOutput {
 
 	cmd := exec.Command(os.Args[0], append([]string{"-test.run=TestMainHelperProcess", "--"}, args...)...)
 	cmd.Env = append(os.Environ(), "GO_WANT_HELPER_PROCESS=1")
+	output, err := cmd.CombinedOutput()
+	if err == nil {
+		return helperOutput{stderr: string(output), exitCode: 0}
+	}
+
+	exitErr, ok := err.(*exec.ExitError)
+	if !ok {
+		t.Fatalf("helper process error = %v", err)
+	}
+	return helperOutput{stderr: string(output), exitCode: exitErr.ExitCode()}
+}
+
+func TestUseNoProjectFlag(t *testing.T) {
+	output := runMainHelper(t, "use")
+	if !strings.Contains(output.stderr, "--project is required") {
+		t.Fatalf("stderr = %q, want --project required message", output.stderr)
+	}
+	if output.exitCode != 1 {
+		t.Fatalf("exitCode = %d, want 1", output.exitCode)
+	}
+}
+
+func TestUseUnknownProject(t *testing.T) {
+	tmpDir := t.TempDir()
+	homeDir := filepath.Join(tmpDir, "home")
+	jirafsDir := filepath.Join(homeDir, settingsDir)
+	if err := os.MkdirAll(jirafsDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	settings := `
+version = 1
+
+[instances.work]
+base_url = "https://jira.example.com"
+auth_type = "atlassian_api_token"
+
+[projects.platform]
+key = "PLAT"
+instance = "work"
+mirror_dir = "` + jirafsDir + `/jira/platform"
+`
+	if err := os.WriteFile(filepath.Join(jirafsDir, settingsFile), []byte(settings), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	output := runMainHelperWithHome(t, homeDir, "use", "--project", "UNKNOWN")
+	if !strings.Contains(output.stderr, `project "UNKNOWN" not found`) {
+		t.Fatalf("stderr = %q, want project not found", output.stderr)
+	}
+	if output.exitCode != 1 {
+		t.Fatalf("exitCode = %d, want 1", output.exitCode)
+	}
+}
+
+func TestUseUpdatesState(t *testing.T) {
+	tmpDir := t.TempDir()
+	homeDir := filepath.Join(tmpDir, "home")
+	jirafsDir := filepath.Join(homeDir, settingsDir)
+	if err := os.MkdirAll(jirafsDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	settings := `
+version = 1
+
+[instances.work]
+base_url = "https://jira.example.com"
+auth_type = "atlassian_api_token"
+
+[projects.platform]
+key = "PLAT"
+instance = "work"
+mirror_dir = "` + jirafsDir + `/jira/platform"
+
+[projects.growth]
+key = "GROW"
+instance = "work"
+mirror_dir = "` + jirafsDir + `/jira/growth"
+`
+	if err := os.WriteFile(filepath.Join(jirafsDir, settingsFile), []byte(settings), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	output := runMainHelperWithHome(t, homeDir, "use", "--project", "growth")
+	if output.exitCode != 0 {
+		t.Fatalf("exitCode = %d, want 0, stderr = %q", output.exitCode, output.stderr)
+	}
+	if !strings.Contains(output.stderr, `current project set to "growth"`) {
+		t.Fatalf("stderr = %q, want confirmation message", output.stderr)
+	}
+
+	// Verify persistence by reading the file directly.
+	data, err := os.ReadFile(filepath.Join(homeDir, settingsDir, settingsFile))
+	if err != nil {
+		t.Fatalf("ReadFile() error = %v", err)
+	}
+	if !strings.Contains(string(data), "current_project") {
+		t.Fatalf("settings = %q, want current_project entry", string(data))
+	}
+	if !strings.Contains(string(data), "growth") {
+		t.Fatalf("settings = %q, want growth project", string(data))
+	}
+}
+
+func TestUseWithExistingState(t *testing.T) {
+	tmpDir := t.TempDir()
+	homeDir := filepath.Join(tmpDir, "home")
+	jirafsDir := filepath.Join(homeDir, settingsDir)
+	if err := os.MkdirAll(jirafsDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	settings := `
+version = 1
+
+[instances.work]
+base_url = "https://jira.example.com"
+auth_type = "atlassian_api_token"
+
+[projects.platform]
+key = "PLAT"
+instance = "work"
+mirror_dir = "` + jirafsDir + `/jira/platform"
+
+[projects.growth]
+key = "GROW"
+instance = "work"
+mirror_dir = "` + jirafsDir + `/jira/growth"
+
+[state]
+current_project = "platform"
+`
+	if err := os.WriteFile(filepath.Join(jirafsDir, settingsFile), []byte(settings), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	output := runMainHelperWithHome(t, homeDir, "use", "--project", "growth")
+	if output.exitCode != 0 {
+		t.Fatalf("exitCode = %d, want 0, stderr = %q", output.exitCode, output.stderr)
+	}
+
+	// Verify state was overwritten.
+	data, err := os.ReadFile(filepath.Join(homeDir, settingsDir, settingsFile))
+	if err != nil {
+		t.Fatalf("ReadFile() error = %v", err)
+	}
+	if !strings.Contains(string(data), "current_project") {
+		t.Fatalf("settings = %q, want current_project entry", string(data))
+	}
+	if !strings.Contains(string(data), "growth") {
+		t.Fatalf("settings = %q, want growth project", string(data))
+	}
+}
+
+func runMainHelperWithHome(t *testing.T, home string, args ...string) helperOutput {
+	t.Helper()
+
+	cmd := exec.Command(os.Args[0], append([]string{"-test.run=TestMainHelperProcess", "--"}, args...)...)
+	env := os.Environ()
+	for i, e := range env {
+		if strings.HasPrefix(e, "HOME=") {
+			env[i] = "HOME=" + home
+			break
+		}
+	}
+	cmd.Env = append(env, "GO_WANT_HELPER_PROCESS=1")
 	output, err := cmd.CombinedOutput()
 	if err == nil {
 		return helperOutput{stderr: string(output), exitCode: 0}
