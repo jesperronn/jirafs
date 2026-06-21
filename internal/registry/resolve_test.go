@@ -211,6 +211,199 @@ func TestResolveError_Error(t *testing.T) {
 	}
 }
 
+func TestResolveStatus_found(t *testing.T) {
+	statuses := map[string]Status{
+		"status:in-progress": {
+			Name:      "In Progress",
+			Category:  "InProgress",
+			Description: "Work is currently being done.",
+		},
+		"status:done": {
+			Name:     "Done",
+			Category: "Done",
+		},
+	}
+
+	name, found := ResolveStatus("status:in-progress", statuses)
+	if !found {
+		t.Fatal("expected found for status:in-progress")
+	}
+	if name != "In Progress" {
+		t.Errorf("name = %q, want %q", name, "In Progress")
+	}
+
+	name, found = ResolveStatus("status:done", statuses)
+	if !found {
+		t.Fatal("expected found for status:done")
+	}
+	if name != "Done" {
+		t.Errorf("name = %q, want %q", name, "Done")
+	}
+}
+
+func TestResolveStatus_not_found(t *testing.T) {
+	statuses := map[string]Status{
+		"status:in-progress": {Name: "In Progress"},
+	}
+
+	_, found := ResolveStatus("status:missing", statuses)
+	if found {
+		t.Error("expected not found for status:missing")
+	}
+}
+
+func TestResolveStatus_empty_ref(t *testing.T) {
+	statuses := map[string]Status{
+		"status:in-progress": {Name: "In Progress"},
+	}
+
+	_, found := ResolveStatus("", statuses)
+	if found {
+		t.Error("expected not found for empty ref")
+	}
+}
+
+func TestResolveStatus_nil_map(t *testing.T) {
+	_, found := ResolveStatus("status:in-progress", nil)
+	if found {
+		t.Error("expected not found for nil map")
+	}
+}
+
+func TestResolveSprint_found(t *testing.T) {
+	sprints := map[string]Sprint{
+		"sprint:12345": {
+			ID:    12345,
+			Name:  "Sprint 24",
+			State: "active",
+		},
+		"sprint:12346": {
+			ID:    12346,
+			Name:  "Sprint 25",
+			State: "closed",
+		},
+	}
+
+	id, found := ResolveSprint("sprint:12345", sprints)
+	if !found {
+		t.Fatal("expected found for sprint:12345")
+	}
+	if id != "12345" {
+		t.Errorf("id = %q, want %q", id, "12345")
+	}
+
+	id, found = ResolveSprint("sprint:12346", sprints)
+	if !found {
+		t.Fatal("expected found for sprint:12346")
+	}
+	if id != "12346" {
+		t.Errorf("id = %q, want %q", id, "12346")
+	}
+}
+
+func TestResolveSprint_not_found(t *testing.T) {
+	sprints := map[string]Sprint{
+		"sprint:12345": {ID: 12345, Name: "Sprint 24"},
+	}
+
+	_, found := ResolveSprint("sprint:99999", sprints)
+	if found {
+		t.Error("expected not found for sprint:99999")
+	}
+}
+
+func TestResolveSprint_empty_ref(t *testing.T) {
+	sprints := map[string]Sprint{
+		"sprint:12345": {ID: 12345},
+	}
+
+	_, found := ResolveSprint("", sprints)
+	if found {
+		t.Error("expected not found for empty ref")
+	}
+}
+
+func TestResolveSprint_nil_map(t *testing.T) {
+	_, found := ResolveSprint("sprint:12345", nil)
+	if found {
+		t.Error("expected not found for nil map")
+	}
+}
+
+func TestResolveSprint_zero_id(t *testing.T) {
+	sprints := map[string]Sprint{
+		"sprint:0": {ID: 0, Name: "Sprint 0"},
+	}
+
+	id, found := ResolveSprint("sprint:0", sprints)
+	if !found {
+		t.Fatal("expected found for sprint:0")
+	}
+	if id != "0" {
+		t.Errorf("id = %q, want %q", id, "0")
+	}
+}
+
+func TestResolveFixVersion_found(t *testing.T) {
+	fixVersions := map[string]FixVersion{
+		"fix-version:1.4.0": {
+			Name:        "1.4.0",
+			Description: "Minor release with bug fixes",
+			Archived:    false,
+			Released:    true,
+		},
+		"fix-version:2.0.0": {
+			Name:     "2.0.0",
+			Released: false,
+		},
+	}
+
+	name, found := ResolveFixVersion("fix-version:1.4.0", fixVersions)
+	if !found {
+		t.Fatal("expected found for fix-version:1.4.0")
+	}
+	if name != "1.4.0" {
+		t.Errorf("name = %q, want %q", name, "1.4.0")
+	}
+
+	name, found = ResolveFixVersion("fix-version:2.0.0", fixVersions)
+	if !found {
+		t.Fatal("expected found for fix-version:2.0.0")
+	}
+	if name != "2.0.0" {
+		t.Errorf("name = %q, want %q", name, "2.0.0")
+	}
+}
+
+func TestResolveFixVersion_not_found(t *testing.T) {
+	fixVersions := map[string]FixVersion{
+		"fix-version:1.4.0": {Name: "1.4.0"},
+	}
+
+	_, found := ResolveFixVersion("fix-version:3.0.0", fixVersions)
+	if found {
+		t.Error("expected not found for fix-version:3.0.0")
+	}
+}
+
+func TestResolveFixVersion_empty_ref(t *testing.T) {
+	fixVersions := map[string]FixVersion{
+		"fix-version:1.4.0": {Name: "1.4.0"},
+	}
+
+	_, found := ResolveFixVersion("", fixVersions)
+	if found {
+		t.Error("expected not found for empty ref")
+	}
+}
+
+func TestResolveFixVersion_nil_map(t *testing.T) {
+	_, found := ResolveFixVersion("fix-version:1.4.0", nil)
+	if found {
+		t.Error("expected not found for nil map")
+	}
+}
+
 func TestIsResolveError(t *testing.T) {
 	re := &ResolveError{Code: "missing_ref"}
 
