@@ -5,6 +5,7 @@ Completed task IDs stay here so active ralph ledgers can stay small.
 ## Foundation
 
 - [x] B060a | B024b,B052a | `internal/plan/**` | BuildPlan returns empty plan when local and remote summary and description are unchanged.
+- [x] B060b | B060a,B052b | `internal/plan/**` | BuildPlan returns empty plan when local and remote refs and metadata are also unchanged; differing refs/metadata do not produce operations when summary/description are unchanged.
 
 ## Foundation
 
