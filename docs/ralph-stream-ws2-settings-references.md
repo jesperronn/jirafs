@@ -34,7 +34,7 @@ Completed dependency IDs archived in [Ralph Task Archive](ralph-task-archive.md)
 - [x] B017d | B017c | Resolve `env://VAR_NAME` credentials into normalized auth fields.
 - [ ] B017e | B017c | Resolve `file://path` credentials into normalized auth fields.
 - [ ] B017f | B017d,B017e | Merge ordered credential sources with later-source override.
-- [ ] B017g | B017f | Validate required resolved auth fields by instance `auth_type`.
+- [x] B017g | B017f | Validate required resolved auth fields by instance `auth_type`.
 - [ ] B017h | B017g | Expose resolved instance credentials through a path-local API for Jira callers.
 
 Integration handoff after each commit:

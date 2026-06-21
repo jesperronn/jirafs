@@ -297,3 +297,132 @@ func TestParseCredentialRefs(t *testing.T) {
 		})
 	}
 }
+
+func TestValidateResolvedCredential(t *testing.T) {
+	tests := []struct {
+		name      string
+		authType  string
+		cred      ResolvedCredential
+		wantErr   bool
+		wantCode  string
+	}{
+		{
+			name:     "empty auth_type passes",
+			authType: "",
+			cred:     ResolvedCredential{Fields: map[string]string{}},
+			wantErr:  false,
+		},
+		{
+			name:     "empty auth_type passes with fields",
+			authType: "",
+			cred:     ResolvedCredential{Fields: map[string]string{"api_token": "tok"}},
+			wantErr:  false,
+		},
+		{
+			name:     "basic with all fields passes",
+			authType: "basic",
+			cred:     ResolvedCredential{Fields: map[string]string{"username": "u", "password": "p"}},
+			wantErr:  false,
+		},
+		{
+			name:     "basic missing password fails",
+			authType: "basic",
+			cred:     ResolvedCredential{Fields: map[string]string{"username": "u"}},
+			wantErr:  true,
+			wantCode: ErrMissingAuthField,
+		},
+		{
+			name:     "basic missing username fails",
+			authType: "basic",
+			cred:     ResolvedCredential{Fields: map[string]string{"password": "p"}},
+			wantErr:  true,
+			wantCode: ErrMissingAuthField,
+		},
+		{
+			name:     "basic missing both fields fails",
+			authType: "basic",
+			cred:     ResolvedCredential{Fields: map[string]string{}},
+			wantErr:  true,
+			wantCode: ErrMissingAuthField,
+		},
+		{
+			name:     "atlassian_api_token with api_token passes",
+			authType: "atlassian_api_token",
+			cred:     ResolvedCredential{Fields: map[string]string{"api_token": "tok"}},
+			wantErr:  false,
+		},
+		{
+			name:     "atlassian_api_token missing api_token fails",
+			authType: "atlassian_api_token",
+			cred:     ResolvedCredential{Fields: map[string]string{"email": "test@example.com"}},
+			wantErr:  true,
+			wantCode: ErrMissingAuthField,
+		},
+		{
+			name:     "atlassian_api_token empty fields fails",
+			authType: "atlassian_api_token",
+			cred:     ResolvedCredential{Fields: map[string]string{}},
+			wantErr:  true,
+			wantCode: ErrMissingAuthField,
+		},
+		{
+			name:     "oauth1 with all fields passes",
+			authType: "oauth1",
+			cred: ResolvedCredential{Fields: map[string]string{
+				"oauth_token":        "ot",
+				"oauth_secret":       "os",
+				"oauth_consumer_key": "ck",
+				"oauth_signature":    "sig",
+			}},
+			wantErr: false,
+		},
+		{
+			name:     "oauth1 missing oauth_secret fails",
+			authType: "oauth1",
+			cred: ResolvedCredential{Fields: map[string]string{
+				"oauth_token":        "ot",
+				"oauth_consumer_key": "ck",
+				"oauth_signature":    "sig",
+			}},
+			wantErr:  true,
+			wantCode: ErrMissingAuthField,
+		},
+		{
+			name:     "unknown auth type returns error",
+			authType: "unknown_auth",
+			cred:     ResolvedCredential{Fields: map[string]string{"api_token": "tok"}},
+			wantErr:  true,
+			wantCode: ErrMissingAuthField,
+		},
+		{
+			name:     "extra fields do not cause failure",
+			authType: "atlassian_api_token",
+			cred:     ResolvedCredential{Fields: map[string]string{"api_token": "tok", "extra": "val"}},
+			wantErr:  false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := ValidateResolvedCredential(tt.authType, tt.cred)
+
+			if tt.wantErr {
+				if err == nil {
+					t.Errorf("ValidateResolvedCredential(%q, %+v) expected error, got nil", tt.authType, tt.cred)
+					return
+				}
+				if tt.wantCode != "" {
+					if !IsSettingError(err, tt.wantCode) {
+						t.Errorf("ValidateResolvedCredential(%q, %+v) error code = %v, want %v",
+							tt.authType, tt.cred, err, tt.wantCode)
+					}
+				}
+				return
+			}
+
+			if err != nil {
+				t.Errorf("ValidateResolvedCredential(%q, %+v) unexpected error = %v", tt.authType, tt.cred, err)
+			}
+		})
+	}
+}
