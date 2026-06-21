@@ -289,3 +289,13 @@ schema_version: "1"
 		t.Errorf("Sections should be nil for B030a, got %v", issue.Sections)
 	}
 }
+
+func TestParseErrorError(t *testing.T) {
+	err := (&ParseError{
+		Kind: ErrKindInvalidYAML,
+		Msg:  "bad yaml",
+	}).Error()
+	if err != "invalid_yaml: bad yaml" {
+		t.Fatalf("Error() = %q, want %q", err, "invalid_yaml: bad yaml")
+	}
+}

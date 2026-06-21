@@ -224,6 +224,33 @@ func TestMustFixturesPanicsOnBadRoot(t *testing.T) {
 	MustFixtures("/nonexistent/path/that/does/not/exist")
 }
 
+func TestNewFixturesRelativePath(t *testing.T) {
+	cwd, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	root := t.TempDir()
+	relative := filepath.Join("fixtures", "nested")
+	if err := os.MkdirAll(filepath.Join(root, relative), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chdir(root); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		_ = os.Chdir(cwd)
+	})
+
+	f, err := NewFixtures(relative)
+	if err != nil {
+		t.Fatalf("NewFixtures() error = %v", err)
+	}
+	if !filepath.IsAbs(f.root) {
+		t.Fatalf("root = %q, want absolute path", f.root)
+	}
+}
+
 func TestGoldenPath(t *testing.T) {
 	dir := t.TempDir()
 	g, err := NewGolden(dir)

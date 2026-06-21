@@ -127,3 +127,10 @@ func TestErrorCodesAreStable(t *testing.T) {
 		}
 	}
 }
+
+func TestSettingErrorUnwrap(t *testing.T) {
+	se := NewSettingError(ErrMissingField, "version is required", "version", "")
+	if se.Unwrap() != nil {
+		t.Fatal("Unwrap() = non-nil, want nil")
+	}
+}

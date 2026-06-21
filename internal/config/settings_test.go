@@ -3,6 +3,7 @@ package config
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -239,6 +240,87 @@ auth_type = "atlassian_api_token"
 
 	if !IsSettingError(err, ErrInvalidURL) {
 		t.Errorf("expected error code %q, got %v", ErrInvalidURL, err)
+	}
+}
+
+func TestSaveStateWritesSettingsFile(t *testing.T) {
+	tmpDir := t.TempDir()
+	homeDir := filepath.Join(tmpDir, "home")
+	jirafsDir := filepath.Join(homeDir, settingsDir)
+	if err := os.MkdirAll(jirafsDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("HOME", homeDir)
+
+	settings := &Settings{
+		Version: 1,
+		Instances: map[string]Instance{
+			"work": {
+				BaseURL:  "https://jira.example.com",
+				AuthType: "atlassian_api_token",
+			},
+		},
+		Projects: map[string]Project{
+			"platform": {
+				Key:       "PLAT",
+				Instance:  "work",
+				MirrorDir: filepath.Join(tmpDir, "mirror"),
+			},
+		},
+		State: State{
+			CurrentProject: "platform",
+			CurrentUser:    "user:jesper",
+		},
+	}
+
+	if err := settings.SaveState(); err != nil {
+		t.Fatalf("SaveState() error = %v", err)
+	}
+
+	data, err := os.ReadFile(filepath.Join(jirafsDir, settingsFile))
+	if err != nil {
+		t.Fatalf("ReadFile() error = %v", err)
+	}
+
+	text := string(data)
+	if !strings.Contains(text, "current_project = 'platform'") &&
+		!strings.Contains(text, "current_project = \"platform\"") {
+		t.Fatalf("settings file = %q, want current_project entry", text)
+	}
+}
+
+func TestSaveStateReturnsStructuredWriteError(t *testing.T) {
+	tmpDir := t.TempDir()
+	homeDir := filepath.Join(tmpDir, "home")
+	if err := os.MkdirAll(homeDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("HOME", homeDir)
+
+	settings := &Settings{
+		Version: 1,
+		Instances: map[string]Instance{
+			"work": {
+				BaseURL:  "https://jira.example.com",
+				AuthType: "atlassian_api_token",
+			},
+		},
+		Projects: map[string]Project{
+			"platform": {
+				Key:       "PLAT",
+				Instance:  "work",
+				MirrorDir: filepath.Join(tmpDir, "mirror"),
+			},
+		},
+		State: State{CurrentProject: "platform"},
+	}
+
+	err := settings.SaveState()
+	if err == nil {
+		t.Fatal("SaveState() error = nil, want write failure")
+	}
+	if !IsSettingError(err, ErrMissingField) {
+		t.Fatalf("SaveState() error = %v, want structured settings error", err)
 	}
 }
 
