@@ -25,7 +25,7 @@ Completed dependency IDs archived in [Ralph Task Archive](ralph-task-archive.md)
 - [x] B023a | B020c | Define user and project registry models.
 - [x] B023b | B023a | Define status, sprint, and fix-version registry models.
 - [x] B024a | B021b | Define typed plan operation model for one editable field.
-- [ ] B024b | B024a | Define conflict model without Jira transport dependencies.
+- [x] B024b | B024a | Define conflict model without Jira transport dependencies.
 - [ ] B030a | B021c | Parse valid synced issue frontmatter into schema model.
 - [ ] B030b | B030a | Parse valid draft issue frontmatter into schema model.
 - [ ] B030c | B030b | Return structured errors for invalid frontmatter.
