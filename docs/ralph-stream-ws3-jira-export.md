@@ -31,7 +31,7 @@ Completed dependency IDs archived in [Ralph Task Archive](ralph-task-archive.md)
 - [x] B055b | B054b,B053b | Implement real Jira search for `current-sprint`.
 - [x] B056a | B032b,B051a | Export one fetched issue through the canonical codec.
 - [x] B056b | B056a,B040b | Refresh project-scoped registries needed by exported refs.
-- [ ] B056c | B055b,B056b | Refresh one named mirror scope while keeping linked issues shallow.
+- [x] B056c | B055b,B056b | Refresh one named mirror scope while keeping linked issues shallow.
 
 Integration handoff after each commit:
 
