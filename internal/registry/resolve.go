@@ -8,10 +8,11 @@ import (
 
 // ResolveError wraps a structured error for typed-ref resolution failures.
 type ResolveError struct {
-	RefType string
-	Ref     string
-	Code    string
-	Msg     string
+	RefType    string
+	Ref        string
+	Code       string
+	Msg        string
+	Candidates []string
 }
 
 func (e *ResolveError) Error() string {
@@ -47,6 +48,19 @@ func ErrMissingRef(refType, lookupValue string) *ResolveError {
 	}
 }
 
+// ErrAmbiguousRef returns a *ResolveError for an ambiguous typed ref where
+// multiple candidates match the lookup value. The Candidates field lists
+// each candidate so callers can present them to the user for disambiguation.
+func ErrAmbiguousRef(refType, lookupValue string, candidates []string) *ResolveError {
+	return &ResolveError{
+		RefType:   refType,
+		Ref:       lookupValue,
+		Code:      "ambiguous_ref",
+		Msg:       fmt.Sprintf("%d %s candidates for %s", len(candidates), refType, lookupValue),
+		Candidates: candidates,
+	}
+}
+
 var errMissingRef = errors.New("registry: missing_ref: typed ref is empty")
 
 // ParseTypedRef splits a typed ref like "user:jesper" into (type, key).
@@ -77,6 +91,35 @@ func ResolveUser(typedRef string, users map[string]User) (accountID string, foun
 		return "", false
 	}
 	return u.AccountID, true
+}
+
+// ResolveUserAmbiguous looks up users in the registry by prefix-matching
+// the lookup value against each user's display name. Returns the single
+// account_id when exactly one candidate matches. Returns an *ResolveError
+// with Code "ambiguous_ref" and candidate context when multiple users match.
+// Returns ("", false, nil) when no user matches.
+func ResolveUserAmbiguous(lookupValue string, users map[string]User) (accountID string, found bool, err error) {
+	if lookupValue == "" {
+		return "", false, nil
+	}
+	var candidates []string
+	for _, u := range users {
+		if strings.Contains(strings.ToLower(u.DisplayName), strings.ToLower(lookupValue)) {
+			candidates = append(candidates, u.DisplayName)
+		}
+	}
+	if len(candidates) == 0 {
+		return "", false, nil
+	}
+	if len(candidates) == 1 {
+		for _, u := range users {
+			if strings.Contains(strings.ToLower(u.DisplayName), strings.ToLower(lookupValue)) {
+				return u.AccountID, true, nil
+			}
+		}
+		return "", false, nil
+	}
+	return "", false, ErrAmbiguousRef("user", lookupValue, candidates)
 }
 
 // ResolveProject looks up a project typed ref in the projects registry and
