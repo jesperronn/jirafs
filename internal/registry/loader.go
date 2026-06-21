@@ -136,3 +136,114 @@ func LoadUsers(mirrorDir string) (map[string]User, error) {
 func LoadProjects(mirrorDir string) (map[string]Project, error) {
 	return LoadProjectsFile(filepath.Join(mirrorDir, ProjectsFile))
 }
+
+// LoadStatusesFile reads a statuses registry YAML from the given path and returns
+// a map keyed by typed-ref (e.g. "status:in-progress") to Status.
+//
+// Expected file shape:
+//
+//	entries:
+//	  "status:in-progress":
+//	    name: "In Progress"
+//	    category: "InProgress"
+//	    description: "Work is currently being done on this issue."
+func LoadStatusesFile(path string) (map[string]Status, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, NewRegistryError(path, "file_not_found", "statuses registry file not found")
+		}
+		return nil, NewRegistryError(path, "file_read", "cannot read statuses registry file: "+err.Error())
+	}
+
+	var raw RegistryFile[string, Status]
+	if err := yaml.Unmarshal(data, &raw); err != nil {
+		return nil, NewRegistryError(path, "yaml_parse", "invalid statuses registry YAML: "+err.Error())
+	}
+
+	if raw.Entries == nil {
+		return nil, NewRegistryError(path, "missing_entries", "statuses registry file has no entries key")
+	}
+
+	return raw.Entries, nil
+}
+
+// LoadSprintsFile reads a sprints registry YAML from the given path and returns
+// a map keyed by typed-ref (e.g. "sprint:12345") to Sprint.
+//
+// Expected file shape:
+//
+//	entries:
+//	  "sprint:12345":
+//	    id: 12345
+//	    name: "Sprint 24"
+//	    state: "active"
+//	    start_date: "2024-06-01T00:00:00Z"
+//	    end_date: "2024-06-14T00:00:00Z"
+func LoadSprintsFile(path string) (map[string]Sprint, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, NewRegistryError(path, "file_not_found", "sprints registry file not found")
+		}
+		return nil, NewRegistryError(path, "file_read", "cannot read sprints registry file: "+err.Error())
+	}
+
+	var raw RegistryFile[string, Sprint]
+	if err := yaml.Unmarshal(data, &raw); err != nil {
+		return nil, NewRegistryError(path, "yaml_parse", "invalid sprints registry YAML: "+err.Error())
+	}
+
+	if raw.Entries == nil {
+		return nil, NewRegistryError(path, "missing_entries", "sprints registry file has no entries key")
+	}
+
+	return raw.Entries, nil
+}
+
+// LoadFixVersionsFile reads a fix_versions registry YAML from the given path and returns
+// a map keyed by typed-ref (e.g. "fix-version:1.4.0") to FixVersion.
+//
+// Expected file shape:
+//
+//	entries:
+//	  "fix-version:1.4.0":
+//	    name: "1.4.0"
+//	    description: "Minor release with bug fixes"
+//	    archived: false
+//	    released: true
+func LoadFixVersionsFile(path string) (map[string]FixVersion, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, NewRegistryError(path, "file_not_found", "fix_versions registry file not found")
+		}
+		return nil, NewRegistryError(path, "file_read", "cannot read fix_versions registry file: "+err.Error())
+	}
+
+	var raw RegistryFile[string, FixVersion]
+	if err := yaml.Unmarshal(data, &raw); err != nil {
+		return nil, NewRegistryError(path, "yaml_parse", "invalid fix_versions registry YAML: "+err.Error())
+	}
+
+	if raw.Entries == nil {
+		return nil, NewRegistryError(path, "missing_entries", "fix_versions registry file has no entries key")
+	}
+
+	return raw.Entries, nil
+}
+
+// LoadStatuses loads the statuses registry from mirrorDir/statuses.yaml.
+func LoadStatuses(mirrorDir string) (map[string]Status, error) {
+	return LoadStatusesFile(filepath.Join(mirrorDir, StatusesFile))
+}
+
+// LoadSprints loads the sprints registry from mirrorDir/sprints.yaml.
+func LoadSprints(mirrorDir string) (map[string]Sprint, error) {
+	return LoadSprintsFile(filepath.Join(mirrorDir, SprintsFile))
+}
+
+// LoadFixVersions loads the fix_versions registry from mirrorDir/fix_versions.yaml.
+func LoadFixVersions(mirrorDir string) (map[string]FixVersion, error) {
+	return LoadFixVersionsFile(filepath.Join(mirrorDir, FixVersionsFile))
+}
