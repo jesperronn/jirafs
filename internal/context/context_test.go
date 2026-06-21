@@ -433,6 +433,35 @@ func TestResolveCwdAmbiguousIdenticalMirrorDirs(t *testing.T) {
 	}
 }
 
+// TestB015aReadRememberedProject verifies that when no explicit project
+// flag is given and cwd has no match, the remembered current project
+// from settings state is read and returned.
+func TestB015aReadRememberedProject(t *testing.T) {
+	projects := map[string]config.Project{
+		"platform": {Key: "PLAT", Instance: "work", MirrorDir: "/mirror/plat"},
+		"growth":   {Key: "GROW", Instance: "work", MirrorDir: "/mirror/grow"},
+	}
+	s := makeSettings(projects, config.State{CurrentProject: "platform"})
+
+	r := NewResolver(s, "")
+	ctx, err := r.Resolve("/tmp/random/nowhere")
+	if err != nil {
+		t.Fatalf("Resolve() error = %v", err)
+	}
+	if ctx.Name != "platform" {
+		t.Errorf("Name = %q, want %q", ctx.Name, "platform")
+	}
+	if ctx.Key != "PLAT" {
+		t.Errorf("Key = %q, want %q", ctx.Key, "PLAT")
+	}
+	if ctx.MirrorDir != "/mirror/plat" {
+		t.Errorf("MirrorDir = %q, want %q", ctx.MirrorDir, "/mirror/plat")
+	}
+	if ctx.Instance != "work" {
+		t.Errorf("Instance = %q, want %q", ctx.Instance, "work")
+	}
+}
+
 func TestIsPrefixOf(t *testing.T) {
 	tests := []struct {
 		prefix, target string
