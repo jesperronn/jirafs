@@ -114,6 +114,95 @@ func TestParseCredentialRef(t *testing.T) {
 	}
 }
 
+func TestResolveEnvCredential(t *testing.T) {
+	t.Setenv("TEST_JIRAFS_TOKEN", "secret-token-value")
+	t.Setenv("TEST_JIRAFS_USER", "testuser")
+
+	tests := []struct {
+		name      string
+		ref       CredentialRef
+		wantErr   bool
+		wantCode  string
+		wantKey   string
+		wantValue string
+	}{
+		{
+			name:      "set env var resolves",
+			ref:       CredentialRef{Scheme: "env", Target: "TEST_JIRAFS_TOKEN"},
+			wantErr:   false,
+			wantKey:   "TEST_JIRAFS_TOKEN",
+			wantValue: "secret-token-value",
+		},
+		{
+			name:      "another set env var resolves",
+			ref:       CredentialRef{Scheme: "env", Target: "TEST_JIRAFS_USER"},
+			wantErr:   false,
+			wantKey:   "TEST_JIRAFS_USER",
+			wantValue: "testuser",
+		},
+		{
+			name:    "unset env var returns error",
+			ref:     CredentialRef{Scheme: "env", Target: "UNSET_VAR_DOES_NOT_EXIST"},
+			wantErr: true,
+			wantCode: ErrCredentialResolve,
+		},
+		{
+			name:    "non-env scheme returns error",
+			ref:     CredentialRef{Scheme: "file", Target: "/path/to/file"},
+			wantErr: true,
+			wantCode: ErrCredentialResolve,
+		},
+		{
+			name:    "empty target returns error",
+			ref:     CredentialRef{Scheme: "env", Target: ""},
+			wantErr: true,
+			wantCode: ErrCredentialResolve,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := ResolveEnvCredential(tt.ref)
+
+			if tt.wantErr {
+				if err == nil {
+					t.Errorf("ResolveEnvCredential(%+v) expected error, got nil", tt.ref)
+					return
+				}
+				if tt.wantCode != "" {
+					if !IsSettingError(err, tt.wantCode) {
+						t.Errorf("ResolveEnvCredential(%+v) error code = %v, want %v",
+							tt.ref, err, tt.wantCode)
+					}
+				}
+				return
+			}
+
+			if err != nil {
+				t.Errorf("ResolveEnvCredential(%+v) unexpected error = %v", tt.ref, err)
+				return
+			}
+
+			if got.Scheme != "env" {
+				t.Errorf("ResolveEnvCredential(%+v).Scheme = %q, want %q",
+					tt.ref, got.Scheme, "env")
+			}
+			if got.Target != tt.ref.Target {
+				t.Errorf("ResolveEnvCredential(%+v).Target = %q, want %q",
+					tt.ref, got.Target, tt.ref.Target)
+			}
+			if len(got.Fields) != 1 {
+				t.Errorf("ResolveEnvCredential(%+v).Fields length = %d, want 1",
+					tt.ref, len(got.Fields))
+			}
+			if got.Fields[tt.wantKey] != tt.wantValue {
+				t.Errorf("ResolveEnvCredential(%+v).Fields[%q] = %q, want %q",
+					tt.ref, tt.wantKey, got.Fields[tt.wantKey], tt.wantValue)
+			}
+		})
+	}
+}
+
 func TestParseCredentialRefs(t *testing.T) {
 	tests := []struct {
 		name    string

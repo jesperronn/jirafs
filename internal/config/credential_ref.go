@@ -2,6 +2,7 @@ package config
 
 import (
 	"fmt"
+	"os"
 	"strings"
 )
 
@@ -72,6 +73,46 @@ func ParseCredentialRef(ref string) (CredentialRef, error) {
 	return CredentialRef{
 		Scheme: scheme,
 		Target: target,
+	}, nil
+}
+
+// ResolvedCredential holds a credential reference after its source has been
+// resolved into a map of normalized auth fields. The Scheme and Target fields
+// preserve the original parsed values for traceability.
+type ResolvedCredential struct {
+	Scheme string            // "env" or "file"
+	Target string            // original target (VAR name or file path)
+	Fields map[string]string // normalized auth fields
+}
+
+// ResolveEnvCredential reads the environment variable named by Target and
+// returns a ResolvedCredential with the variable name as the key and the
+// variable value as the value in Fields. If the variable is unset, it
+// returns ErrCredentialResolve.
+func ResolveEnvCredential(ref CredentialRef) (ResolvedCredential, error) {
+	if ref.Scheme != "env" {
+		return ResolvedCredential{}, NewSettingError(
+			ErrCredentialResolve,
+			fmt.Sprintf("expected env:// scheme, got %q", ref.Scheme),
+			"credential_ref", ref.Scheme+"://"+ref.Target,
+		)
+	}
+
+	value := os.Getenv(ref.Target)
+	if value == "" {
+		return ResolvedCredential{}, NewSettingError(
+			ErrCredentialResolve,
+			fmt.Sprintf("environment variable %q is not set", ref.Target),
+			"credential_ref", "env://"+ref.Target,
+		)
+	}
+
+	return ResolvedCredential{
+		Scheme: "env",
+		Target: ref.Target,
+		Fields: map[string]string{
+			ref.Target: value,
+		},
 	}, nil
 }
 
