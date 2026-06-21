@@ -27,6 +27,32 @@ type User struct {
 	AccountType  string `json:"accountType"`
 }
 
+// StatusEntry represents a Jira issue status returned by the status API.
+type StatusEntry struct {
+	Name        string `json:"name"`
+	Category    string `json:"category"`
+	Description string `json:"description,omitempty"`
+	StatusKey   string `json:"statusKey,omitempty"`
+}
+
+// SprintEntry represents a Jira sprint returned by the agile API.
+type SprintEntry struct {
+	ID           int64  `json:"id"`
+	Name         string `json:"name"`
+	State        string `json:"state"`
+	StartDate    string `json:"startDate,omitempty"`
+	EndDate      string `json:"endDate,omitempty"`
+	CompleteDate string `json:"completeDate,omitempty"`
+}
+
+// FixVersionEntry represents a Jira fix version returned by the version API.
+type FixVersionEntry struct {
+	Name        string `json:"name"`
+	Description string `json:"description,omitempty"`
+	Archived    bool   `json:"archived"`
+	Released    bool   `json:"released"`
+}
+
 // Client is the Jira API client interface for fetching and searching issues.
 // Implementations may talk to a real Jira REST API or a fake transport.
 type Client interface {
@@ -38,6 +64,15 @@ type Client interface {
 
 	// CurrentUser returns the authenticated user identity from the Jira API.
 	CurrentUser(ctx context.Context) (*User, error)
+
+	// FetchStatuses returns all available issue statuses from Jira.
+	FetchStatuses(ctx context.Context) ([]StatusEntry, error)
+
+	// FetchSprints returns all sprints for the given project key.
+	FetchSprints(ctx context.Context, projectKey string) ([]SprintEntry, error)
+
+	// FetchFixVersions returns all fix versions for the given project key.
+	FetchFixVersions(ctx context.Context, projectKey string) ([]FixVersionEntry, error)
 }
 
 // jiraErrorDetails captures the structured error response from Jira.
@@ -60,6 +95,21 @@ type jiraIssueResponse struct {
 type searchResponse struct {
 	Total    int                `json:"total"`
 	Issues   []jiraIssueResponse `json:"issues"`
+}
+
+// statusesResponse is the JSON structure returned by the status API.
+type statusesResponse struct {
+	Statuses []StatusEntry `json:"statuses"`
+}
+
+// sprintsResponse is the JSON structure returned by the agile sprint API.
+type sprintsResponse struct {
+	Values []SprintEntry `json:"values"`
+}
+
+// fixVersionsResponse is the JSON structure returned by the project versions API.
+type fixVersionsResponse struct {
+	Values []FixVersionEntry `json:"values"`
 }
 
 // mapHTTPErr reads the response body and maps the HTTP status to a
@@ -321,4 +371,126 @@ func (c *JiraClient) CurrentUser(ctx context.Context) (*User, error) {
 	}
 
 	return &u, nil
+}
+
+// FetchStatuses calls the Jira /rest/api/3/status endpoint to retrieve
+// all available issue statuses. It returns the parsed StatusEntry slice.
+func (c *JiraClient) FetchStatuses(ctx context.Context) ([]StatusEntry, error) {
+	url := c.baseURL + "/rest/api/3/status"
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		return nil, NewTransportError("cannot create status request: " + err.Error())
+	}
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return nil, NewTransportError("status request failed: " + err.Error())
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode == http.StatusNotFound {
+		return nil, NewNotFoundError("statuses")
+	}
+
+	if resp.StatusCode >= 400 && resp.StatusCode < 500 {
+		if resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden {
+			return nil, NewAuthError("HTTP " + fmt.Sprintf("%d", resp.StatusCode))
+		}
+		return nil, mapHTTPErr(resp)
+	}
+
+	if resp.StatusCode >= 500 {
+		return nil, mapHTTPErr(resp)
+	}
+
+	var sr statusesResponse
+	if err := json.NewDecoder(resp.Body).Decode(&sr); err != nil {
+		return nil, NewUnknownErr("cannot parse statuses JSON: " + err.Error())
+	}
+
+	return sr.Statuses, nil
+}
+
+// FetchSprints calls the Jira /rest/agile/1.0/sprint endpoint with a
+// project query parameter to retrieve all sprints for the given project.
+func (c *JiraClient) FetchSprints(ctx context.Context, projectKey string) ([]SprintEntry, error) {
+	if projectKey == "" {
+		return nil, NewNotFoundError("empty project key for sprints")
+	}
+
+	url := fmt.Sprintf("%s/rest/agile/1.0/sprint?project=%s", c.baseURL, projectKey)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		return nil, NewTransportError("cannot create sprint request: " + err.Error())
+	}
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return nil, NewTransportError("sprint request failed: " + err.Error())
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode == http.StatusNotFound {
+		return nil, NewNotFoundError("sprints:" + projectKey)
+	}
+
+	if resp.StatusCode >= 400 && resp.StatusCode < 500 {
+		if resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden {
+			return nil, NewAuthError("HTTP " + fmt.Sprintf("%d", resp.StatusCode))
+		}
+		return nil, mapHTTPErr(resp)
+	}
+
+	if resp.StatusCode >= 500 {
+		return nil, mapHTTPErr(resp)
+	}
+
+	var sr sprintsResponse
+	if err := json.NewDecoder(resp.Body).Decode(&sr); err != nil {
+		return nil, NewUnknownErr("cannot parse sprints JSON: " + err.Error())
+	}
+
+	return sr.Values, nil
+}
+
+// FetchFixVersions calls the Jira /rest/api/3/project/{projectKey}/versions
+// endpoint to retrieve all fix versions for the given project.
+func (c *JiraClient) FetchFixVersions(ctx context.Context, projectKey string) ([]FixVersionEntry, error) {
+	if projectKey == "" {
+		return nil, NewNotFoundError("empty project key for fix versions")
+	}
+
+	url := fmt.Sprintf("%s/rest/api/3/project/%s/versions", c.baseURL, projectKey)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		return nil, NewTransportError("cannot create version request: " + err.Error())
+	}
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return nil, NewTransportError("version request failed: " + err.Error())
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode == http.StatusNotFound {
+		return nil, NewNotFoundError("fix-versions:" + projectKey)
+	}
+
+	if resp.StatusCode >= 400 && resp.StatusCode < 500 {
+		if resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden {
+			return nil, NewAuthError("HTTP " + fmt.Sprintf("%d", resp.StatusCode))
+		}
+		return nil, mapHTTPErr(resp)
+	}
+
+	if resp.StatusCode >= 500 {
+		return nil, mapHTTPErr(resp)
+	}
+
+	var fr fixVersionsResponse
+	if err := json.NewDecoder(resp.Body).Decode(&fr); err != nil {
+		return nil, NewUnknownErr("cannot parse fix-versions JSON: " + err.Error())
+	}
+
+	return fr.Values, nil
 }

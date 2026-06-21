@@ -16,6 +16,10 @@ type FakeTransport struct {
 	err           error                    // returned when ErrOn is set
 	errOn         string                   // "fetch", "search", or "user"
 	issuesByScope map[string][]*schema.Issue // scope -> issues
+	// Registry data for registry refresh tests.
+	statuses      []StatusEntry
+	sprints       map[string][]SprintEntry // projectKey -> sprints
+	fixVersions   map[string][]FixVersionEntry // projectKey -> versions
 }
 
 // NewFakeTransport creates a fake transport with empty state.
@@ -23,6 +27,8 @@ func NewFakeTransport() *FakeTransport {
 	return &FakeTransport{
 		issues:        make(map[string]*schema.Issue),
 		issuesByScope: make(map[string][]*schema.Issue),
+		sprints:       make(map[string][]SprintEntry),
+		fixVersions:   make(map[string][]FixVersionEntry),
 	}
 }
 
@@ -114,6 +120,66 @@ func (f *FakeTransport) CurrentUser(_ context.Context) (*User, error) {
 		EmailAddress: "jirafs-test@example.com",
 		Active:      true,
 	}, nil
+}
+
+// SetStatuses registers statuses that FetchStatuses will return.
+func (f *FakeTransport) SetStatuses(statuses []StatusEntry) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.statuses = statuses
+}
+
+// SetSprints registers sprints for a project key that FetchSprints will return.
+func (f *FakeTransport) SetSprints(projectKey string, sprints []SprintEntry) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.sprints[projectKey] = sprints
+}
+
+// SetFixVersions registers fix versions for a project key that
+// FetchFixVersions will return.
+func (f *FakeTransport) SetFixVersions(projectKey string, versions []FixVersionEntry) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.fixVersions[projectKey] = versions
+}
+
+// FetchStatuses returns the registered statuses.
+func (f *FakeTransport) FetchStatuses(_ context.Context) ([]StatusEntry, error) {
+	f.mu.RLock()
+	defer f.mu.RUnlock()
+	if f.statuses == nil {
+		return nil, NewNotFoundError("statuses")
+	}
+	return f.statuses, nil
+}
+
+// FetchSprints returns the registered sprints for the given project key.
+func (f *FakeTransport) FetchSprints(_ context.Context, projectKey string) ([]SprintEntry, error) {
+	f.mu.RLock()
+	defer f.mu.RUnlock()
+	if projectKey == "" {
+		return nil, NewNotFoundError("empty project key for sprints")
+	}
+	sprints, ok := f.sprints[projectKey]
+	if !ok {
+		return nil, NewNotFoundError("sprints:" + projectKey)
+	}
+	return sprints, nil
+}
+
+// FetchFixVersions returns the registered fix versions for the given project key.
+func (f *FakeTransport) FetchFixVersions(_ context.Context, projectKey string) ([]FixVersionEntry, error) {
+	f.mu.RLock()
+	defer f.mu.RUnlock()
+	if projectKey == "" {
+		return nil, NewNotFoundError("empty project key for fix versions")
+	}
+	versions, ok := f.fixVersions[projectKey]
+	if !ok {
+		return nil, NewNotFoundError("fix-versions:" + projectKey)
+	}
+	return versions, nil
 }
 
 // generateScopeIssues returns deterministic issues for known scopes.

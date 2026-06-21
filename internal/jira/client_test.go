@@ -1001,3 +1001,307 @@ func TestCurrentUserInvalidJSON(t *testing.T) {
 		t.Errorf("expected unknown error, got %v", err)
 	}
 }
+
+func TestFetchStatusesSuccess(t *testing.T) {
+	payload := map[string]interface{}{
+		"statuses": []map[string]interface{}{
+			{"name": "To Do", "category": "New", "statusKey": "todo"},
+			{"name": "In Progress", "category": "InProgress", "statusKey": "in-progress"},
+			{"name": "Done", "category": "Done", "statusKey": "done"},
+		},
+	}
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet {
+			t.Errorf("method = %s, want GET", r.Method)
+		}
+		wantPath := "/rest/api/3/status"
+		if r.URL.Path != wantPath {
+			t.Errorf("path = %s, want %s", r.URL.Path, wantPath)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(payload)
+	}))
+	defer server.Close()
+
+	client := NewJiraClient(server.URL)
+	statuses, err := client.FetchStatuses(context.Background())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(statuses) != 3 {
+		t.Fatalf("expected 3 statuses, got %d", len(statuses))
+	}
+	if statuses[0].Name != "To Do" {
+		t.Errorf("status 0 name = %q, want %q", statuses[0].Name, "To Do")
+	}
+	if statuses[0].StatusKey != "todo" {
+		t.Errorf("status 0 statusKey = %q, want %q", statuses[0].StatusKey, "todo")
+	}
+	if statuses[1].Category != "InProgress" {
+		t.Errorf("status 1 category = %q, want %q", statuses[1].Category, "InProgress")
+	}
+}
+
+func TestFetchStatusesNotFound(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusNotFound)
+		w.Write([]byte(`{"errorMessages":["Not found"]}`))
+	}))
+	defer server.Close()
+
+	client := NewJiraClient(server.URL)
+	_, err := client.FetchStatuses(context.Background())
+	if !IsClientError(err, ErrNotFound) {
+		t.Errorf("expected not_found error, got %v", err)
+	}
+}
+
+func TestFetchStatusesAuthError(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusUnauthorized)
+		w.Write([]byte(`{"errorMessages":["Unauthorized"]}`))
+	}))
+	defer server.Close()
+
+	client := NewJiraClient(server.URL)
+	_, err := client.FetchStatuses(context.Background())
+	if !IsClientError(err, ErrAuth) {
+		t.Errorf("expected auth error, got %v", err)
+	}
+}
+
+func TestFetchStatusesInvalidJSON(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.Write([]byte(`not json`))
+	}))
+	defer server.Close()
+
+	client := NewJiraClient(server.URL)
+	_, err := client.FetchStatuses(context.Background())
+	if !IsClientError(err, ErrUnknown) {
+		t.Errorf("expected unknown error, got %v", err)
+	}
+}
+
+func TestFetchSprintsSuccess(t *testing.T) {
+	payload := map[string]interface{}{
+		"values": []map[string]interface{}{
+			{"id": 100, "name": "Sprint 1", "state": "active",
+				"startDate": "2024-01-01T00:00:00Z",
+				"endDate": "2024-01-14T00:00:00Z"},
+			{"id": 101, "name": "Sprint 2", "state": "closed"},
+		},
+	}
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet {
+			t.Errorf("method = %s, want GET", r.Method)
+		}
+		wantPath := "/rest/agile/1.0/sprint"
+		if r.URL.Path != wantPath {
+			t.Errorf("path = %s, want %s", r.URL.Path, wantPath)
+		}
+		if r.URL.Query().Get("project") != "PROJ" {
+			t.Errorf("project query = %q, want PROJ", r.URL.Query().Get("project"))
+		}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(payload)
+	}))
+	defer server.Close()
+
+	client := NewJiraClient(server.URL)
+	sprints, err := client.FetchSprints(context.Background(), "PROJ")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(sprints) != 2 {
+		t.Fatalf("expected 2 sprints, got %d", len(sprints))
+	}
+	if sprints[0].ID != 100 {
+		t.Errorf("sprint 0 id = %d, want 100", sprints[0].ID)
+	}
+	if sprints[0].Name != "Sprint 1" {
+		t.Errorf("sprint 0 name = %q, want %q", sprints[0].Name, "Sprint 1")
+	}
+	if sprints[0].State != "active" {
+		t.Errorf("sprint 0 state = %q, want %q", sprints[0].State, "active")
+	}
+	if sprints[1].Name != "Sprint 2" {
+		t.Errorf("sprint 1 name = %q, want %q", sprints[1].Name, "Sprint 2")
+	}
+}
+
+func TestFetchSprintsEmptyProjectKey(t *testing.T) {
+	client := NewJiraClient("https://jira.example.com")
+	_, err := client.FetchSprints(context.Background(), "")
+	if !IsClientError(err, ErrNotFound) {
+		t.Errorf("expected not_found error, got %v", err)
+	}
+}
+
+func TestFetchSprintsNotFound(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusNotFound)
+		w.Write([]byte(`{"errorMessages":["Not found"]}`))
+	}))
+	defer server.Close()
+
+	client := NewJiraClient(server.URL)
+	_, err := client.FetchSprints(context.Background(), "PROJ")
+	if !IsClientError(err, ErrNotFound) {
+		t.Errorf("expected not_found error, got %v", err)
+	}
+}
+
+func TestFetchSprintsAuthError(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusUnauthorized)
+		w.Write([]byte(`{"errorMessages":["Unauthorized"]}`))
+	}))
+	defer server.Close()
+
+	client := NewJiraClient(server.URL)
+	_, err := client.FetchSprints(context.Background(), "PROJ")
+	if !IsClientError(err, ErrAuth) {
+		t.Errorf("expected auth error, got %v", err)
+	}
+}
+
+func TestFetchSprintsInvalidJSON(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.Write([]byte(`not json`))
+	}))
+	defer server.Close()
+
+	client := NewJiraClient(server.URL)
+	_, err := client.FetchSprints(context.Background(), "PROJ")
+	if !IsClientError(err, ErrUnknown) {
+		t.Errorf("expected unknown error, got %v", err)
+	}
+}
+
+func TestFetchFixVersionsSuccess(t *testing.T) {
+	payload := map[string]interface{}{
+		"values": []map[string]interface{}{
+			{"name": "1.0.0", "description": "First release", "archived": false, "released": true},
+			{"name": "1.1.0", "archived": false, "released": false},
+		},
+	}
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet {
+			t.Errorf("method = %s, want GET", r.Method)
+		}
+		wantPath := "/rest/api/3/project/PROJ/versions"
+		if r.URL.Path != wantPath {
+			t.Errorf("path = %s, want %s", r.URL.Path, wantPath)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(payload)
+	}))
+	defer server.Close()
+
+	client := NewJiraClient(server.URL)
+	versions, err := client.FetchFixVersions(context.Background(), "PROJ")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(versions) != 2 {
+		t.Fatalf("expected 2 fix versions, got %d", len(versions))
+	}
+	if versions[0].Name != "1.0.0" {
+		t.Errorf("version 0 name = %q, want %q", versions[0].Name, "1.0.0")
+	}
+	if versions[0].Description != "First release" {
+		t.Errorf("version 0 description = %q, want %q", versions[0].Description, "First release")
+	}
+	if versions[0].Released != true {
+		t.Errorf("version 0 released = %v, want true", versions[0].Released)
+	}
+	if versions[1].Archived != false {
+		t.Errorf("version 1 archived = %v, want false", versions[1].Archived)
+	}
+}
+
+func TestFetchFixVersionsEmptyProjectKey(t *testing.T) {
+	client := NewJiraClient("https://jira.example.com")
+	_, err := client.FetchFixVersions(context.Background(), "")
+	if !IsClientError(err, ErrNotFound) {
+		t.Errorf("expected not_found error, got %v", err)
+	}
+}
+
+func TestFetchFixVersionsNotFound(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusNotFound)
+		w.Write([]byte(`{"errorMessages":["Not found"]}`))
+	}))
+	defer server.Close()
+
+	client := NewJiraClient(server.URL)
+	_, err := client.FetchFixVersions(context.Background(), "PROJ")
+	if !IsClientError(err, ErrNotFound) {
+		t.Errorf("expected not_found error, got %v", err)
+	}
+}
+
+func TestFetchFixVersionsAuthError(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusUnauthorized)
+		w.Write([]byte(`{"errorMessages":["Unauthorized"]}`))
+	}))
+	defer server.Close()
+
+	client := NewJiraClient(server.URL)
+	_, err := client.FetchFixVersions(context.Background(), "PROJ")
+	if !IsClientError(err, ErrAuth) {
+		t.Errorf("expected auth error, got %v", err)
+	}
+}
+
+func TestFetchFixVersionsInvalidJSON(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.Write([]byte(`not json`))
+	}))
+	defer server.Close()
+
+	client := NewJiraClient(server.URL)
+	_, err := client.FetchFixVersions(context.Background(), "PROJ")
+	if !IsClientError(err, ErrUnknown) {
+		t.Errorf("expected unknown error, got %v", err)
+	}
+}
+
+func TestFetchStatusesTransportError(t *testing.T) {
+	client := NewJiraClient("http://localhost:1")
+	ctx, cancel := context.WithTimeout(context.Background(), 100*1000000)
+	defer cancel()
+	_, err := client.FetchStatuses(ctx)
+	if err == nil {
+		t.Fatal("expected error for connection refused")
+	}
+}
+
+func TestFetchSprintsTransportError(t *testing.T) {
+	client := NewJiraClient("http://localhost:1")
+	ctx, cancel := context.WithTimeout(context.Background(), 100*1000000)
+	defer cancel()
+	_, err := client.FetchSprints(ctx, "PROJ")
+	if err == nil {
+		t.Fatal("expected error for connection refused")
+	}
+}
+
+func TestFetchFixVersionsTransportError(t *testing.T) {
+	client := NewJiraClient("http://localhost:1")
+	ctx, cancel := context.WithTimeout(context.Background(), 100*1000000)
+	defer cancel()
+	_, err := client.FetchFixVersions(ctx, "PROJ")
+	if err == nil {
+		t.Fatal("expected error for connection refused")
+	}
+}
