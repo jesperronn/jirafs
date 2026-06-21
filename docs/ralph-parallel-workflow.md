@@ -31,3 +31,27 @@ stream worktree or report the blocker with the failing command output.
 
 Multiple stream worktrees can develop concurrently. `main` updates are
 serialized by the helper's retry loop.
+
+## Parallel Setup
+
+```asciidoc
+[main Codex orchestrator]
+  |
+  |-- planlægger parallelle bidder
+  |-- skriver: todo-1, todo-2
+  v
+
+        +-------------------+         +-------------------+
+        |    worktree-1     |         |    worktree-2     |
+        |                   |         |                   |
+        | henter opgaver    |         | henter opgaver    |
+        | fra todo-2        |         | fra todo-2        |
+        +-------------------+         +-------------------+
+                 \                             /
+                  \                           /
+                   \                         /
+                    v                       v
+
+                          [main]
+                    merges efterhånden
+```
