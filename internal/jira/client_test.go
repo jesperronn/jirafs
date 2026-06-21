@@ -2,11 +2,14 @@ package jira
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
+
+	"github.com/jirafs/jirafs/internal/config"
 )
 
 func contains(s, substr string) bool {
@@ -385,5 +388,191 @@ func TestFetchIssueWithNilFields(t *testing.T) {
 	}
 	if issue.Identity.Key != "PROJ-001" {
 		t.Errorf("key = %q, want %q", issue.Identity.Key, "PROJ-001")
+	}
+}
+
+func TestBuildAuthenticatedRequestBasicAuth(t *testing.T) {
+	creds := config.ResolvedInstanceCredentials{
+		BaseURL: "https://jira.example.com",
+		AuthType: "basic",
+		Credential: config.ResolvedCredential{
+			Scheme: "env",
+			Target: "JIRA_CRED",
+			Fields: map[string]string{
+				"username": "user@example.com",
+				"password": "secret",
+			},
+		},
+	}
+
+	req, err := http.NewRequest(http.MethodGet, "https://jira.example.com/rest/api/3/issue/PROJ-1", nil)
+	if err != nil {
+		t.Fatalf("unexpected error creating request: %v", err)
+	}
+
+	out, err := BuildAuthenticatedRequest(req, creds)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if out != req {
+		t.Error("expected same request pointer returned")
+	}
+
+	want := "Basic " + base64.StdEncoding.EncodeToString([]byte("user@example.com:secret"))
+	got := out.Header.Get("Authorization")
+	if got != want {
+		t.Errorf("Authorization = %q, want %q", got, want)
+	}
+}
+
+func TestBuildAuthenticatedRequestAPIToken(t *testing.T) {
+	creds := config.ResolvedInstanceCredentials{
+		BaseURL: "https://jira.example.com",
+		AuthType: "atlassian_api_token",
+		Credential: config.ResolvedCredential{
+			Scheme: "env",
+			Target: "JIRA_TOKEN",
+			Fields: map[string]string{
+				"email":     "user@example.com",
+				"api_token": "my-api-token",
+			},
+		},
+	}
+
+	req, err := http.NewRequest(http.MethodGet, "https://jira.example.com/rest/api/3/issue/PROJ-1", nil)
+	if err != nil {
+		t.Fatalf("unexpected error creating request: %v", err)
+	}
+
+	out, err := BuildAuthenticatedRequest(req, creds)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	want := "Basic " + base64.StdEncoding.EncodeToString([]byte("user@example.com:my-api-token"))
+	got := out.Header.Get("Authorization")
+	if got != want {
+		t.Errorf("Authorization = %q, want %q", got, want)
+	}
+}
+
+func TestBuildAuthenticatedRequestEmptyAuthType(t *testing.T) {
+	creds := config.ResolvedInstanceCredentials{
+		BaseURL:    "https://jira.example.com",
+		AuthType:   "",
+		Credential: config.ResolvedCredential{},
+	}
+
+	req, _ := http.NewRequest(http.MethodGet, "https://jira.example.com/rest/api/3/issue/PROJ-1", nil)
+	out, err := BuildAuthenticatedRequest(req, creds)
+	if err != nil {
+		t.Fatalf("unexpected error for empty auth type: %v", err)
+	}
+	if out != req {
+		t.Error("expected same request pointer returned")
+	}
+}
+
+func TestBuildAuthenticatedRequestUnsupportedAuthType(t *testing.T) {
+	creds := config.ResolvedInstanceCredentials{
+		AuthType: "oauth2",
+	}
+
+	req, _ := http.NewRequest(http.MethodGet, "https://jira.example.com/rest/api/3/issue/PROJ-1", nil)
+	_, err := BuildAuthenticatedRequest(req, creds)
+	if err == nil {
+		t.Fatal("expected error for unsupported auth type")
+	}
+	if !contains(err.Error(), "unsupported auth type") {
+		t.Errorf("error should mention unsupported auth type, got %q", err.Error())
+	}
+}
+
+func TestBuildAuthenticatedRequestBasicMissingUsername(t *testing.T) {
+	creds := config.ResolvedInstanceCredentials{
+		AuthType: "basic",
+		Credential: config.ResolvedCredential{
+			Fields: map[string]string{"password": "secret"},
+		},
+	}
+
+	req, _ := http.NewRequest(http.MethodGet, "https://jira.example.com/rest/api/3/issue/PROJ-1", nil)
+	_, err := BuildAuthenticatedRequest(req, creds)
+	if err == nil {
+		t.Fatal("expected error for missing username")
+	}
+	if !contains(err.Error(), "username") {
+		t.Errorf("error should mention username, got %q", err.Error())
+	}
+}
+
+func TestBuildAuthenticatedRequestBasicMissingPassword(t *testing.T) {
+	creds := config.ResolvedInstanceCredentials{
+		AuthType: "basic",
+		Credential: config.ResolvedCredential{
+			Fields: map[string]string{"username": "user@example.com"},
+		},
+	}
+
+	req, _ := http.NewRequest(http.MethodGet, "https://jira.example.com/rest/api/3/issue/PROJ-1", nil)
+	_, err := BuildAuthenticatedRequest(req, creds)
+	if err == nil {
+		t.Fatal("expected error for missing password")
+	}
+	if !contains(err.Error(), "password") {
+		t.Errorf("error should mention password, got %q", err.Error())
+	}
+}
+
+func TestBuildAuthenticatedRequestAPITokenMissingEmail(t *testing.T) {
+	creds := config.ResolvedInstanceCredentials{
+		AuthType: "atlassian_api_token",
+		Credential: config.ResolvedCredential{
+			Fields: map[string]string{"api_token": "my-token"},
+		},
+	}
+
+	req, _ := http.NewRequest(http.MethodGet, "https://jira.example.com/rest/api/3/issue/PROJ-1", nil)
+	_, err := BuildAuthenticatedRequest(req, creds)
+	if err == nil {
+		t.Fatal("expected error for missing email")
+	}
+	if !contains(err.Error(), "email") {
+		t.Errorf("error should mention email, got %q", err.Error())
+	}
+}
+
+func TestBuildAuthenticatedRequestAPITokenMissingToken(t *testing.T) {
+	creds := config.ResolvedInstanceCredentials{
+		AuthType: "atlassian_api_token",
+		Credential: config.ResolvedCredential{
+			Fields: map[string]string{"email": "user@example.com"},
+		},
+	}
+
+	req, _ := http.NewRequest(http.MethodGet, "https://jira.example.com/rest/api/3/issue/PROJ-1", nil)
+	_, err := BuildAuthenticatedRequest(req, creds)
+	if err == nil {
+		t.Fatal("expected error for missing api_token")
+	}
+	if !contains(err.Error(), "api_token") {
+		t.Errorf("error should mention api_token, got %q", err.Error())
+	}
+}
+
+func TestBuildAuthenticatedRequestNilRequest(t *testing.T) {
+	creds := config.ResolvedInstanceCredentials{
+		AuthType: "basic",
+		Credential: config.ResolvedCredential{
+			Fields: map[string]string{"username": "u", "password": "p"},
+		},
+	}
+
+	_, err := BuildAuthenticatedRequest(nil, creds)
+	if err == nil {
+		t.Fatal("expected error for nil request")
+	}
+	if !contains(err.Error(), "nil request") {
+		t.Errorf("error should mention nil request, got %q", err.Error())
 	}
 }
