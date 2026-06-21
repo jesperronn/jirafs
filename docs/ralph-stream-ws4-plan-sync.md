@@ -20,7 +20,7 @@ Completed dependency IDs archived in [Ralph Task Archive](ralph-task-archive.md)
 `B041b`, `B042a`, `B042b`, `B050a`, `B050b`, `B051a`, `B051b`, `B052a`,
 `B052b`.
 
-- [ ] B060a | B024b,B052a | Unchanged local/remote summary and description produce empty plan.
+- [x] B060a | B024b,B052a | Unchanged local/remote summary and description produce empty plan.
 - [ ] B060b | B060a,B052b | Unchanged refs and metadata produce empty plan.
 - [ ] B061a | B060a | Summary and description changes become typed operations.
 - [ ] B061b | B061a | Labels, assignee, status, sprint, and fix-version changes become typed operations.
