@@ -166,6 +166,7 @@ func TestBuildPlan_unchangedRefsAndMetadata(t *testing.T) {
 func TestBuildPlan_differingRefsMetadataNoOps(t *testing.T) {
 	// B060b: differing refs and metadata do not produce operations
 	// when summary, description, labels, and assignee are unchanged.
+	// ContentHash must match here because differing hashes trigger B062b conflict.
 	assignee := "jdoe"
 	local := schema.Issue{
 		Summary:     "Test issue",
@@ -190,7 +191,7 @@ func TestBuildPlan_differingRefsMetadataNoOps(t *testing.T) {
 		},
 		RemoteMetadata: schema.RemoteMetadata{
 			RemoteVersion: "1",
-			ContentHash:   "def456",
+			ContentHash:   "abc123",
 		},
 	}
 
@@ -530,6 +531,48 @@ func TestBuildPlan_staleRemoteVersion(t *testing.T) {
 	}
 	if c.RemoteValue != "2" {
 		t.Errorf("expected remote value %q, got %q", "2", c.RemoteValue)
+	}
+}
+
+func TestBuildPlan_staleContentHash(t *testing.T) {
+	// B062b: stale content hash produces conflict, not operations.
+	local := schema.Issue{
+		Summary: "New title",
+		RemoteMetadata: schema.RemoteMetadata{
+			RemoteVersion: "1",
+			ContentHash:   "abc123",
+		},
+	}
+	remote := schema.Issue{
+		Summary: "Old title",
+		RemoteMetadata: schema.RemoteMetadata{
+			RemoteVersion: "1",
+			ContentHash:   "def456",
+		},
+	}
+
+	ops, conflicts, err := BuildPlan(local, remote)
+	if err != nil {
+		t.Fatalf("BuildPlan returned error: %v", err)
+	}
+
+	if len(ops) != 0 {
+		t.Errorf("expected 0 operations for stale content hash, got %d: %v", len(ops), ops)
+	}
+
+	if len(conflicts) != 1 {
+		t.Fatalf("expected 1 conflict, got %d: %v", len(conflicts), conflicts)
+	}
+
+	c := conflicts[0]
+	if c.Type != schema.ConflictRemoteDeleteLocalEdit {
+		t.Errorf("expected conflict type %q, got %q", schema.ConflictRemoteDeleteLocalEdit, c.Type)
+	}
+	if c.LocalValue != "abc123" {
+		t.Errorf("expected local value %q, got %q", "abc123", c.LocalValue)
+	}
+	if c.RemoteValue != "def456" {
+		t.Errorf("expected remote value %q, got %q", "def456", c.RemoteValue)
 	}
 }
 

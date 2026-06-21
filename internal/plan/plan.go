@@ -36,6 +36,19 @@ func BuildPlan(local, remote schema.Issue) ([]schema.PlanOperation, []schema.Con
 		return ops, conflicts, nil
 	}
 
+	// Check for stale content hash.
+	if local.RemoteMetadata.ContentHash != "" &&
+		remote.RemoteMetadata.ContentHash != "" &&
+		local.RemoteMetadata.ContentHash != remote.RemoteMetadata.ContentHash {
+		conflicts = append(conflicts, schema.Conflict{
+			Field:       schema.EditableFieldSummary,
+			Type:        schema.ConflictRemoteDeleteLocalEdit,
+			LocalValue:  local.RemoteMetadata.ContentHash,
+			RemoteValue: remote.RemoteMetadata.ContentHash,
+		})
+		return ops, conflicts, nil
+	}
+
 	// Compare summary.
 	if local.Summary != remote.Summary {
 		ops = append(ops, schema.PlanOperation{
