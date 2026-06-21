@@ -1,0 +1,42 @@
+#!/usr/bin/env bash
+
+set -euo pipefail
+
+MAX_ATTEMPTS=5
+MIN_BACKOFF=1
+MAX_BACKOFF=3
+
+REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+cd "${REPO_ROOT}"
+
+target="${1:-main}"
+
+if ! git diff --quiet || ! git diff --cached --quiet; then
+  echo "integrate: worktree must be clean before integration" >&2
+  exit 1
+fi
+
+attempt=1
+while [ "${attempt}" -le "${MAX_ATTEMPTS}" ]; do
+  echo "integrate: attempt ${attempt}/${MAX_ATTEMPTS} for HEAD -> ${target}"
+
+  git rebase "${target}"
+  bin/test
+  bin/lint
+
+  head_commit="$(git rev-parse HEAD)"
+  if git push . "HEAD:${target}"; then
+    echo "integrate: pushed ${head_commit} to ${target}"
+    exit 0
+  fi
+
+  if [ "${attempt}" -eq "${MAX_ATTEMPTS}" ]; then
+    echo "integrate: push failed after ${MAX_ATTEMPTS} attempts" >&2
+    exit 1
+  fi
+
+  backoff="$(awk -v min="${MIN_BACKOFF}" -v max="${MAX_BACKOFF}" 'BEGIN { srand(); printf "%.3f", min + rand() * (max - min) }')"
+  echo "integrate: push failed; retrying full gate after ${backoff}s" >&2
+  sleep "${backoff}"
+  attempt=$((attempt + 1))
+done

@@ -6,10 +6,11 @@
 implementation plan for the future codebase while keeping ownership boundaries
 strict enough that multiple workers can move without colliding.
 
-Assumed target layout:
+Current Go target layout:
 
 ```text
-src/jirafs/
+cmd/jirafs/
+internal/
   schema/
   codec/
   config/
@@ -22,10 +23,9 @@ src/jirafs/
   plan/
   sync/
   cli/
-  templates/
   board/
   archive/
-  agents/
+  testutil/
 tests/
 ```
 
@@ -47,14 +47,14 @@ tests/
 
 | ID | Workstream | Suggested owner | Exclusive write scope | Depends on | Can run concurrently with |
 | --- | --- | --- | --- | --- | --- |
-| WS0 | Foundation and integration | Agent A or tech lead | `pyproject.toml`, `src/jirafs/__init__.py`, `src/jirafs/interfaces/**`, `tests/conftest.py`, `tests/contracts/**`, CI/bootstrap files | none | all other streams once contracts are stubbed |
-| WS1 | Schema and markdown codec | Agent B | `src/jirafs/schema/**`, `src/jirafs/codec/**`, `tests/schema/**`, `tests/codec/**` | WS0 interface stubs | WS2, WS3, WS5 |
-| WS2 | Settings, context, registry, and reference resolution | Agent C | `src/jirafs/config/**`, `src/jirafs/context/**`, `src/jirafs/registry/**`, `src/jirafs/references/**`, matching tests | WS0 interface stubs | WS1, WS3, WS6 |
-| WS3 | Jira client and export read path | Agent D | `src/jirafs/jira/**`, `src/jirafs/export/**`, matching tests | WS0 interface stubs; WS1 types for issue shape | WS1, WS2, WS5 |
-| WS4 | Planner and sync applier | Agent E | `src/jirafs/plan/**`, `src/jirafs/sync/**`, matching tests | WS1, WS2, WS3 | WS5 after contracts are frozen |
-| WS5 | Mirror manager and archive sweep | Agent F | `src/jirafs/mirror/**`, `src/jirafs/archive/**`, matching tests | WS2, WS3, WS4 | WS6 after contracts are frozen |
-| WS6 | CLI surface and user-visible command flow | Agent G | `src/jirafs/cli/**`, `tests/cli/**` | WS0 for command skeletons; then WS1-WS5 adapters | WS1, WS2, WS3; limited overlap with WS4 |
-| WS7 | Templates, board views, and agent helpers | Agent H or later phase | `src/jirafs/templates/**`, `src/jirafs/board/**`, `src/jirafs/agents/**`, matching tests | WS1, WS2, WS6; parts of WS4 and WS5 for sync-aware features | starts after core contracts stabilize |
+| WS0 | Foundation and integration | Agent A or tech lead | `go.mod`, `go.sum`, `cmd/jirafs/**`, `internal/testutil/**`, root `bin/**`, CI/bootstrap files | none | all other streams once contracts are stubbed |
+| WS1 | Schema and markdown codec | Agent B | `internal/schema/**`, `internal/codec/**` | WS0 package skeleton | WS2, WS3, WS5 |
+| WS2 | Settings, context, registry, and reference resolution | Agent C | `internal/config/**`, `internal/context/**`, `internal/registry/**`, `internal/references/**` | WS0 package skeleton | WS1, WS3, WS6 |
+| WS3 | Jira client and export read path | Agent D | `internal/jira/**`, `internal/export/**` | WS0 package skeleton; WS1 types for issue shape | WS1, WS2, WS5 |
+| WS4 | Planner and sync applier | Agent E | `internal/plan/**`, `internal/sync/**` | WS1, WS2, WS3 | WS5 after contracts are frozen |
+| WS5 | Mirror manager and archive sweep | Agent F | `internal/mirror/**`, `internal/archive/**` | WS2, WS3, WS4 | WS6 after contracts are frozen |
+| WS6 | CLI surface and user-visible command flow | Agent G | `internal/cli/**`, `cmd/jirafs/**` | WS0 for command skeletons; then WS1-WS5 adapters | WS1, WS2, WS3; limited overlap with WS4 |
+| WS7 | Board views and later agent helpers | Agent H or later phase | `internal/board/**` | WS1, WS2, WS6; parts of WS4 and WS5 for sync-aware features | starts after core contracts stabilize |
 
 ## Ownership Boundaries
 

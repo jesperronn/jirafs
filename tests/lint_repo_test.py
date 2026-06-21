@@ -33,9 +33,14 @@ MINIMAL_DOCS = {
     "docs/project-selection-cli.md": "# R\n",
     "docs/implementation-packets.md": "# S\n",
     "docs/ralph-loop-implementation-tasks.md": "# T\n",
+    "docs/ralph-stream-ws1-schema-codec.md": "# U\n",
+    "docs/ralph-stream-ws2-settings-references.md": "# V\n",
+    "docs/ralph-stream-ws3-jira-export.md": "# W\n",
+    "docs/ralph-parallel-workflow.md": "# X\n",
 }
 
 MINIMAL_SCRIPTS = {
+    "bin/integrate_stream_commit": "#!/usr/bin/env bash\n",
     "bin/lint": "#!/usr/bin/env bash\n",
     "bin/test": "#!/usr/bin/env bash\n",
     "tools/repo_checks.py": "x = 1\n",
@@ -51,7 +56,7 @@ def build_repo(repo_root: Path) -> None:
         path = repo_root / relative_path
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(content, encoding="utf-8")
-        if relative_path in {"bin/lint", "bin/test"}:
+        if relative_path in {"bin/integrate_stream_commit", "bin/lint", "bin/test"}:
             os.chmod(path, 0o755)
 
 
