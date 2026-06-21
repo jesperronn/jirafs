@@ -21,7 +21,6 @@ Pick the first unchecked task whose deps are done in the ledger below.
 Rules:
 
 - One task per iteration. Do not start a second task.
-- Use at most two delegate implementors at once.
 - Stay inside owned paths except for explicitly named integration files.
 - New code needs tests in the same task.
 - Final gates: `bin/test` and `bin/lint`.
@@ -30,6 +29,10 @@ Rules:
 - Do not commit blocked or failing work.
 - Handoff must include final gate results and commit hash.
 - Local model context is small: read only the docs needed for the chosen task.
+
+Progress source: the task ledger is canonical. Each iteration starts at the
+first unchecked task whose deps are checked. Do not plan later work in the
+handoff.
 
 Project: Go CLI for local-first Jira Markdown workspace. Prefer stdlib; justify
 new dependencies.
@@ -81,9 +84,6 @@ Commit:
 
 Status:
 - <done|partial|blocked>
-
-Next smallest step:
-- <one action>
 
 Risks:
 - <open issues or none>
