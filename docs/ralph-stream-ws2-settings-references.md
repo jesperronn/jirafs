@@ -27,7 +27,7 @@ Completed dependency IDs archived in [Ralph Task Archive](ralph-task-archive.md)
 - [x] B041a | B040a | Resolve user and project typed refs to Jira ids.
 - [x] B041b | B041a,B040b | Resolve status, sprint, and fix-version typed refs to Jira ids.
 - [x] B042a | B041a | Missing refs include type and lookup value.
-- [ ] B042b | B042a | Ambiguous refs include candidate context.
+- [x] B042b | B042a | Ambiguous refs include candidate context.
 
 Integration handoff after each commit:
 

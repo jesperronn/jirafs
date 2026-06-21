@@ -471,6 +471,212 @@ func TestErrMissingRef_fix_version(t *testing.T) {
 	}
 }
 
+func TestErrAmbiguousRef_includes_candidates(t *testing.T) {
+	candidates := []string{"Jesper Ronn", "Jesper Smith"}
+	err := ErrAmbiguousRef("user", "jesper", candidates)
+
+	if err.Code != "ambiguous_ref" {
+		t.Errorf("Code = %q, want %q", err.Code, "ambiguous_ref")
+	}
+	if err.RefType != "user" {
+		t.Errorf("RefType = %q, want %q", err.RefType, "user")
+	}
+	if err.Ref != "jesper" {
+		t.Errorf("Ref = %q, want %q", err.Ref, "jesper")
+	}
+	if len(err.Candidates) != 2 {
+		t.Errorf("Candidates = %v, want 2 candidates", err.Candidates)
+	}
+	if err.Candidates[0] != "Jesper Ronn" {
+		t.Errorf("Candidates[0] = %q, want %q", err.Candidates[0], "Jesper Ronn")
+	}
+	if err.Candidates[1] != "Jesper Smith" {
+		t.Errorf("Candidates[1] = %q, want %q", err.Candidates[1], "Jesper Smith")
+	}
+
+	// Verify the error message includes candidate count and lookup value.
+	have := err.Error()
+	if !strings.Contains(have, "2") {
+		t.Errorf("Error() = %q does not contain candidate count", have)
+	}
+	if !strings.Contains(have, "jesper") {
+		t.Errorf("Error() = %q does not contain lookup value", have)
+	}
+}
+
+func TestErrAmbiguousRef_single_candidate(t *testing.T) {
+	err := ErrAmbiguousRef("project", "ABC", []string{"A Big Project"})
+
+	if err.Code != "ambiguous_ref" {
+		t.Errorf("Code = %q, want %q", err.Code, "ambiguous_ref")
+	}
+	want := "registry: ambiguous_ref: 1 project candidates for ABC"
+	if err.Error() != want {
+		t.Errorf("Error() = %q, want %q", err.Error(), want)
+	}
+}
+
+func TestErrAmbiguousRef_zero_candidates(t *testing.T) {
+	err := ErrAmbiguousRef("user", "nobody", []string{})
+
+	if err.Code != "ambiguous_ref" {
+		t.Errorf("Code = %q, want %q", err.Code, "ambiguous_ref")
+	}
+	want := "registry: ambiguous_ref: 0 user candidates for nobody"
+	if err.Error() != want {
+		t.Errorf("Error() = %q, want %q", err.Error(), want)
+	}
+}
+
+func TestIsResolveError_ambiguous_ref(t *testing.T) {
+	err := ErrAmbiguousRef("user", "jesper", []string{"Jesper Ronn"})
+
+	if !IsResolveError(err, "ambiguous_ref") {
+		t.Error("IsResolveError(err, \"ambiguous_ref\") = false, want true")
+	}
+	if IsResolveError(err, "missing_ref") {
+		t.Error("IsResolveError(err, \"missing_ref\") = true, want false")
+	}
+}
+
+func TestResolveUserAmbiguous_exact_display_name_match(t *testing.T) {
+	users := map[string]User{
+		"user:jesper":  {AccountID: "712020:abcd", DisplayName: "Jesper Ronn"},
+		"user:bob":     {AccountID: "712020:efgh", DisplayName: "Bob Smith"},
+		"user:jenny":   {AccountID: "712020:ijkl", DisplayName: "Jenny Lee"},
+	}
+
+	// Exact match returns the single candidate
+	accountID, found, err := ResolveUserAmbiguous("Jesper Ronn", users)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !found {
+		t.Fatal("expected found for Jesper Ronn")
+	}
+	if accountID != "712020:abcd" {
+		t.Errorf("accountID = %q, want %q", accountID, "712020:abcd")
+	}
+}
+
+func TestResolveUserAmbiguous_partial_display_name_match(t *testing.T) {
+	users := map[string]User{
+		"user:jesper": {AccountID: "712020:abcd", DisplayName: "Jesper Ronn"},
+		"user:bob":    {AccountID: "712020:efgh", DisplayName: "Bob Smith"},
+	}
+
+	// Partial match on "Jesper" finds exactly one user
+	accountID, found, err := ResolveUserAmbiguous("Jesper", users)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !found {
+		t.Fatal("expected found for Jesper")
+	}
+	if accountID != "712020:abcd" {
+		t.Errorf("accountID = %q, want %q", accountID, "712020:abcd")
+	}
+}
+
+func TestResolveUserAmbiguous_ambiguous_matches(t *testing.T) {
+	users := map[string]User{
+		"user:jesper":  {AccountID: "712020:abcd", DisplayName: "Jesper Ronn"},
+		"user:jesper2": {AccountID: "712020:efgh", DisplayName: "Jesper Smith"},
+		"user:bob":     {AccountID: "712020:ijkl", DisplayName: "Bob Smith"},
+	}
+
+	_, found, err := ResolveUserAmbiguous("Jesper", users)
+	if err == nil {
+		t.Fatal("expected error for ambiguous lookup")
+	}
+	if found {
+		t.Error("expected not found for ambiguous lookup")
+	}
+	if !IsResolveError(err, "ambiguous_ref") {
+		t.Errorf("expected ambiguous_ref error, got: %v", err)
+	}
+	re := err.(*ResolveError)
+	if len(re.Candidates) != 2 {
+		t.Errorf("expected 2 candidates, got %d", len(re.Candidates))
+	}
+	have := make(map[string]bool)
+	for _, c := range re.Candidates {
+		have[c] = true
+	}
+	if !have["Jesper Ronn"] {
+		t.Errorf("candidates missing Jesper Ronn: %v", re.Candidates)
+	}
+	if !have["Jesper Smith"] {
+		t.Errorf("candidates missing Jesper Smith: %v", re.Candidates)
+	}
+}
+
+func TestResolveUserAmbiguous_no_match(t *testing.T) {
+	users := map[string]User{
+		"user:jesper": {AccountID: "712020:abcd", DisplayName: "Jesper Ronn"},
+		"user:bob":    {AccountID: "712020:efgh", DisplayName: "Bob Smith"},
+	}
+
+	accountID, found, err := ResolveUserAmbiguous("Nobody", users)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if found {
+		t.Error("expected not found for Nobody")
+	}
+	if accountID != "" {
+		t.Errorf("accountID = %q, want empty", accountID)
+	}
+}
+
+func TestResolveUserAmbiguous_empty_lookup(t *testing.T) {
+	users := map[string]User{
+		"user:jesper": {AccountID: "712020:abcd", DisplayName: "Jesper Ronn"},
+	}
+
+	accountID, found, err := ResolveUserAmbiguous("", users)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if found {
+		t.Error("expected not found for empty lookup")
+	}
+	if accountID != "" {
+		t.Errorf("accountID = %q, want empty", accountID)
+	}
+}
+
+func TestResolveUserAmbiguous_nil_map(t *testing.T) {
+	accountID, found, err := ResolveUserAmbiguous("Jesper", nil)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if found {
+		t.Error("expected not found for nil map")
+	}
+	if accountID != "" {
+		t.Errorf("accountID = %q, want empty", accountID)
+	}
+}
+
+func TestResolveUserAmbiguous_case_insensitive(t *testing.T) {
+	users := map[string]User{
+		"user:jesper": {AccountID: "712020:abcd", DisplayName: "Jesper Ronn"},
+	}
+
+	// Lowercase lookup should match uppercase display name
+	accountID, found, err := ResolveUserAmbiguous("jesper", users)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !found {
+		t.Fatal("expected found for lowercase 'jesper'")
+	}
+	if accountID != "712020:abcd" {
+		t.Errorf("accountID = %q, want %q", accountID, "712020:abcd")
+	}
+}
+
 func TestIsResolveError(t *testing.T) {
 	re := &ResolveError{Code: "missing_ref"}
 
