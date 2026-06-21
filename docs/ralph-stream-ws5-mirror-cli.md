@@ -24,7 +24,7 @@ Completed dependency IDs archived in [Ralph Task Archive](ralph-task-archive.md)
 
 - [x] B070a | B011,B014 | Model explicit issue imports with explainable membership reason.
 - [x] B070b | B070a | Model named scope membership alongside explicit imports.
-- [ ] B071a | B070b | Resolved out-of-scope issues become archive-eligible.
+- [x] B071a | B070b | Resolved out-of-scope issues become archive-eligible.
 - [ ] B071b | B071a | Pinned or unsynced issues remain live.
 - [ ] B080a | B015b,B016a | `jirafs use --project` updates remembered project.
 - [ ] B080b | B080a,B016b | `jirafs use` interactive and non-interactive selection behavior matches docs.

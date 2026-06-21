@@ -226,6 +226,63 @@ func (m *Mirror) AddScope(s Scope) bool {
 	return true
 }
 
+// ResolvedStatus represents the resolved state of a Jira issue.
+type ResolvedStatus string
+
+const (
+	// ResolvedStatusResolved means the issue has been resolved in Jira.
+	ResolvedStatusResolved ResolvedStatus = "resolved"
+	// ResolvedStatusOpen means the issue is still open in Jira.
+	ResolvedStatusOpen ResolvedStatus = "open"
+)
+
+// ValidResolvedStatuses returns the set of all recognized resolved statuses.
+var ValidResolvedStatuses = []ResolvedStatus{
+	ResolvedStatusResolved,
+	ResolvedStatusOpen,
+}
+
+// IsValidResolvedStatus reports whether s is a known resolved status.
+func IsValidResolvedStatus(s ResolvedStatus) bool {
+	for _, v := range ValidResolvedStatuses {
+		if s == v {
+			return true
+		}
+	}
+	return false
+}
+
+// ArchiveEligible represents an issue that is eligible for archiving.
+type ArchiveEligible struct {
+	// Key is the issue key (e.g. "PROJ-123").
+	Key schema.IssueKey `yaml:"key"`
+	// ResolvedStatus is the Jira resolved status that made this issue eligible.
+	ResolvedStatus ResolvedStatus `yaml:"resolved_status"`
+}
+
+// IsZero reports whether a has no identity set.
+func (a ArchiveEligible) IsZero() bool {
+	return a.Key == "" && a.ResolvedStatus == ""
+}
+
+// String renders the archive-eligible issue as "key (resolved_status)".
+func (a ArchiveEligible) String() string {
+	return string(a.Key) + " (" + string(a.ResolvedStatus) + ")"
+}
+
+// IsArchiveEligible reports whether the given issue key is eligible for
+// archiving: it must be out of scope (not explicitly imported and not a scope
+// member) and its resolved status must be ResolvedStatusResolved.
+func (m Mirror) IsArchiveEligible(key schema.IssueKey, resolved ResolvedStatus) bool {
+	if m.HasIssue(key) {
+		return false
+	}
+	if m.HasScopeMember(key) {
+		return false
+	}
+	return resolved == ResolvedStatusResolved
+}
+
 // AddScopeMember adds a scope member to the mirror.
 // It returns true if the member was added, false if already present.
 func (m *Mirror) AddScopeMember(mem ScopeMember) bool {

@@ -19,15 +19,16 @@ const (
 // RemoteMetadata holds fields that track synchronization state
 // between a local issue file and its remote Jira counterpart.
 type RemoteMetadata struct {
-	RemoteVersion string       `yaml:"remote_version"`
-	ContentHash   string       `yaml:"content_hash"`
-	SyncTime      time.Time    `yaml:"sync_time"`
-	StateFile     string       `yaml:"state,omitempty"`
+	RemoteVersion  string       `yaml:"remote_version"`
+	ContentHash    string       `yaml:"content_hash"`
+	SyncTime       time.Time    `yaml:"sync_time"`
+	StateFile      string       `yaml:"state,omitempty"`
+	ResolvedStatus string       `yaml:"resolved_status,omitempty"`
 }
 
 // IsZero reports whether r has no remote metadata set.
 func (r RemoteMetadata) IsZero() bool {
-	return r.RemoteVersion == "" && r.ContentHash == "" && r.SyncTime.IsZero()
+	return r.RemoteVersion == "" && r.ContentHash == "" && r.SyncTime.IsZero() && r.ResolvedStatus == ""
 }
 
 // State returns the IssueState derived from r's fields.
