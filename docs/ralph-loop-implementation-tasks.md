@@ -96,7 +96,7 @@ Completed dependency IDs archived in [Ralph Task Archive](ralph-task-archive.md)
 
 ## Mirror, CLI, Archive, Board
 
-- [ ] B070a | B011,B014 | `internal/mirror/**`, `tests/mirror/**` | Model explicit issue imports with explainable membership reason.
+- [x] B070a | B011,B014 | `internal/mirror/**`, `tests/mirror/**` | Model explicit issue imports with explainable membership reason.
 - [ ] B070b | B070a | `internal/mirror/**`, `tests/mirror/**` | Model named scope membership alongside explicit imports.
 - [ ] B071a | B070b | `internal/mirror/**`, `tests/mirror/**` | Resolved out-of-scope issues become archive-eligible.
 - [ ] B071b | B071a | `internal/mirror/**`, `tests/mirror/**` | Pinned or unsynced issues remain live.
