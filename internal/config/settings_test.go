@@ -822,3 +822,184 @@ mirror_dir = "` + jirafsDir + `/jira/platform"
 		t.Errorf("CredentialRefs[1] = %q, want %q", refs[1], "env://JIRAFS_WORK_API_TOKEN")
 	}
 }
+
+// TestLoadDuplicateProjectKey verifies that two projects with the same key are rejected.
+func TestLoadDuplicateProjectKey(t *testing.T) {
+	tmpDir := t.TempDir()
+	homeDir := filepath.Join(tmpDir, "home")
+	if err := os.MkdirAll(homeDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	jirafsDir := filepath.Join(homeDir, settingsDir)
+	if err := os.MkdirAll(jirafsDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("HOME", homeDir)
+
+	settings := `
+version = 1
+
+[instances.work]
+base_url = "https://jira.example.com"
+auth_type = "atlassian_api_token"
+
+[projects.platform]
+key = "PLAT"
+instance = "work"
+mirror_dir = "` + jirafsDir + `/jira/platform"
+
+[projects.portal]
+key = "PLAT"
+instance = "work"
+mirror_dir = "` + jirafsDir + `/jira/portal"
+`
+	if err := os.WriteFile(filepath.Join(jirafsDir, settingsFile), []byte(settings), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	_, err := Load()
+	if err == nil {
+		t.Fatal("Load() expected error for duplicate project key, got nil")
+	}
+
+	if !IsSettingError(err, ErrDuplicateProjectKey) {
+		t.Errorf("expected error code %q, got %v", ErrDuplicateProjectKey, err)
+	}
+}
+
+// TestLoadDuplicateMirrorDir verifies that two projects with the same mirror_dir are rejected.
+func TestLoadDuplicateMirrorDir(t *testing.T) {
+	tmpDir := t.TempDir()
+	homeDir := filepath.Join(tmpDir, "home")
+	if err := os.MkdirAll(homeDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	jirafsDir := filepath.Join(homeDir, settingsDir)
+	if err := os.MkdirAll(jirafsDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("HOME", homeDir)
+
+	settings := `
+version = 1
+
+[instances.work]
+base_url = "https://jira.example.com"
+auth_type = "atlassian_api_token"
+
+[projects.platform]
+key = "PLAT"
+instance = "work"
+mirror_dir = "` + jirafsDir + `/jira/shared"
+
+[projects.portal]
+key = "PORTAL"
+instance = "work"
+mirror_dir = "` + jirafsDir + `/jira/shared"
+`
+	if err := os.WriteFile(filepath.Join(jirafsDir, settingsFile), []byte(settings), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	_, err := Load()
+	if err == nil {
+		t.Fatal("Load() expected error for duplicate mirror_dir, got nil")
+	}
+
+	if !IsSettingError(err, ErrDuplicateMirrorDir) {
+		t.Errorf("expected error code %q, got %v", ErrDuplicateMirrorDir, err)
+	}
+}
+
+// TestLoadDuplicateLocalDir verifies that two projects sharing a local_dir are rejected.
+func TestLoadDuplicateLocalDir(t *testing.T) {
+	tmpDir := t.TempDir()
+	homeDir := filepath.Join(tmpDir, "home")
+	if err := os.MkdirAll(homeDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	jirafsDir := filepath.Join(homeDir, settingsDir)
+	if err := os.MkdirAll(jirafsDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("HOME", homeDir)
+
+	settings := `
+version = 1
+
+[instances.work]
+base_url = "https://jira.example.com"
+auth_type = "atlassian_api_token"
+
+[projects.platform]
+key = "PLAT"
+instance = "work"
+mirror_dir = "` + jirafsDir + `/jira/platform"
+local_dirs = [
+  "` + jirafsDir + `/shared-src",
+]
+
+[projects.portal]
+key = "PORTAL"
+instance = "work"
+mirror_dir = "` + jirafsDir + `/jira/portal"
+local_dirs = [
+  "` + jirafsDir + `/shared-src",
+]
+`
+	if err := os.WriteFile(filepath.Join(jirafsDir, settingsFile), []byte(settings), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	_, err := Load()
+	if err == nil {
+		t.Fatal("Load() expected error for duplicate local_dir, got nil")
+	}
+
+	if !IsSettingError(err, ErrDuplicateLocalDir) {
+		t.Errorf("expected error code %q, got %v", ErrDuplicateLocalDir, err)
+	}
+}
+
+// TestLoadDuplicateLocalDirWithinProject verifies duplicate local_dirs within the same project are rejected.
+func TestLoadDuplicateLocalDirWithinProject(t *testing.T) {
+	tmpDir := t.TempDir()
+	homeDir := filepath.Join(tmpDir, "home")
+	if err := os.MkdirAll(homeDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	jirafsDir := filepath.Join(homeDir, settingsDir)
+	if err := os.MkdirAll(jirafsDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("HOME", homeDir)
+
+	settings := `
+version = 1
+
+[instances.work]
+base_url = "https://jira.example.com"
+auth_type = "atlassian_api_token"
+
+[projects.platform]
+key = "PLAT"
+instance = "work"
+mirror_dir = "` + jirafsDir + `/jira/platform"
+local_dirs = [
+  "` + jirafsDir + `/src",
+  "` + jirafsDir + `/src",
+]
+`
+	if err := os.WriteFile(filepath.Join(jirafsDir, settingsFile), []byte(settings), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	_, err := Load()
+	if err == nil {
+		t.Fatal("Load() expected error for duplicate local_dir within project, got nil")
+	}
+
+	if !IsSettingError(err, ErrDuplicateLocalDir) {
+		t.Errorf("expected error code %q, got %v", ErrDuplicateLocalDir, err)
+	}
+}

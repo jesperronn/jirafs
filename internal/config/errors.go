@@ -24,6 +24,12 @@ const (
 	// ErrEmptyMirrorDir is returned when mirror_dir is empty after expansion.
 	ErrEmptyMirrorDir = "empty_mirror_dir"
 
+	// ErrDuplicateProjectKey is returned when two projects share the same key.
+	ErrDuplicateProjectKey = "duplicate_project_key"
+
+	// ErrDuplicateMirrorDir is returned when two projects share the same mirror_dir.
+	ErrDuplicateMirrorDir = "duplicate_mirror_dir"
+
 	// ErrInvalidCredentialRef is returned when a credential reference scheme is unsupported.
 	ErrInvalidCredentialRef = "invalid_credential_ref"
 

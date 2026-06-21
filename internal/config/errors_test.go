@@ -110,6 +110,8 @@ func TestErrorCodesAreStable(t *testing.T) {
 		ErrInvalidURL,
 		ErrUnknownInstance,
 		ErrUnknownProject,
+		ErrDuplicateProjectKey,
+		ErrDuplicateMirrorDir,
 		ErrDuplicateLocalDir,
 		ErrEmptyMirrorDir,
 		ErrInvalidCredentialRef,

@@ -6,11 +6,12 @@ Rules:
 
 - Pick the first unchecked task whose deps are done.
 - Do exactly one task, test it, commit it, hand off, then stop.
-- Use at most two delegate implementors at once.
 - Stay in owned paths. Add tests with new code.
 - Required final gates: `bin/test` and `bin/lint`.
 - Only mark `[x]` after gates pass and the task commit exists.
 - Commit done work with conventional commit wording. Do not commit blocked work.
+- The checked task ledger is the only progress pointer. A new loop starts at
+  the first unchecked task whose deps are checked.
 
 Task format:
 `ID | deps | owned paths | acceptance`
@@ -23,9 +24,9 @@ Task format:
 
 ## Settings And Context
 
-- [ ] B010 | B001 | `internal/config/**`, `tests/config/**` | Settings errors expose stable codes and messages.
-- [ ] B011 | B010 | `internal/config/**`, `tests/config/**` | Parse `~/.jirafs/settings.toml`; load instances/projects; expand paths.
-- [ ] B012 | B011 | `internal/config/**`, `tests/config/**` | Reject duplicate keys, missing instances, bad project refs, bad mirror dirs.
+- [x] B010 | B001 | `internal/config/**`, `tests/config/**` | Settings errors expose stable codes and messages.
+- [x] B011 | B010 | `internal/config/**`, `tests/config/**` | Parse `~/.jirafs/settings.toml`; load instances/projects; expand paths.
+- [x] B012 | B011 | `internal/config/**`, `tests/config/**` | Reject duplicate keys, missing instances, bad project refs, bad mirror dirs.
 - [ ] B013 | B011 | `internal/context/**`, `tests/context/**` | Explicit `--project` beats every other source.
 - [ ] B014 | B013 | `internal/context/**`, `tests/context/**` | Cwd mapping uses most-specific match; ambiguity fails clearly.
 - [ ] B015 | B013 | `internal/context/**`, `tests/context/**` | Remembered current project is read/written and lower precedence.

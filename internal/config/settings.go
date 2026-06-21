@@ -1,6 +1,7 @@
 package config
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -149,6 +150,50 @@ func (s *Settings) validate() error {
 
 	if len(s.Projects) == 0 {
 		return NewSettingError(ErrMissingField, "at least one project is required", "projects", "")
+	}
+
+	// Check for duplicate project keys.
+	keyMap := make(map[string]string, len(s.Projects))
+	for name, proj := range s.Projects {
+		if proj.Key == "" {
+			continue // already caught above
+		}
+		if prev, ok := keyMap[proj.Key]; ok {
+			return NewSettingError(ErrDuplicateProjectKey,
+				fmt.Sprintf("project key %q is duplicate: %q and %q", proj.Key, prev, name),
+				"projects.", proj.Key)
+		}
+		keyMap[proj.Key] = name
+	}
+
+	// Check for duplicate mirror_dirs across projects.
+	mirrorMap := make(map[string]string, len(s.Projects))
+	for name, proj := range s.Projects {
+		if proj.MirrorDir == "" {
+			continue // already caught above
+		}
+		if prev, ok := mirrorMap[proj.MirrorDir]; ok {
+			return NewSettingError(ErrDuplicateMirrorDir,
+				fmt.Sprintf("mirror_dir %q is duplicate: %q and %q", proj.MirrorDir, prev, name),
+				"projects.", proj.MirrorDir)
+		}
+		mirrorMap[proj.MirrorDir] = name
+	}
+
+	// Check for duplicate local_dirs across projects.
+	localDirMap := make(map[string]string, len(s.Projects))
+	for name, proj := range s.Projects {
+		for _, ld := range proj.LocalDirs {
+			if ld == "" {
+				continue
+			}
+			if prev, ok := localDirMap[ld]; ok {
+				return NewSettingError(ErrDuplicateLocalDir,
+					fmt.Sprintf("local_dir %q is duplicate: %q and %q", ld, prev, name),
+					"projects.", ld)
+			}
+			localDirMap[ld] = name
+		}
 	}
 
 	// Validate state references.
