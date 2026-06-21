@@ -20,7 +20,7 @@ Completed dependency IDs archived in [Ralph Task Archive](ralph-task-archive.md)
 
 - [x] B015a | B013 | Read remembered current project when no explicit project or cwd match exists.
 - [x] B015b | B015a | Write remembered current project after successful explicit selection.
-- [ ] B016a | B013 | Non-interactive unresolved context returns a structured no-project error.
+- [x] B016a | B013 | Non-interactive unresolved context returns a structured no-project error.
 - [ ] B016b | B016a | Interactive unresolved context selects from known projects.
 - [ ] B040a | B011,B023b | Load user and project registry files with structured file errors.
 - [ ] B040b | B040a | Load status, sprint, and fix-version registry files.

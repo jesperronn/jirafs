@@ -35,9 +35,15 @@ func (e *Error) Error() string {
 	return "jirafs/context: " + e.Code + ": " + e.Message
 }
 
-// NewError creates a new Error with the given code and message.
-func NewError(code, message string) *Error {
-	return &Error{Code: code, Message: message}
+// NewError creates a new Error with the given code, message, and optional
+// candidates. Candidates are known project names that help the user
+// understand what is available when resolution fails.
+func NewError(code, message string, candidates ...string) *Error {
+	e := &Error{Code: code, Message: message}
+	if len(candidates) > 0 {
+		e.Candidates = candidates
+	}
+	return e
 }
 
 // Resolver resolves the active project from multiple sources.
@@ -165,8 +171,12 @@ func (r *Resolver) resolveCwd(cwd string) (*Context, error) {
 	}
 
 	if best == nil {
+		candidates := make([]string, 0, len(r.settings.Projects))
+		for name := range r.settings.Projects {
+			candidates = append(candidates, name)
+		}
 		return nil, NewError(config.ErrNoProjectResolved,
-			fmt.Sprintf("no project matches cwd %q", cwd))
+			fmt.Sprintf("no project matches cwd %q", cwd), candidates...)
 	}
 
 	return best, nil
@@ -176,8 +186,12 @@ func (r *Resolver) resolveCwd(cwd string) (*Context, error) {
 func (r *Resolver) resolveState() (*Context, error) {
 	stateName := r.settings.State.CurrentProject
 	if stateName == "" {
+		candidates := make([]string, 0, len(r.settings.Projects))
+		for name := range r.settings.Projects {
+			candidates = append(candidates, name)
+		}
 		return nil, NewError(config.ErrNoProjectResolved,
-			"no project configured and no remembered project")
+			"no project configured and no remembered project", candidates...)
 	}
 
 	proj, ok := r.settings.Projects[stateName]

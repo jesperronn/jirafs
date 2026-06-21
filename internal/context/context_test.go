@@ -241,6 +241,50 @@ func TestResolveNoMatchNoState(t *testing.T) {
 	}
 }
 
+// TestB016aUnresolvedContextStructuredError verifies that when no project
+// can be resolved (no explicit flag, no cwd match, no remembered state),
+// the returned error includes a structured no-project code and the list of
+// known project names as candidates.
+func TestB016aUnresolvedContextStructuredError(t *testing.T) {
+	projects := map[string]config.Project{
+		"platform": {Key: "PLAT", Instance: "work", MirrorDir: "/mirror/plat"},
+		"growth":   {Key: "GROW", Instance: "work", MirrorDir: "/mirror/grow"},
+		"alpha":    {Key: "ALPHA", Instance: "work", MirrorDir: "/mirror/alpha"},
+	}
+	s := makeSettings(projects, config.State{})
+
+	r := NewResolver(s, "")
+	_, err := r.Resolve("/tmp/nowhere")
+	if err == nil {
+		t.Fatal("Resolve() expected error, got nil")
+	}
+
+	var ce *Error
+	if !errorsAs(err, &ce) {
+		t.Fatalf("expected *context.Error, got %T", err)
+	}
+	if ce.Code != config.ErrNoProjectResolved {
+		t.Errorf("error code = %q, want %q", ce.Code, config.ErrNoProjectResolved)
+	}
+	if ce.Message == "" {
+		t.Error("error message should not be empty")
+	}
+
+	// Verify candidates include all known project names.
+	candidateSet := make(map[string]bool)
+	for _, c := range ce.Candidates {
+		candidateSet[c] = true
+	}
+	for name := range projects {
+		if !candidateSet[name] {
+			t.Errorf("candidate %q missing from error", name)
+		}
+	}
+	if len(ce.Candidates) != len(projects) {
+		t.Errorf("candidates count = %d, want %d", len(ce.Candidates), len(projects))
+	}
+}
+
 func TestResolveNoState(t *testing.T) {
 	projects := map[string]config.Project{
 		"platform": {Key: "PLAT", Instance: "work", MirrorDir: "/mirror/plat"},
