@@ -16,9 +16,27 @@ import (
 //
 // When summary or description differ, BuildPlan produces typed PlanOperation
 // entries describing the required changes.
+//
+// When the remote has a stale version (remote.RemoteVersion differs from
+// local.RemoteMetadata.RemoteVersion), BuildPlan returns a conflict instead
+// of operations, preventing overwrites of concurrently modified issues.
 func BuildPlan(local, remote schema.Issue) ([]schema.PlanOperation, []schema.Conflict, error) {
 	var ops []schema.PlanOperation
 	var conflicts []schema.Conflict
+
+	// Check for stale remote version.
+	if local.RemoteMetadata.RemoteVersion != "" &&
+		remote.RemoteMetadata.RemoteVersion != "" &&
+		local.RemoteMetadata.RemoteVersion != remote.RemoteMetadata.RemoteVersion {
+		return nil, []schema.Conflict{
+			{
+				Field:       schema.EditableFieldSummary,
+				Type:        schema.ConflictBothEdited,
+				LocalValue:  local.RemoteMetadata.RemoteVersion,
+				RemoteValue: remote.RemoteMetadata.RemoteVersion,
+			},
+		}, nil
+	}
 
 	// Compare summary.
 	if local.Summary != remote.Summary {
