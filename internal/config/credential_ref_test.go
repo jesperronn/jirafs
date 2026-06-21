@@ -792,9 +792,151 @@ func TestResolveInstanceCredentials(t *testing.T) {
 				t.Fatalf("credential field count = %d, want %d", len(got.Credential.Fields), len(tt.wantFields))
 			}
 			for key, want := range tt.wantFields {
-				if got.Credential.Fields[key] != want {
-					t.Fatalf("credential field %q = %q, want %q", key, got.Credential.Fields[key], want)
+			if got.Credential.Fields[key] != want {
+				t.Fatalf("credential field %q = %q, want %q", key, got.Credential.Fields[key], want)
 				}
+			}
+		})
+	}
+}
+
+func TestInstanceCredentialsForPath(t *testing.T) {
+	tmpDir := t.TempDir()
+	homeDir := filepath.Join(tmpDir, "home")
+	jirafsDir := filepath.Join(homeDir, settingsDir)
+	if err := os.MkdirAll(jirafsDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("HOME", homeDir)
+
+	credsFile := filepath.Join(jirafsDir, "creds.toml")
+	credsContent := `username = "pathuser"
+password = "pathpass"
+`
+	if err := os.WriteFile(credsFile, []byte(credsContent), 0o644); err != nil {
+		t.Fatalf("setup: write creds file: %v", err)
+	}
+
+	instBCredsFile := filepath.Join(jirafsDir, "instb.toml")
+	instBCredsContent := `api_token = "instb-api-token"
+`
+	if err := os.WriteFile(instBCredsFile, []byte(instBCredsContent), 0o644); err != nil {
+		t.Fatalf("setup: write instb creds file: %v", err)
+	}
+
+	t.Setenv("PATH_TOKEN", "path-token-val")
+
+	mirrorA := filepath.Join(jirafsDir, "jira", "projA")
+	mirrorB := filepath.Join(jirafsDir, "jira", "projB")
+	localB := filepath.Join(tmpDir, "work", "projB")
+	for _, d := range []string{mirrorA, mirrorB, localB} {
+		if err := os.MkdirAll(d, 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	settings := `version = 1
+
+[instances.instA]
+base_url = "https://a.example.com"
+auth_type = "basic"
+credential_refs = [
+  "file://` + credsFile + `",
+  "env://PATH_TOKEN",
+]
+
+[instances.instB]
+base_url = "https://b.example.com"
+auth_type = "atlassian_api_token"
+credential_refs = [
+  "file://` + instBCredsFile + `",
+]
+
+[projects.projA]
+key = "PA"
+instance = "instA"
+mirror_dir = "` + mirrorA + `"
+
+[projects.projB]
+key = "PB"
+instance = "instB"
+mirror_dir = "` + mirrorB + `"
+local_dirs = ["` + localB + `"]
+`
+	if err := os.WriteFile(filepath.Join(jirafsDir, settingsFile), []byte(settings), 0o644); err != nil {
+		t.Fatalf("setup: write settings: %v", err)
+	}
+
+	s, err := Load()
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+
+	tests := []struct {
+		name       string
+		path       string
+		wantErr    bool
+		wantCode   string
+		wantFields int
+	}{
+		{
+			name:       "mirror_dir match returns instance credentials",
+			path:       filepath.Join(mirrorA, "sub", "deep"),
+			wantErr:    false,
+			wantFields: 3,
+		},
+		{
+			name:       "mirror_dir exact match",
+			path:       mirrorA,
+			wantErr:    false,
+			wantFields: 3,
+		},
+		{
+			name:       "local_dirs match returns instance credentials",
+			path:       filepath.Join(localB, "src"),
+			wantErr:    false,
+			wantCode:   "",
+			wantFields: 1,
+		},
+		{
+			name:    "no matching project returns ErrNoUsableInstance",
+			path:    filepath.Join(tmpDir, "nowhere"),
+			wantErr: true,
+			wantCode: ErrNoUsableInstance,
+		},
+		{
+			name:    "empty path returns error",
+			path:    "",
+			wantErr: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := s.InstanceCredentialsForPath(tt.path)
+
+			if tt.wantErr {
+				if err == nil {
+					t.Errorf("InstanceCredentialsForPath(%q) expected error, got nil", tt.path)
+					return
+				}
+				if tt.wantCode != "" {
+					if !IsSettingError(err, tt.wantCode) {
+						t.Errorf("InstanceCredentialsForPath(%q) error code = %v, want %v",
+							tt.path, err, tt.wantCode)
+					}
+				}
+				return
+			}
+
+			if err != nil {
+				t.Errorf("InstanceCredentialsForPath(%q) unexpected error = %v", tt.path, err)
+				return
+			}
+
+			if len(got.Credential.Fields) != tt.wantFields {
+				t.Errorf("InstanceCredentialsForPath(%q).Credential.Fields length = %d, want %d",
+					tt.path, len(got.Credential.Fields), tt.wantFields)
 			}
 		})
 	}

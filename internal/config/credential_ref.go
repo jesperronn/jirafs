@@ -359,3 +359,64 @@ func (s *Settings) ResolveInstanceCredentials(instanceName string) (ResolvedInst
 		Credential: merged,
 	}, nil
 }
+
+// InstanceCredentialsForPath resolves the project associated with path and
+// returns the resolved instance credentials for that project's instance.
+// It matches path against project mirror_dir and local_dirs as prefixes,
+// using the longest-match heuristic (most-specific project wins).
+// It returns ErrNoUsableInstance when no project matches the path.
+func (s *Settings) InstanceCredentialsForPath(path string) (ResolvedInstanceCredentials, error) {
+	abs, err := filepath.Abs(path)
+	if err != nil {
+		return ResolvedInstanceCredentials{}, NewSettingError(
+			ErrMissingField,
+			fmt.Sprintf("cannot resolve absolute path for %q: %s", path, err.Error()),
+			"path", path,
+		)
+	}
+	abs = filepath.Clean(abs)
+
+	var bestProject string
+	var bestDepth int
+	for name, proj := range s.Projects {
+		mirror := filepath.Clean(proj.MirrorDir)
+		if isPathPrefixOf(mirror, abs) {
+			d := pathDepth(mirror)
+			if d > bestDepth {
+				bestDepth = d
+				bestProject = name
+			}
+		}
+		for _, ld := range proj.LocalDirs {
+			local := filepath.Clean(ld)
+			if isPathPrefixOf(local, abs) {
+				d := pathDepth(local)
+				if d > bestDepth {
+					bestDepth = d
+					bestProject = name
+				}
+			}
+		}
+	}
+
+	if bestProject == "" {
+		return ResolvedInstanceCredentials{}, NewSettingError(
+			ErrNoUsableInstance,
+			fmt.Sprintf("no project matches path %q", path),
+			"path", path,
+		)
+	}
+
+	inst := s.Projects[bestProject].Instance
+	return s.ResolveInstanceCredentials(inst)
+}
+
+// isPathPrefixOf reports whether prefix is a directory prefix of target.
+func isPathPrefixOf(prefix, target string) bool {
+	return target == prefix || len(target) > len(prefix) && target[:len(prefix)+1] == prefix+string(filepath.Separator)
+}
+
+// pathDepth returns the number of path components in p.
+func pathDepth(p string) int {
+	return strings.Count(p, string(filepath.Separator)) + 1
+}
