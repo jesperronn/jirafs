@@ -23,7 +23,7 @@ Completed dependency IDs archived in [Ralph Task Archive](ralph-task-archive.md)
 - [x] B022a | B021a | Define remote version, content hash, and sync timestamp metadata.
 - [x] B022b | B022a | Validate syncable, unsynced, archived, and draft states.
 - [x] B023a | B020c | Define user and project registry models.
-- [ ] B023b | B023a | Define status, sprint, and fix-version registry models.
+- [x] B023b | B023a | Define status, sprint, and fix-version registry models.
 - [ ] B024a | B021b | Define typed plan operation model for one editable field.
 - [ ] B024b | B024a | Define conflict model without Jira transport dependencies.
 - [ ] B030a | B021c | Parse valid synced issue frontmatter into schema model.
