@@ -15,7 +15,7 @@ Rules:
 Task format: `ID | deps | acceptance`
 
 Completed dependency IDs archived in [Ralph Task Archive](ralph-task-archive.md):
-`B001`, `B020a`, `B020b`, `B020c`, `B021a`, `B021b`, `B021c`, `B022a`, `B022b`, `B030a`.
+`B001`, `B020a`, `B020b`, `B020c`, `B021a`, `B021b`, `B021c`, `B022a`, `B022b`, `B030a`, `B030b`, `B030c`.
 
 - [x] B021a | B020c | Define issue identity and machine-owned frontmatter fields.
 - [x] B021b | B021a | Define editable issue fields and fixed section names.
@@ -28,7 +28,7 @@ Completed dependency IDs archived in [Ralph Task Archive](ralph-task-archive.md)
 - [x] B024b | B024a | Define conflict model without Jira transport dependencies.
 - [x] B030a | B021c | Parse valid synced issue frontmatter into schema model.
 - [x] B030b | B030a | Parse valid draft issue frontmatter into schema model.
-- [ ] B030c | B030b | Return structured errors for invalid frontmatter.
+- [x] B030c | B030b | Return structured errors for invalid frontmatter.
 - [ ] B031a | B030a | Parse description and acceptance sections.
 - [ ] B031b | B031a | Reject unknown sections explicitly.
 - [ ] B032a | B031a | Render frontmatter with stable field order.
