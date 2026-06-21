@@ -44,6 +44,10 @@ const (
 
 	// ErrNoUsableInstance is returned when the resolved project has no usable instance config.
 	ErrNoUsableInstance = "no_usable_instance"
+
+	// ErrMissingAuthField is returned when a resolved credential is missing
+	// a field required by the instance auth_type.
+	ErrMissingAuthField = "missing_auth_field"
 )
 
 // SettingError wraps a stable code with a human-readable message and optional
