@@ -165,7 +165,8 @@ func TestBuildPlan_unchangedRefsAndMetadata(t *testing.T) {
 
 func TestBuildPlan_differingRefsMetadataNoOps(t *testing.T) {
 	// B060b: differing refs and metadata do not produce operations
-	// when summary, description, labels, and assignee are unchanged.
+	// when summary, description, labels, and assignee are unchanged
+	// and remote versions match.
 	assignee := "jdoe"
 	local := schema.Issue{
 		Summary:     "Test issue",
@@ -189,7 +190,7 @@ func TestBuildPlan_differingRefsMetadataNoOps(t *testing.T) {
 			{Key: "PROJ-2", Type: "relates to"},
 		},
 		RemoteMetadata: schema.RemoteMetadata{
-			RemoteVersion: "2",
+			RemoteVersion: "1", // same version
 			ContentHash:   "def456",
 		},
 	}
@@ -550,6 +551,139 @@ func TestBuildPlan_allFieldsChanged(t *testing.T) {
 
 	if len(conflicts) != 0 {
 		t.Errorf("expected 0 conflicts, got %d: %v", len(conflicts), conflicts)
+	}
+}
+
+func TestBuildPlan_staleRemoteVersion(t *testing.T) {
+	// B062a: stale remote version produces conflict, not operations.
+	local := schema.Issue{
+		Summary: "New title",
+		RemoteMetadata: schema.RemoteMetadata{
+			RemoteVersion: "42",
+			ContentHash:   "abc123",
+		},
+	}
+	remote := schema.Issue{
+		Summary: "Old title",
+		RemoteMetadata: schema.RemoteMetadata{
+			RemoteVersion: "43", // stale: remote was updated
+			ContentHash:   "def456",
+		},
+	}
+
+	ops, conflicts, err := BuildPlan(local, remote)
+	if err != nil {
+		t.Fatalf("BuildPlan returned error: %v", err)
+	}
+
+	if len(ops) != 0 {
+		t.Errorf("expected 0 operations for stale remote, got %d: %v", len(ops), ops)
+	}
+
+	if len(conflicts) != 1 {
+		t.Fatalf("expected 1 conflict for stale remote, got %d: %v", len(conflicts), conflicts)
+	}
+
+	c := conflicts[0]
+	if c.Type != schema.ConflictBothEdited {
+		t.Errorf("conflict type = %q, want %q", c.Type, schema.ConflictBothEdited)
+	}
+	if c.LocalValue != "42" {
+		t.Errorf("conflict local value = %q, want %q", c.LocalValue, "42")
+	}
+	if c.RemoteValue != "43" {
+		t.Errorf("conflict remote value = %q, want %q", c.RemoteValue, "43")
+	}
+}
+
+func TestBuildPlan_matchingRemoteVersionNoConflict(t *testing.T) {
+	// B062a: matching remote version should not produce a conflict.
+	local := schema.Issue{
+		Summary: "New title",
+		RemoteMetadata: schema.RemoteMetadata{
+			RemoteVersion: "42",
+			ContentHash:   "abc123",
+		},
+	}
+	remote := schema.Issue{
+		Summary: "Old title",
+		RemoteMetadata: schema.RemoteMetadata{
+			RemoteVersion: "42", // matching
+			ContentHash:   "abc123",
+		},
+	}
+
+	ops, conflicts, err := BuildPlan(local, remote)
+	if err != nil {
+		t.Fatalf("BuildPlan returned error: %v", err)
+	}
+
+	if len(ops) != 1 {
+		t.Fatalf("expected 1 operation, got %d: %v", len(ops), ops)
+	}
+
+	if len(conflicts) != 0 {
+		t.Errorf("expected 0 conflicts for matching version, got %d: %v", len(conflicts), conflicts)
+	}
+}
+
+func TestBuildPlan_emptyLocalRemoteVersionNoConflict(t *testing.T) {
+	// B062a: empty local remote version should not trigger conflict check.
+	local := schema.Issue{
+		Summary: "New title",
+		RemoteMetadata: schema.RemoteMetadata{
+			ContentHash: "abc123",
+		},
+	}
+	remote := schema.Issue{
+		Summary: "Old title",
+		RemoteMetadata: schema.RemoteMetadata{
+			RemoteVersion: "42",
+			ContentHash:   "abc123",
+		},
+	}
+
+	ops, conflicts, err := BuildPlan(local, remote)
+	if err != nil {
+		t.Fatalf("BuildPlan returned error: %v", err)
+	}
+
+	if len(ops) != 1 {
+		t.Fatalf("expected 1 operation, got %d: %v", len(ops), ops)
+	}
+
+	if len(conflicts) != 0 {
+		t.Errorf("expected 0 conflicts when local has no remote version, got %d: %v", len(conflicts), conflicts)
+	}
+}
+
+func TestBuildPlan_emptyRemoteRemoteVersionNoConflict(t *testing.T) {
+	// B062a: empty remote remote version should not trigger conflict check.
+	local := schema.Issue{
+		Summary: "New title",
+		RemoteMetadata: schema.RemoteMetadata{
+			RemoteVersion: "42",
+			ContentHash:   "abc123",
+		},
+	}
+	remote := schema.Issue{
+		Summary: "Old title",
+		RemoteMetadata: schema.RemoteMetadata{
+			ContentHash: "def456",
+		},
+	}
+
+	ops, conflicts, err := BuildPlan(local, remote)
+	if err != nil {
+		t.Fatalf("BuildPlan returned error: %v", err)
+	}
+
+	if len(ops) != 1 {
+		t.Fatalf("expected 1 operation, got %d: %v", len(ops), ops)
+	}
+
+	if len(conflicts) != 0 {
+		t.Errorf("expected 0 conflicts when remote has no remote version, got %d: %v", len(conflicts), conflicts)
 	}
 }
 
