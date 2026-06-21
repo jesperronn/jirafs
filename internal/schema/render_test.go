@@ -497,3 +497,81 @@ func TestRenderIssue_synced_golden_roundtrip(t *testing.T) {
 		}
 	}
 }
+
+func TestRenderIssue_draft_golden_roundtrip(t *testing.T) {
+	fixturePath := filepath.Join("testdata", "golden_draft_issue.md")
+	raw, err := os.ReadFile(fixturePath)
+	if err != nil {
+		t.Fatalf("read golden fixture: %v", err)
+	}
+
+	// Parse the golden fixture.
+	issue, pe := ParseIssue(string(raw))
+	if pe != nil {
+		t.Fatalf("ParseIssue(golden) returned error: %v", pe)
+	}
+
+	// Re-render and compare byte-for-byte.
+	rendered := RenderIssue(issue)
+	if rendered != string(raw) {
+		t.Errorf("golden round-trip mismatch (orig %d, rend %d)\n--- original ---\n%s\n--- rendered ---\n%s", len(raw), len(rendered), raw, rendered)
+	}
+
+	// Parse the rendered output again and verify identity.
+	issue2, pe2 := ParseIssue(rendered)
+	if pe2 != nil {
+		t.Fatalf("ParseIssue(rendered) returned error: %v", pe2)
+	}
+
+	// Compare all fields that ParseIssue populates.
+	if issue2.Identity.Key != issue.Identity.Key {
+		t.Errorf("round-trip key = %q, want %q", issue2.Identity.Key, issue.Identity.Key)
+	}
+	if issue2.Identity.Type != issue.Identity.Type {
+		t.Errorf("round-trip type = %q, want %q", issue2.Identity.Type, issue.Identity.Type)
+	}
+	if !issue2.Identity.Project.Equals(issue.Identity.Project) {
+		t.Errorf("round-trip project differs")
+	}
+	if issue2.MachineOwned.SchemaVersion != issue.MachineOwned.SchemaVersion {
+		t.Errorf("round-trip schema_version = %q, want %q", issue2.MachineOwned.SchemaVersion, issue.MachineOwned.SchemaVersion)
+	}
+	if issue2.RemoteMetadata.State() != issue.RemoteMetadata.State() {
+		t.Errorf("round-trip state = %q, want %q", issue2.RemoteMetadata.State(), issue.RemoteMetadata.State())
+	}
+	if issue2.Summary != issue.Summary {
+		t.Errorf("round-trip summary = %q, want %q", issue2.Summary, issue.Summary)
+	}
+	if len(issue2.Labels) != len(issue.Labels) {
+		t.Errorf("round-trip labels len = %d, want %d", len(issue2.Labels), len(issue.Labels))
+	} else {
+		for i := range issue.Labels {
+			if issue2.Labels[i] != issue.Labels[i] {
+				t.Errorf("round-trip labels[%d] = %q, want %q", i, issue2.Labels[i], issue.Labels[i])
+			}
+		}
+	}
+	if (issue2.Assignee == nil) != (issue.Assignee == nil) {
+		t.Errorf("round-trip assignee nilness = %v, want %v", issue2.Assignee, issue.Assignee)
+	} else if issue2.Assignee != nil && *issue2.Assignee != *issue.Assignee {
+		t.Errorf("round-trip assignee = %v, want %v", issue2.Assignee, issue.Assignee)
+	}
+	if len(issue2.LinkedIssues) != len(issue.LinkedIssues) {
+		t.Errorf("round-trip linked_issues len = %d, want %d", len(issue2.LinkedIssues), len(issue.LinkedIssues))
+	} else {
+		for i := range issue.LinkedIssues {
+			if issue2.LinkedIssues[i].Key != issue.LinkedIssues[i].Key || issue2.LinkedIssues[i].Type != issue.LinkedIssues[i].Type {
+				t.Errorf("round-trip linked_issues[%d] = %+v, want %+v", i, issue2.LinkedIssues[i], issue.LinkedIssues[i])
+			}
+		}
+	}
+	if len(issue2.Sections) != len(issue.Sections) {
+		t.Errorf("round-trip sections len = %d, want %d", len(issue2.Sections), len(issue.Sections))
+	} else {
+		for name := range issue.Sections {
+			if issue2.Sections[name] != issue.Sections[name] {
+				t.Errorf("round-trip Sections[%q] = %q, want %q", name, issue2.Sections[name], issue.Sections[name])
+			}
+		}
+	}
+}
