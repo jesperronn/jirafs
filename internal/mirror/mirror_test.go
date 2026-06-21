@@ -347,3 +347,78 @@ func TestMirror_ExplicitAndScopeMembers(t *testing.T) {
 		t.Error("PROJ-200 should be a scope member")
 	}
 }
+
+func TestIsValidResolvedStatus(t *testing.T) {
+	for _, s := range ValidResolvedStatuses {
+		if !IsValidResolvedStatus(s) {
+			t.Errorf("IsValidResolvedStatus(%q) = false, want true", s)
+		}
+	}
+	if IsValidResolvedStatus("bogus") {
+		t.Error("IsValidResolvedStatus(\"bogus\") = true, want false")
+	}
+	var zero ResolvedStatus
+	if IsValidResolvedStatus(zero) {
+		t.Error("IsValidResolvedStatus(\"\") = true, want false")
+	}
+}
+
+func TestArchiveEligible_IsZero(t *testing.T) {
+	var zero ArchiveEligible
+	if !zero.IsZero() {
+		t.Error("zero ArchiveEligible should be zero")
+	}
+	partial := ArchiveEligible{Key: "PROJ-123"}
+	if partial.IsZero() {
+		t.Error("ArchiveEligible with only Key set should not be zero")
+	}
+	nonZero := ArchiveEligible{Key: "PROJ-123", ResolvedStatus: ResolvedStatusResolved}
+	if nonZero.IsZero() {
+		t.Error("non-zero ArchiveEligible should not be zero")
+	}
+}
+
+func TestArchiveEligible_String(t *testing.T) {
+	a := ArchiveEligible{Key: "PROJ-123", ResolvedStatus: ResolvedStatusResolved}
+	got := a.String()
+	want := "PROJ-123 (resolved)"
+	if got != want {
+		t.Errorf("ArchiveEligible.String() = %q, want %q", got, want)
+	}
+}
+
+func TestMirror_IsArchiveEligible(t *testing.T) {
+	m := Mirror{
+		Project: schema.TypedRef{Type: schema.RefProject, Value: "ABC"},
+		Issues: []ImportedIssue{
+			{Key: "PROJ-100", Reason: ImportReasonManual},
+		},
+		ScopeMembers: []ScopeMember{
+			{Key: "PROJ-200", Scope: "active"},
+		},
+	}
+	// Out-of-scope + resolved = eligible
+	if !m.IsArchiveEligible("PROJ-300", ResolvedStatusResolved) {
+		t.Error("out-of-scope resolved issue should be archive-eligible")
+	}
+	// Explicitly imported + resolved = not eligible
+	if m.IsArchiveEligible("PROJ-100", ResolvedStatusResolved) {
+		t.Error("explicitly imported issue should not be archive-eligible")
+	}
+	// Scope member + resolved = not eligible
+	if m.IsArchiveEligible("PROJ-200", ResolvedStatusResolved) {
+		t.Error("scope member should not be archive-eligible")
+	}
+	// Out-of-scope + open = not eligible
+	if m.IsArchiveEligible("PROJ-300", ResolvedStatusOpen) {
+		t.Error("out-of-scope open issue should not be archive-eligible")
+	}
+}
+
+func TestMirror_IsArchiveEligible_empty(t *testing.T) {
+	var m Mirror
+	// Empty mirror: out-of-scope + resolved = eligible
+	if !m.IsArchiveEligible("PROJ-123", ResolvedStatusResolved) {
+		t.Error("empty mirror: out-of-scope resolved issue should be eligible")
+	}
+}
