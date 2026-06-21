@@ -762,6 +762,89 @@ func TestSearchIssuesMyIssues(t *testing.T) {
 	}
 }
 
+func TestSearchIssuesCurrentSprint(t *testing.T) {
+	payload := map[string]interface{}{
+		"total":    2,
+		"maxResults": 50,
+		"issues": []map[string]interface{}{
+			{
+				"id":   "10003",
+				"key":  "PROJ-20",
+				"fields": map[string]interface{}{
+					"issuetype": map[string]interface{}{
+						"name": "Story",
+					},
+					"summary": "Sprint story",
+				},
+			},
+			{
+				"id":   "10004",
+				"key":  "PROJ-21",
+				"fields": map[string]interface{}{
+					"issuetype": map[string]interface{}{
+						"name": "Bug",
+					},
+					"summary": "Sprint bug",
+				},
+			},
+		},
+	}
+
+	sentJQL := ""
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			t.Errorf("method = %s, want POST", r.Method)
+		}
+		if r.URL.Path != "/rest/api/3/search" {
+			t.Errorf("path = %s, want /rest/api/3/search", r.URL.Path)
+		}
+		if r.Header.Get("Content-Type") != "application/json" {
+			t.Errorf("Content-Type = %q, want application/json", r.Header.Get("Content-Type"))
+		}
+		var body map[string]interface{}
+		json.NewDecoder(r.Body).Decode(&body)
+		sentJQL = body["jql"].(string)
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(payload)
+	}))
+	defer server.Close()
+
+	client := NewJiraClient(server.URL)
+	client.SetCredentials(config.ResolvedInstanceCredentials{
+		AuthType: "basic",
+		Credential: config.ResolvedCredential{
+			Fields: map[string]string{
+				"username": "user@example.com",
+				"password": "secret",
+			},
+		},
+	})
+
+	issues, err := client.SearchIssues(context.Background(), "current-sprint")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(issues) != 2 {
+		t.Fatalf("expected 2 issues, got %d", len(issues))
+	}
+	if string(issues[0].Identity.Key) != "PROJ-20" {
+		t.Errorf("issue 0 key = %q, want %q", issues[0].Identity.Key, "PROJ-20")
+	}
+	if string(issues[0].Identity.Type) != "Story" {
+		t.Errorf("issue 0 type = %q, want %q", issues[0].Identity.Type, "Story")
+	}
+	if string(issues[1].Identity.Key) != "PROJ-21" {
+		t.Errorf("issue 1 key = %q, want %q", issues[1].Identity.Key, "PROJ-21")
+	}
+	if string(issues[1].Identity.Type) != "Bug" {
+		t.Errorf("issue 1 type = %q, want %q", issues[1].Identity.Type, "Bug")
+	}
+	wantJQL := "sprint in openSprints()"
+	if sentJQL != wantJQL {
+		t.Errorf("sent JQL = %q, want %q", sentJQL, wantJQL)
+	}
+}
+
 func TestSearchIssuesUnknownScope(t *testing.T) {
 	client := NewJiraClient("https://jira.example.com")
 	_, err := client.SearchIssues(context.Background(), "unknown-scope")

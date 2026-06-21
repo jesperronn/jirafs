@@ -187,7 +187,8 @@ func (c *JiraClient) FetchIssue(ctx context.Context, key string) (*schema.Issue,
 //
 // Supported scopes:
 //
-//	"my-issues"   -> assignee = currentUser()
+//	"my-issues"       -> assignee = currentUser()
+//	"current-sprint"  -> sprint in openSprints()
 //
 // Unsupported scopes return a not_found error.
 func (c *JiraClient) SearchIssues(ctx context.Context, scope string) ([]*schema.Issue, error) {
@@ -195,6 +196,8 @@ func (c *JiraClient) SearchIssues(ctx context.Context, scope string) ([]*schema.
 	switch scope {
 	case "my-issues":
 		jql = "assignee = currentUser()"
+	case "current-sprint":
+		jql = "sprint in openSprints()"
 	default:
 		return nil, NewNotFoundError("scope:" + scope)
 	}
