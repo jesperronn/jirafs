@@ -2,6 +2,7 @@ package registry
 
 import (
 	"errors"
+	"strings"
 	"testing"
 )
 
@@ -401,6 +402,72 @@ func TestResolveFixVersion_nil_map(t *testing.T) {
 	_, found := ResolveFixVersion("fix-version:1.4.0", nil)
 	if found {
 		t.Error("expected not found for nil map")
+	}
+}
+
+func TestErrMissingRef_includes_type_and_lookup_value(t *testing.T) {
+	err := ErrMissingRef("user", "user:missing")
+
+	if err.Code != "missing_ref" {
+		t.Errorf("Code = %q, want %q", err.Code, "missing_ref")
+	}
+	if err.RefType != "user" {
+		t.Errorf("RefType = %q, want %q", err.RefType, "user")
+	}
+	if err.Ref != "user:missing" {
+		t.Errorf("Ref = %q, want %q", err.Ref, "user:missing")
+	}
+
+	// Verify the error message includes both type and lookup value.
+	have := err.Error()
+	if !strings.Contains(have, "user") {
+		t.Errorf("Error() = %q does not contain type %q", have, "user")
+	}
+	if !strings.Contains(have, "user:missing") {
+		t.Errorf("Error() = %q does not contain lookup value %q", have, "user:missing")
+	}
+}
+
+func TestErrMissingRef_project(t *testing.T) {
+	err := ErrMissingRef("project", "project:XYZ")
+
+	if err.RefType != "project" {
+		t.Errorf("RefType = %q, want %q", err.RefType, "project")
+	}
+	if err.Ref != "project:XYZ" {
+		t.Errorf("Ref = %q, want %q", err.Ref, "project:XYZ")
+	}
+
+	want := "registry: missing_ref: no project found for project:XYZ"
+	if err.Error() != want {
+		t.Errorf("Error() = %q, want %q", err.Error(), want)
+	}
+}
+
+func TestErrMissingRef_status(t *testing.T) {
+	err := ErrMissingRef("status", "status:in-review")
+
+	want := "registry: missing_ref: no status found for status:in-review"
+	if err.Error() != want {
+		t.Errorf("Error() = %q, want %q", err.Error(), want)
+	}
+}
+
+func TestErrMissingRef_sprint(t *testing.T) {
+	err := ErrMissingRef("sprint", "sprint:99999")
+
+	want := "registry: missing_ref: no sprint found for sprint:99999"
+	if err.Error() != want {
+		t.Errorf("Error() = %q, want %q", err.Error(), want)
+	}
+}
+
+func TestErrMissingRef_fix_version(t *testing.T) {
+	err := ErrMissingRef("fix-version", "fix-version:3.0.0")
+
+	want := "registry: missing_ref: no fix-version found for fix-version:3.0.0"
+	if err.Error() != want {
+		t.Errorf("Error() = %q, want %q", err.Error(), want)
 	}
 }
 
