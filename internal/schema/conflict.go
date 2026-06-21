@@ -16,6 +16,12 @@ const (
 	// ConflictLocalAddRemoteEdit means the local side added a new field
 	// that the remote side also edited (remote had a prior value).
 	ConflictLocalAddRemoteEdit ConflictType = "local_add_remote_edit"
+	// ConflictArchivePathInvalid means the archive path configured for the
+	// sync is not valid (e.g. does not exist or is not writable).
+	ConflictArchivePathInvalid ConflictType = "archive_path_invalid"
+	// ConflictUnresolvedRef means a reference in the issue cannot be
+	// resolved (e.g. empty linked issue key, missing assignee).
+	ConflictUnresolvedRef ConflictType = "unresolved_ref"
 )
 
 // ValidConflictTypes returns the set of all recognized conflict types.
@@ -24,6 +30,8 @@ var ValidConflictTypes = []ConflictType{
 	ConflictLocalDeleteRemoteEdit,
 	ConflictRemoteDeleteLocalEdit,
 	ConflictLocalAddRemoteEdit,
+	ConflictArchivePathInvalid,
+	ConflictUnresolvedRef,
 }
 
 // IsValidConflictType reports whether ct is a known conflict type.

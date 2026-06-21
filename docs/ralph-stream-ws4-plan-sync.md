@@ -28,7 +28,7 @@ Completed dependency IDs archived in [Ralph Task Archive](ralph-task-archive.md)
 - [x] B062b | B062a | Stale content hash produces conflict, not operations.
 - [x] B063a | B061a | Sync applies a validated no-op plan without mutation.
 - [x] B063b | B063a,B061b | Sync applies one validated field-change operation.
-- [ ] B064a | B063b | Archive paths and unresolved refs fail before mutation.
+- [x] B064a | B063b | Archive paths and unresolved refs fail before mutation.
 - [ ] B064b | B064a | Stale state and invalid transitions fail before mutation.
 
 Integration handoff after each commit:

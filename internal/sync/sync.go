@@ -1,6 +1,8 @@
 package sync
 
 import (
+	"os"
+
 	"github.com/jirafs/jirafs/internal/plan"
 	"github.com/jirafs/jirafs/internal/schema"
 )
@@ -20,9 +22,29 @@ type ApplyResult struct {
 //
 // For a no-op plan (zero operations), Sync returns the remote unchanged
 // without mutation.
-func Sync(local, remote schema.Issue, plan []schema.PlanOperation) ApplyResult {
+//
+// Before any mutation, Sync validates the archive path and checks that all
+// references in the issue are resolved. If either check fails, Sync returns
+// conflicts and does not apply the plan.
+func Sync(local, remote schema.Issue, plan []schema.PlanOperation, archivePath string) ApplyResult {
 	// Validate the plan against current state.
 	if conflicts := validatePlan(local, remote, plan); len(conflicts) > 0 {
+		return ApplyResult{
+			Remote:    &remote,
+			Conflicts: conflicts,
+		}
+	}
+
+	// Validate archive path before mutation.
+	if conflicts := validateArchivePath(archivePath); len(conflicts) > 0 {
+		return ApplyResult{
+			Remote:    &remote,
+			Conflicts: conflicts,
+		}
+	}
+
+	// Validate that all references in the issue are resolved before mutation.
+	if conflicts := validateUnresolvedRefs(local, remote); len(conflicts) > 0 {
 		return ApplyResult{
 			Remote:    &remote,
 			Conflicts: conflicts,
@@ -143,4 +165,125 @@ func splitComma(s string) []string {
 	}
 	parts = append(parts, current)
 	return parts
+}
+
+// validateArchivePath checks that the archive path exists and is a directory.
+// Returns conflicts if the path is invalid.
+func validateArchivePath(path string) []schema.Conflict {
+	if path == "" {
+		return []schema.Conflict{
+			{
+				Field:       "",
+				Type:        schema.ConflictArchivePathInvalid,
+				LocalValue:  "",
+				RemoteValue: "archive path is empty",
+			},
+		}
+	}
+
+	info, err := os.Stat(path)
+	if err != nil {
+		return []schema.Conflict{
+			{
+				Field:       "",
+				Type:        schema.ConflictArchivePathInvalid,
+				LocalValue:  path,
+				RemoteValue: err.Error(),
+			},
+		}
+	}
+
+	if !info.IsDir() {
+		return []schema.Conflict{
+			{
+				Field:       "",
+				Type:        schema.ConflictArchivePathInvalid,
+				LocalValue:  path,
+				RemoteValue: "not a directory",
+			},
+		}
+	}
+
+	return nil
+}
+
+// validateUnresolvedRefs checks that all references in the local and remote
+// issues are resolved (non-empty). Returns conflicts for each unresolved
+// reference found.
+func validateUnresolvedRefs(local, remote schema.Issue) []schema.Conflict {
+	var conflicts []schema.Conflict
+
+	// Check linked issues for empty keys.
+	for _, li := range local.LinkedIssues {
+		if li.Key == "" {
+			conflicts = append(conflicts, schema.Conflict{
+				Field:       schema.EditableFieldSummary,
+				Type:        schema.ConflictUnresolvedRef,
+				LocalValue:  "linked_issue",
+				RemoteValue: "empty key",
+			})
+		}
+	}
+	for _, li := range remote.LinkedIssues {
+		if li.Key == "" {
+			conflicts = append(conflicts, schema.Conflict{
+				Field:       schema.EditableFieldSummary,
+				Type:        schema.ConflictUnresolvedRef,
+				LocalValue:  "linked_issue",
+				RemoteValue: "empty key",
+			})
+		}
+	}
+
+	// Check assignee.
+	if local.Assignee != nil && *local.Assignee == "" {
+		conflicts = append(conflicts, schema.Conflict{
+			Field:       schema.EditableFieldAssignee,
+			Type:        schema.ConflictUnresolvedRef,
+			LocalValue:  "assignee",
+			RemoteValue: "empty value",
+		})
+	}
+	if remote.Assignee != nil && *remote.Assignee == "" {
+		conflicts = append(conflicts, schema.Conflict{
+			Field:       schema.EditableFieldAssignee,
+			Type:        schema.ConflictUnresolvedRef,
+			LocalValue:  "assignee",
+			RemoteValue: "empty value",
+		})
+	}
+
+	// Check sprint.
+	if local.Sprint == "" && local.Summary != "" {
+		// Sprint is only checked when it's non-zero to avoid false
+		// positives on empty issues.
+	}
+	if remote.Sprint == "" && remote.Summary != "" {
+		// Sprint is only checked when it's non-zero to avoid false
+		// positives on empty issues.
+	}
+
+	// Check fix versions.
+	for _, fv := range local.FixVersions {
+		if fv == "" {
+			conflicts = append(conflicts, schema.Conflict{
+				Field:       schema.EditableFieldFixVersions,
+				Type:        schema.ConflictUnresolvedRef,
+				LocalValue:  "fix_version",
+				RemoteValue: "empty value",
+			})
+		}
+	}
+	for _, fv := range remote.FixVersions {
+		if fv == "" {
+			conflicts = append(conflicts, schema.Conflict{
+				Field:       schema.EditableFieldFixVersions,
+				Type:        schema.ConflictUnresolvedRef,
+				LocalValue:  "fix_version",
+				RemoteValue: "empty value",
+			})
+		}
+	}
+
+	return conflicts
 }

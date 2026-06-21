@@ -1,6 +1,8 @@
 package sync
 
 import (
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/jirafs/jirafs/internal/schema"
@@ -24,7 +26,7 @@ func TestSync_noOpPlanReturnsUnchangedRemote(t *testing.T) {
 	}
 	plan := []schema.PlanOperation{} // no-op plan
 
-	result := Sync(remote, remote, plan)
+	result := Sync(remote, remote, plan, t.TempDir())
 
 	if result.Conflicts != nil {
 		t.Errorf("expected no conflicts for no-op plan, got %v", result.Conflicts)
@@ -61,7 +63,7 @@ func TestSync_nilPlanReturnsUnchangedRemote(t *testing.T) {
 	}
 	var plan []schema.PlanOperation // nil
 
-	result := Sync(remote, remote, plan)
+	result := Sync(remote, remote, plan, t.TempDir())
 
 	if result.Conflicts != nil {
 		t.Errorf("expected no conflicts for nil plan, got %v", result.Conflicts)
@@ -84,7 +86,7 @@ func TestSync_zeroLengthPlanReturnsUnchangedRemote(t *testing.T) {
 	}
 	plan := []schema.PlanOperation{} // empty, not nil
 
-	result := Sync(remote, remote, plan)
+	result := Sync(remote, remote, plan, t.TempDir())
 
 	if result.Conflicts != nil {
 		t.Errorf("expected no conflicts for zero-length plan, got %v", result.Conflicts)
@@ -104,7 +106,7 @@ func TestSync_emptyIssueNoOp(t *testing.T) {
 	var local, remote schema.Issue
 	plan := []schema.PlanOperation{}
 
-	result := Sync(local, remote, plan)
+	result := Sync(local, remote, plan, t.TempDir())
 
 	if result.Conflicts != nil {
 		t.Errorf("expected no conflicts for no-op with empty issues, got %v", result.Conflicts)
@@ -123,7 +125,7 @@ func TestSync_summaryChangeApplied(t *testing.T) {
 		{Field: schema.EditableFieldSummary, Type: schema.OpSet, Value: "New summary"},
 	}
 
-	result := Sync(local, remote, plan)
+	result := Sync(local, remote, plan, t.TempDir())
 
 	if len(result.Conflicts) > 0 {
 		t.Fatalf("unexpected conflicts: %v", result.Conflicts)
@@ -143,7 +145,7 @@ func TestSync_descriptionChangeApplied(t *testing.T) {
 		{Field: schema.EditableFieldDescription, Type: schema.OpSet, Value: "New desc"},
 	}
 
-	result := Sync(local, remote, plan)
+	result := Sync(local, remote, plan, t.TempDir())
 
 	if len(result.Conflicts) > 0 {
 		t.Fatalf("unexpected conflicts: %v", result.Conflicts)
@@ -163,7 +165,7 @@ func TestSync_labelsChangeApplied(t *testing.T) {
 		{Field: schema.EditableFieldLabels, Type: schema.OpSet, Value: "bug,priority"},
 	}
 
-	result := Sync(local, remote, plan)
+	result := Sync(local, remote, plan, t.TempDir())
 
 	if len(result.Conflicts) > 0 {
 		t.Fatalf("unexpected conflicts: %v", result.Conflicts)
@@ -184,7 +186,7 @@ func TestSync_assigneeChangeApplied(t *testing.T) {
 		{Field: schema.EditableFieldAssignee, Type: schema.OpSet, Value: "jdoe"},
 	}
 
-	result := Sync(local, remote, plan)
+	result := Sync(local, remote, plan, t.TempDir())
 
 	if len(result.Conflicts) > 0 {
 		t.Fatalf("unexpected conflicts: %v", result.Conflicts)
@@ -207,7 +209,7 @@ func TestSync_statusChangeApplied(t *testing.T) {
 		{Field: schema.EditableFieldStatus, Type: schema.OpSet, Value: "In Progress"},
 	}
 
-	result := Sync(local, remote, plan)
+	result := Sync(local, remote, plan, t.TempDir())
 
 	if len(result.Conflicts) > 0 {
 		t.Fatalf("unexpected conflicts: %v", result.Conflicts)
@@ -227,7 +229,7 @@ func TestSync_sprintChangeApplied(t *testing.T) {
 		{Field: schema.EditableFieldSprint, Type: schema.OpSet, Value: "Sprint 42"},
 	}
 
-	result := Sync(local, remote, plan)
+	result := Sync(local, remote, plan, t.TempDir())
 
 	if len(result.Conflicts) > 0 {
 		t.Fatalf("unexpected conflicts: %v", result.Conflicts)
@@ -247,7 +249,7 @@ func TestSync_fixVersionsChangeApplied(t *testing.T) {
 		{Field: schema.EditableFieldFixVersions, Type: schema.OpSet, Value: "1.0,2.0"},
 	}
 
-	result := Sync(local, remote, plan)
+	result := Sync(local, remote, plan, t.TempDir())
 
 	if len(result.Conflicts) > 0 {
 		t.Fatalf("unexpected conflicts: %v", result.Conflicts)
@@ -311,5 +313,217 @@ func TestSync_splitComma(t *testing.T) {
 				t.Errorf("splitComma(%q)[%d] = %q, want %q", tt.input, i, result[i], tt.expected[i])
 			}
 		}
+	}
+}
+
+func TestSync_archivePathInvalid_failsBeforeMutation(t *testing.T) {
+	// B064a: invalid archive path produces conflict, not operations.
+	local := schema.Issue{Summary: "Test issue"}
+	remote := schema.Issue{Summary: "Old summary"}
+	plan := []schema.PlanOperation{
+		{Field: schema.EditableFieldSummary, Type: schema.OpSet, Value: "Test issue"},
+	}
+
+	result := Sync(local, remote, plan, "/nonexistent/archive/path")
+
+	if len(result.Conflicts) == 0 {
+		t.Fatal("expected conflict for invalid archive path, got none")
+	}
+
+	conflict := result.Conflicts[0]
+	if conflict.Type != schema.ConflictArchivePathInvalid {
+		t.Errorf("expected conflict type %q, got %q", schema.ConflictArchivePathInvalid, conflict.Type)
+	}
+
+	// Remote should be unchanged.
+	if result.Remote == nil {
+		t.Fatal("expected non-nil remote in result")
+	}
+	if result.Remote.Summary != "Old summary" {
+		t.Errorf("expected summary %q, got %q", "Old summary", result.Remote.Summary)
+	}
+}
+
+func TestSync_archivePathIsFile_failsBeforeMutation(t *testing.T) {
+	// B064a: archive path that is a file (not directory) produces conflict.
+	tmpDir := t.TempDir()
+	filePath := filepath.Join(tmpDir, "not_a_dir")
+	f, err := os.Create(filePath)
+	if err != nil {
+		t.Fatalf("create temp file: %v", err)
+	}
+	f.Close()
+
+	local := schema.Issue{Summary: "Test issue"}
+	remote := schema.Issue{Summary: "Old summary"}
+	plan := []schema.PlanOperation{
+		{Field: schema.EditableFieldSummary, Type: schema.OpSet, Value: "Test issue"},
+	}
+
+	result := Sync(local, remote, plan, filePath)
+
+	if len(result.Conflicts) == 0 {
+		t.Fatal("expected conflict for file-as-archive-path, got none")
+	}
+
+	conflict := result.Conflicts[0]
+	if conflict.Type != schema.ConflictArchivePathInvalid {
+		t.Errorf("expected conflict type %q, got %q", schema.ConflictArchivePathInvalid, conflict.Type)
+	}
+}
+
+func TestSync_archivePathEmpty_failsBeforeMutation(t *testing.T) {
+	// B064a: empty archive path produces conflict.
+	local := schema.Issue{Summary: "Test issue"}
+	remote := schema.Issue{Summary: "Old summary"}
+	plan := []schema.PlanOperation{
+		{Field: schema.EditableFieldSummary, Type: schema.OpSet, Value: "Test issue"},
+	}
+
+	result := Sync(local, remote, plan, "")
+
+	if len(result.Conflicts) == 0 {
+		t.Fatal("expected conflict for empty archive path, got none")
+	}
+
+	conflict := result.Conflicts[0]
+	if conflict.Type != schema.ConflictArchivePathInvalid {
+		t.Errorf("expected conflict type %q, got %q", schema.ConflictArchivePathInvalid, conflict.Type)
+	}
+}
+
+func TestSync_archivePathValid_allowsMutation(t *testing.T) {
+	// B064a: valid archive path allows mutation to proceed.
+	local := schema.Issue{Summary: "New summary"}
+	remote := schema.Issue{Summary: "Old summary"}
+	plan := []schema.PlanOperation{
+		{Field: schema.EditableFieldSummary, Type: schema.OpSet, Value: "New summary"},
+	}
+
+	result := Sync(local, remote, plan, t.TempDir())
+
+	if len(result.Conflicts) > 0 {
+		t.Fatalf("unexpected conflicts: %v", result.Conflicts)
+	}
+	if result.Remote == nil {
+		t.Fatal("expected non-nil remote")
+	}
+	if result.Remote.Summary != "New summary" {
+		t.Errorf("expected summary %q, got %q", "New summary", result.Remote.Summary)
+	}
+}
+
+func TestSync_unresolvedLinkedIssue_failsBeforeMutation(t *testing.T) {
+	// B064a: unresolved linked issue reference (empty key) produces conflict.
+	local := schema.Issue{
+		Summary:      "Test issue",
+		LinkedIssues: []schema.LinkedIssue{{Key: "", Type: "blocks"}},
+	}
+	remote := schema.Issue{Summary: "Test issue"}
+	plan := []schema.PlanOperation{}
+
+	result := Sync(local, remote, plan, t.TempDir())
+
+	if len(result.Conflicts) == 0 {
+		t.Fatal("expected conflict for unresolved linked issue, got none")
+	}
+
+	conflict := result.Conflicts[0]
+	if conflict.Type != schema.ConflictUnresolvedRef {
+		t.Errorf("expected conflict type %q, got %q", schema.ConflictUnresolvedRef, conflict.Type)
+	}
+}
+
+func TestSync_unresolvedRemoteLinkedIssue_failsBeforeMutation(t *testing.T) {
+	// B064a: unresolved linked issue in remote produces conflict.
+	local := schema.Issue{Summary: "Test issue"}
+	remote := schema.Issue{
+		Summary:      "Test issue",
+		LinkedIssues: []schema.LinkedIssue{{Key: "", Type: "relates to"}},
+	}
+	plan := []schema.PlanOperation{}
+
+	result := Sync(local, remote, plan, t.TempDir())
+
+	if len(result.Conflicts) == 0 {
+		t.Fatal("expected conflict for unresolved remote linked issue, got none")
+	}
+
+	conflict := result.Conflicts[0]
+	if conflict.Type != schema.ConflictUnresolvedRef {
+		t.Errorf("expected conflict type %q, got %q", schema.ConflictUnresolvedRef, conflict.Type)
+	}
+}
+
+func TestSync_unresolvedAssignee_failsBeforeMutation(t *testing.T) {
+	// B064a: unresolved assignee reference (empty value) produces conflict.
+	emptyAssignee := ""
+	local := schema.Issue{
+		Summary:  "Test issue",
+		Assignee: &emptyAssignee,
+	}
+	remote := schema.Issue{Summary: "Test issue"}
+	plan := []schema.PlanOperation{}
+
+	result := Sync(local, remote, plan, t.TempDir())
+
+	if len(result.Conflicts) == 0 {
+		t.Fatal("expected conflict for unresolved assignee, got none")
+	}
+
+	conflict := result.Conflicts[0]
+	if conflict.Type != schema.ConflictUnresolvedRef {
+		t.Errorf("expected conflict type %q, got %q", schema.ConflictUnresolvedRef, conflict.Type)
+	}
+}
+
+func TestSync_unresolvedFixVersion_failsBeforeMutation(t *testing.T) {
+	// B064a: unresolved fix version reference (empty value) produces conflict.
+	local := schema.Issue{
+		Summary:     "Test issue",
+		FixVersions: []string{"1.0", ""},
+	}
+	remote := schema.Issue{Summary: "Test issue"}
+	plan := []schema.PlanOperation{}
+
+	result := Sync(local, remote, plan, t.TempDir())
+
+	if len(result.Conflicts) == 0 {
+		t.Fatal("expected conflict for unresolved fix version, got none")
+	}
+
+	conflict := result.Conflicts[0]
+	if conflict.Type != schema.ConflictUnresolvedRef {
+		t.Errorf("expected conflict type %q, got %q", schema.ConflictUnresolvedRef, conflict.Type)
+	}
+}
+
+func TestSync_allRefsResolved_allowsMutation(t *testing.T) {
+	// B064a: all references resolved allows mutation to proceed.
+	assignee := "jdoe"
+	local := schema.Issue{
+		Summary:     "New summary",
+		Assignee:    &assignee,
+		FixVersions: []string{"1.0", "2.0"},
+	}
+	remote := schema.Issue{
+		Summary:     "Old summary",
+		Assignee:    &assignee,
+		FixVersions: []string{"1.0", "2.0"},
+	}
+	plan := []schema.PlanOperation{
+		{Field: schema.EditableFieldSummary, Type: schema.OpSet, Value: "New summary"},
+	}
+
+	result := Sync(local, remote, plan, t.TempDir())
+
+	if len(result.Conflicts) > 0 {
+		t.Fatalf("unexpected conflicts: %v", result.Conflicts)
+	}
+	if result.Remote == nil {
+		t.Fatal("expected non-nil remote")
+	}
+	if result.Remote.Summary != "New summary" {
+		t.Errorf("expected summary %q, got %q", "New summary", result.Remote.Summary)
 	}
 }
