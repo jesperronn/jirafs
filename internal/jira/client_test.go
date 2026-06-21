@@ -682,6 +682,226 @@ func TestCurrentUserTransportError(t *testing.T) {
 	}
 }
 
+func TestSearchIssuesMyIssues(t *testing.T) {
+	payload := map[string]interface{}{
+		"total":    2,
+		"maxResults": 50,
+		"issues": []map[string]interface{}{
+			{
+				"id":   "10001",
+				"key":  "PROJ-10",
+				"fields": map[string]interface{}{
+					"issuetype": map[string]interface{}{
+						"name": "Story",
+					},
+					"summary": "First issue",
+					"labels":  []string{"urgent"},
+				},
+			},
+			{
+				"id":   "10002",
+				"key":  "PROJ-11",
+				"fields": map[string]interface{}{
+					"issuetype": map[string]interface{}{
+						"name": "Bug",
+					},
+					"summary": "Second issue",
+				},
+			},
+		},
+	}
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			t.Errorf("method = %s, want POST", r.Method)
+		}
+		wantPath := "/rest/api/3/search"
+		if r.URL.Path != wantPath {
+			t.Errorf("path = %s, want %s", r.URL.Path, wantPath)
+		}
+		if r.Header.Get("Content-Type") != "application/json" {
+			t.Errorf("Content-Type = %q, want application/json", r.Header.Get("Content-Type"))
+		}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(payload)
+	}))
+	defer server.Close()
+
+	client := NewJiraClient(server.URL)
+	client.SetCredentials(config.ResolvedInstanceCredentials{
+		AuthType: "basic",
+		Credential: config.ResolvedCredential{
+			Fields: map[string]string{
+				"username": "user@example.com",
+				"password": "secret",
+			},
+		},
+	})
+
+	issues, err := client.SearchIssues(context.Background(), "my-issues")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(issues) != 2 {
+		t.Fatalf("expected 2 issues, got %d", len(issues))
+	}
+	if string(issues[0].Identity.Key) != "PROJ-10" {
+		t.Errorf("issue 0 key = %q, want %q", issues[0].Identity.Key, "PROJ-10")
+	}
+	if string(issues[0].Identity.Type) != "Story" {
+		t.Errorf("issue 0 type = %q, want %q", issues[0].Identity.Type, "Story")
+	}
+	if string(issues[1].Identity.Key) != "PROJ-11" {
+		t.Errorf("issue 1 key = %q, want %q", issues[1].Identity.Key, "PROJ-11")
+	}
+	if string(issues[1].Identity.Type) != "Bug" {
+		t.Errorf("issue 1 type = %q, want %q", issues[1].Identity.Type, "Bug")
+	}
+	if len(issues[0].Labels) != 1 || issues[0].Labels[0] != "urgent" {
+		t.Errorf("issue 0 labels = %v, want [urgent]", issues[0].Labels)
+	}
+}
+
+func TestSearchIssuesUnknownScope(t *testing.T) {
+	client := NewJiraClient("https://jira.example.com")
+	_, err := client.SearchIssues(context.Background(), "unknown-scope")
+	if !IsClientError(err, ErrNotFound) {
+		t.Errorf("expected not_found error, got %v", err)
+	}
+}
+
+func TestSearchIssuesAuthError(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusUnauthorized)
+		w.Write([]byte(`{"errorMessages":["Unauthorized"]}`))
+	}))
+	defer server.Close()
+
+	client := NewJiraClient(server.URL)
+	client.SetCredentials(config.ResolvedInstanceCredentials{
+		AuthType: "basic",
+		Credential: config.ResolvedCredential{
+			Fields: map[string]string{
+				"username": "user@example.com",
+				"password": "secret",
+			},
+		},
+	})
+
+	_, err := client.SearchIssues(context.Background(), "my-issues")
+	if !IsClientError(err, ErrAuth) {
+		t.Errorf("expected auth error, got %v", err)
+	}
+}
+
+func TestSearchIssuesHTTPError(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+		w.Write([]byte(`{"errorMessages":["Internal server error"]}`))
+	}))
+	defer server.Close()
+
+	client := NewJiraClient(server.URL)
+	_, err := client.SearchIssues(context.Background(), "my-issues")
+	if !IsClientError(err, ErrHTTP) {
+		t.Errorf("expected http error, got %v", err)
+	}
+}
+
+func TestSearchIssuesTransportError(t *testing.T) {
+	client := NewJiraClient("http://localhost:1")
+	ctx, cancel := context.WithTimeout(context.Background(), 100*1000000)
+	defer cancel()
+	_, err := client.SearchIssues(ctx, "my-issues")
+	if err == nil {
+		t.Fatal("expected error for connection refused")
+	}
+}
+
+func TestSearchIssuesInvalidJSON(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.Write([]byte(`not json`))
+	}))
+	defer server.Close()
+
+	client := NewJiraClient(server.URL)
+	client.SetCredentials(config.ResolvedInstanceCredentials{
+		AuthType: "basic",
+		Credential: config.ResolvedCredential{
+			Fields: map[string]string{
+				"username": "user@example.com",
+				"password": "secret",
+			},
+		},
+	})
+
+	_, err := client.SearchIssues(context.Background(), "my-issues")
+	if !IsClientError(err, ErrUnknown) {
+		t.Errorf("expected unknown error, got %v", err)
+	}
+}
+
+func TestSearchIssuesEmptyBody(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		// no body
+	}))
+	defer server.Close()
+
+	client := NewJiraClient(server.URL)
+	client.SetCredentials(config.ResolvedInstanceCredentials{
+		AuthType: "basic",
+		Credential: config.ResolvedCredential{
+			Fields: map[string]string{
+				"username": "user@example.com",
+				"password": "secret",
+			},
+		},
+	})
+
+	_, err := client.SearchIssues(context.Background(), "my-issues")
+	if !IsClientError(err, ErrUnknown) {
+		t.Errorf("expected unknown error, got %v", err)
+	}
+}
+
+func TestSearchIssuesNoIssuesReturned(t *testing.T) {
+	payload := map[string]interface{}{
+		"total":    0,
+		"maxResults": 50,
+		"issues":   []map[string]interface{}{},
+	}
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(payload)
+	}))
+	defer server.Close()
+
+	client := NewJiraClient(server.URL)
+	client.SetCredentials(config.ResolvedInstanceCredentials{
+		AuthType: "basic",
+		Credential: config.ResolvedCredential{
+			Fields: map[string]string{
+				"username": "user@example.com",
+				"password": "secret",
+			},
+		},
+	})
+
+	issues, err := client.SearchIssues(context.Background(), "my-issues")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if issues == nil {
+		t.Fatal("expected non-nil empty slice")
+	}
+	if len(issues) != 0 {
+		t.Errorf("expected 0 issues, got %d", len(issues))
+	}
+}
+
 func TestCurrentUserInvalidJSON(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")

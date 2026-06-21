@@ -27,7 +27,7 @@ Completed dependency IDs archived in [Ralph Task Archive](ralph-task-archive.md)
 - [x] B053b | B053a | Search fake `current-sprint` scope with deterministic keys.
 - [x] B054a | B017h,B050b | Build authenticated Jira requests from resolved credentials.
 - [x] B054b | B054a | Add current-user lookup helper for scope resolution.
-- [ ] B055a | B054a,B053a | Implement real Jira search for `my-issues`.
+- [x] B055a | B054a,B053a | Implement real Jira search for `my-issues`.
 - [ ] B055b | B054b,B053b | Implement real Jira search for `current-sprint`.
 - [ ] B056a | B032b,B051a | Export one fetched issue through the canonical codec.
 - [ ] B056b | B056a,B040b | Refresh project-scoped registries needed by exported refs.

@@ -3,12 +3,14 @@
 package jira
 
 import (
+	"bytes"
 	"context"
 	"crypto/tls"
 	"encoding/json"
 	"fmt"
 	"net/http"
 
+	"github.com/jirafs/jirafs/internal/config"
 	"github.com/jirafs/jirafs/internal/export"
 	"github.com/jirafs/jirafs/internal/schema"
 )
@@ -53,6 +55,13 @@ type jiraIssueResponse struct {
 	Fields map[string]interface{} `json:"fields"`
 }
 
+// searchResponse is the JSON structure returned by the Jira REST API
+// for a search (JQL) request.
+type searchResponse struct {
+	Total    int                `json:"total"`
+	Issues   []jiraIssueResponse `json:"issues"`
+}
+
 // mapHTTPErr reads the response body and maps the HTTP status to a
 // structured ClientError, preferring Jira error details when available.
 func mapHTTPErr(resp *http.Response) *ClientError {
@@ -88,6 +97,13 @@ func mapHTTPErr(resp *http.Response) *ClientError {
 type JiraClient struct {
 	baseURL    string
 	httpClient *http.Client
+	credential config.ResolvedInstanceCredentials
+}
+
+// SetCredentials configures the credentials used for authenticating
+// requests made by this client.
+func (c *JiraClient) SetCredentials(creds config.ResolvedInstanceCredentials) {
+	c.credential = creds
 }
 
 // NewJiraClient creates a new JiraClient for the given base URL.
@@ -166,10 +182,103 @@ func (c *JiraClient) FetchIssue(ctx context.Context, key string) (*schema.Issue,
 	return issue, nil
 }
 
-// SearchIssues is a stub that returns an unimplemented error.
-// Implementation is deferred to later tasks.
+// SearchIssues builds a JQL query for the given scope and POSTs it to the
+// Jira /rest/api/3/search endpoint, returning the matching issues.
+//
+// Supported scopes:
+//
+//	"my-issues"   -> assignee = currentUser()
+//
+// Unsupported scopes return a not_found error.
 func (c *JiraClient) SearchIssues(ctx context.Context, scope string) ([]*schema.Issue, error) {
-	return nil, NewUnknownErr("SearchIssues not yet implemented for JiraClient")
+	var jql string
+	switch scope {
+	case "my-issues":
+		jql = "assignee = currentUser()"
+	default:
+		return nil, NewNotFoundError("scope:" + scope)
+	}
+
+	body := map[string]interface{}{
+		"jql":         jql,
+		"maxResults":  50,
+		"fields":      []string{"summary", "description", "labels", "assignee", "status", "issuetype"},
+		"startAt":     0,
+		"expand":      "schema,names",
+		"properties":  []string{},
+	}
+
+	payload, err := json.Marshal(body)
+	if err != nil {
+		return nil, NewUnknownErr("cannot marshal search request: " + err.Error())
+	}
+
+	url := c.baseURL + "/rest/api/3/search"
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(payload))
+	if err != nil {
+		return nil, NewTransportError("cannot create search request: " + err.Error())
+	}
+
+	req.Header.Set("Content-Type", "application/json")
+
+	req, err = BuildAuthenticatedRequest(req, c.credential)
+	if err != nil {
+		return nil, NewUnknownErr("cannot authenticate search request: " + err.Error())
+	}
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return nil, NewTransportError("search request failed: " + err.Error())
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode == http.StatusNotFound {
+		return nil, NewNotFoundError("search:" + scope)
+	}
+
+	if resp.StatusCode >= 400 && resp.StatusCode < 500 {
+		if resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden {
+			return nil, NewAuthError("HTTP " + fmt.Sprintf("%d", resp.StatusCode))
+		}
+		return nil, mapHTTPErr(resp)
+	}
+
+	if resp.StatusCode >= 500 {
+		return nil, mapHTTPErr(resp)
+	}
+
+	var sr searchResponse
+	if err := json.NewDecoder(resp.Body).Decode(&sr); err != nil {
+		return nil, NewUnknownErr("cannot parse search response: " + err.Error())
+	}
+
+	issues := make([]*schema.Issue, 0, len(sr.Issues))
+	for _, ir := range sr.Issues {
+		issue := &schema.Issue{
+			Identity: schema.IssueIdentity{
+				Key:  schema.IssueKey(ir.Key),
+				Type: schema.IssueType(""),
+			},
+		}
+
+		if ir.Fields != nil {
+			if issuetype, ok := ir.Fields["issuetype"]; ok {
+				if mt, ok := issuetype.(map[string]interface{}); ok {
+					if name, ok := mt["name"]; ok {
+						if s, ok := name.(string); ok {
+							issue.Identity.Type = schema.IssueType(s)
+						}
+					}
+				}
+			}
+			export.NormalizeIssue(issue, ir.Fields)
+			export.NormalizeLinkedIssues(issue, ir.Fields)
+		}
+
+		issues = append(issues, issue)
+	}
+
+	return issues, nil
 }
 
 // CurrentUser calls the Jira /rest/api/3/myself endpoint to retrieve
