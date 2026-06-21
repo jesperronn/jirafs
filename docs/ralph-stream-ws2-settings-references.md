@@ -18,7 +18,7 @@ Task format: `ID | deps | acceptance`
 Completed dependency IDs archived in [Ralph Task Archive](ralph-task-archive.md):
 `B001`, `B010`, `B011`, `B012`, `B013`, `B014`.
 
-- [ ] B015a | B013 | Read remembered current project when no explicit project or cwd match exists.
+- [x] B015a | B013 | Read remembered current project when no explicit project or cwd match exists.
 - [ ] B015b | B015a | Write remembered current project after successful explicit selection.
 - [ ] B016a | B013 | Non-interactive unresolved context returns a structured no-project error.
 - [ ] B016b | B016a | Interactive unresolved context selects from known projects.
