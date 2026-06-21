@@ -141,56 +141,7 @@ func ParseIssue(content string) (Issue, *ParseError) {
 		}
 	}
 
-	// Parse the body content after the frontmatter.
-	issue.Sections = parseSections(extractBody(content))
-
 	return issue, nil
-}
-
-// parseSections extracts body sections from content following the closing
-// "---" delimiter. It finds lines starting with "## " and treats the
-// section name (trimmed) as a FixedSectionName. The content between
-// consecutive headers (or end of content) becomes the section body,
-// with leading and trailing blank lines stripped.
-func parseSections(content string) map[FixedSectionName]string {
-	sections := make(map[FixedSectionName]string)
-	lines := strings.Split(content, "\n")
-	var current FixedSectionName
-	var buf []string
-
-	flush := func() {
-		if current == "" {
-			return
-		}
-		// Join buffer lines, strip leading/trailing blank lines.
-		result := strings.Join(buf, "\n")
-		result = strings.TrimRight(result, "\n")
-		// Strip leading blank lines.
-		for len(result) > 0 && result[0] == '\n' {
-			result = result[1:]
-		}
-		// Strip trailing blank lines.
-		for len(result) > 0 && result[len(result)-1] == '\n' {
-			result = result[:len(result)-1]
-		}
-		sections[current] = result
-		current = ""
-		buf = nil
-	}
-
-	for _, line := range lines {
-		if strings.HasPrefix(line, "## ") {
-			flush()
-			name := FixedSectionName(strings.TrimSpace(line[3:]))
-			if name.IsKnown() {
-				current = name
-			}
-		} else {
-			buf = append(buf, line)
-		}
-	}
-	flush()
-	return sections
 }
 
 // extractFrontmatter extracts the YAML frontmatter from the content string.
@@ -216,16 +167,4 @@ func extractFrontmatter(content string) (string, *ParseError) {
 	}
 
 	return strings.TrimSpace(rest[:idx]), nil
-}
-
-// extractBody returns the content after the closing "---" frontmatter
-// delimiter, with surrounding whitespace trimmed.
-func extractBody(content string) string {
-	trimmed := strings.TrimSpace(content)
-	rest := trimmed[3:] // skip opening "---"
-	idx := strings.Index(rest, "---")
-	if idx < 0 {
-		return ""
-	}
-	return strings.TrimSpace(rest[idx+3:])
 }

@@ -195,6 +195,30 @@ A change becomes merge-ready only after the orchestrator confirms:
 - the work still fits the roadmap and contract docs
 - any cross-stream effects are reconciled
 
+## Parallel Setup
+
+```asciidoc
+[main Codex orchestrator]
+  |
+  |-- planlægger parallelle bidder
+  |-- skriver: todo-1, todo-2
+  v
+
+        +-------------------+         +-------------------+
+        |    worktree-1     |         |    worktree-2     |
+        |                   |         |                   |
+        | henter opgaver    |         | henter opgaver    |
+        | fra todo-2        |         | fra todo-2        |
+        +-------------------+         +-------------------+
+                 \                             /
+                  \                           /
+                   \                         /
+                    v                       v
+
+                          [main]
+                    merges efterhånden
+```
+
 ## Default Standard
 
 - orchestrator owns planning and integration
