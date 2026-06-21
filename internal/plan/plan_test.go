@@ -119,6 +119,96 @@ func TestBuildPlan_differentSummaryUnchangedDescription(t *testing.T) {
 	}
 }
 
+func TestBuildPlan_unchangedRefsAndMetadata(t *testing.T) {
+	// B060b: unchanged refs and metadata produce empty plan.
+	assignee := "jdoe"
+	local := schema.Issue{
+		Summary:     "Test issue",
+		Description: "Some description",
+		Labels:      []string{"bug", "priority"},
+		Assignee:    &assignee,
+		LinkedIssues: []schema.LinkedIssue{
+			{Key: "PROJ-1", Type: "blocks"},
+		},
+		RemoteMetadata: schema.RemoteMetadata{
+			RemoteVersion: "1",
+			ContentHash:   "abc123",
+		},
+	}
+	remote := schema.Issue{
+		Summary:     "Test issue",
+		Description: "Some description",
+		Labels:      []string{"bug", "priority"},
+		Assignee:    &assignee,
+		LinkedIssues: []schema.LinkedIssue{
+			{Key: "PROJ-1", Type: "blocks"},
+		},
+		RemoteMetadata: schema.RemoteMetadata{
+			RemoteVersion: "1",
+			ContentHash:   "abc123",
+		},
+	}
+
+	ops, conflicts, err := BuildPlan(local, remote)
+	if err != nil {
+		t.Fatalf("BuildPlan returned error: %v", err)
+	}
+
+	if len(ops) != 0 {
+		t.Errorf("expected 0 operations, got %d: %v", len(ops), ops)
+	}
+
+	if len(conflicts) != 0 {
+		t.Errorf("expected 0 conflicts, got %d: %v", len(conflicts), conflicts)
+	}
+}
+
+func TestBuildPlan_differingRefsMetadataNoOps(t *testing.T) {
+	// B060b: differing refs and metadata do not produce operations
+	// when summary and description are unchanged.
+	localAssignee := "jdoe"
+	remoteAssignee := "jsmith"
+	local := schema.Issue{
+		Summary:     "Test issue",
+		Description: "Some description",
+		Labels:      []string{"bug"},
+		Assignee:    &localAssignee,
+		LinkedIssues: []schema.LinkedIssue{
+			{Key: "PROJ-1", Type: "blocks"},
+		},
+		RemoteMetadata: schema.RemoteMetadata{
+			RemoteVersion: "1",
+			ContentHash:   "abc123",
+		},
+	}
+	remote := schema.Issue{
+		Summary:     "Test issue",
+		Description: "Some description",
+		Labels:      []string{"enhancement"},
+		Assignee:    &remoteAssignee,
+		LinkedIssues: []schema.LinkedIssue{
+			{Key: "PROJ-2", Type: "relates to"},
+		},
+		RemoteMetadata: schema.RemoteMetadata{
+			RemoteVersion: "2",
+			ContentHash:   "def456",
+		},
+	}
+
+	ops, conflicts, err := BuildPlan(local, remote)
+	if err != nil {
+		t.Fatalf("BuildPlan returned error: %v", err)
+	}
+
+	if len(ops) != 0 {
+		t.Errorf("expected 0 operations (refs/metadata diffs ignored), got %d: %v", len(ops), ops)
+	}
+
+	if len(conflicts) != 0 {
+		t.Errorf("expected 0 conflicts, got %d: %v", len(conflicts), conflicts)
+	}
+}
+
 func TestBuildPlan_bothChanged(t *testing.T) {
 	local := schema.Issue{
 		Summary:     "New title",
