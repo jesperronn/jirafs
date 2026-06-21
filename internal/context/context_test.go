@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/jirafs/jirafs/internal/config"
+	"github.com/pelletier/go-toml/v2"
 )
 
 // makeSettings creates a settings struct from a project map and state.
@@ -509,4 +510,73 @@ func errCode(err error) string {
 
 func errorsAs(err error, target any) bool {
 	return errors.As(err, target)
+}
+
+// TestB015bWriteRememberedProject verifies that after a successful explicit
+// selection, SaveCurrentProject persists the project name to the settings file.
+func TestB015bWriteRememberedProject(t *testing.T) {
+	tmpDir := t.TempDir()
+	jirafsDir := filepath.Join(tmpDir, ".jirafs")
+	if err := os.MkdirAll(jirafsDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	settingsPath := filepath.Join(jirafsDir, "settings.toml")
+	initialTOML := `version = 1
+
+[instances.work]
+base_url = "https://jira.example.com"
+auth_type = "atlassian_api_token"
+
+[projects.platform]
+key = "PLAT"
+instance = "work"
+mirror_dir = "/mirror/plat"
+
+[projects.growth]
+key = "GROW"
+instance = "work"
+mirror_dir = "/mirror/grow"
+`
+	if err := os.WriteFile(settingsPath, []byte(initialTOML), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	// Point HOME at our temp dir so settingsPath resolves correctly.
+	oldHome := os.Getenv("HOME")
+	os.Setenv("HOME", tmpDir)
+	defer os.Setenv("HOME", oldHome)
+
+	s, err := config.Load()
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+
+	r := NewResolver(s, "platform")
+	ctx, err := r.Resolve("/tmp/random/nowhere")
+	if err != nil {
+		t.Fatalf("Resolve() error = %v", err)
+	}
+	if ctx.Name != "platform" {
+		t.Errorf("Name = %q, want %q", ctx.Name, "platform")
+	}
+
+	// Save the current project.
+	if err := r.SaveCurrentProject(ctx.Name); err != nil {
+		t.Fatalf("SaveCurrentProject() error = %v", err)
+	}
+
+	// Re-read the settings file and verify the state was updated.
+	data, err := os.ReadFile(settingsPath)
+	if err != nil {
+		t.Fatalf("ReadFile() error = %v", err)
+	}
+
+	var reloaded config.Settings
+	if err := toml.Unmarshal(data, &reloaded); err != nil {
+		t.Fatalf("Unmarshal() error = %v", err)
+	}
+	if reloaded.State.CurrentProject != "platform" {
+		t.Errorf("State.CurrentProject = %q, want %q", reloaded.State.CurrentProject, "platform")
+	}
 }

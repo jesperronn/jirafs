@@ -245,6 +245,25 @@ func (s *Settings) expandPaths() error {
 	return nil
 }
 
+// SaveState writes the current State back to the settings file.
+func (s *Settings) SaveState() error {
+	path, err := settingsPath()
+	if err != nil {
+		return NewSettingError(ErrMissingField, "home directory is not set", "home", "")
+	}
+
+	data, err := toml.Marshal(s)
+	if err != nil {
+		return NewSettingError(ErrMissingField, "cannot marshal settings: "+err.Error(), "state", "")
+	}
+
+	if err := os.WriteFile(path, data, 0o644); err != nil {
+		return NewSettingError(ErrMissingField, "cannot write settings file: "+err.Error(), "path", path)
+	}
+
+	return nil
+}
+
 // expandPath expands ~ and $VAR references in a single path string.
 func expandPath(p string) (string, error) {
 	if p == "" {
