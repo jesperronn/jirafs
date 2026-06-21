@@ -187,6 +187,36 @@ func parseTOMLFields(data []byte) (map[string]string, error) {
 	return fields, nil
 }
 
+// MergeCredentialSources merges an ordered slice of ResolvedCredential
+// sources into a single ResolvedCredential. Later sources override earlier
+// sources for the same field key. The Scheme and Target fields of the
+// last source are preserved in the result.
+//
+// An empty input returns an empty ResolvedCredential with a nil Fields map.
+func MergeCredentialSources(sources []ResolvedCredential) ResolvedCredential {
+	if len(sources) == 0 {
+		return ResolvedCredential{
+			Fields: nil,
+		}
+	}
+
+	merged := make(map[string]string)
+	var last ResolvedCredential
+
+	for _, src := range sources {
+		for k, v := range src.Fields {
+			merged[k] = v
+		}
+		last = src
+	}
+
+	return ResolvedCredential{
+		Scheme: last.Scheme,
+		Target: last.Target,
+		Fields: merged,
+	}
+}
+
 // ParseCredentialRefs parses a slice of raw credential ref strings into an
 // ordered slice of typed CredentialRef values. It preserves the input order
 // and returns the first error encountered (from the lowest-index entry).
