@@ -4,6 +4,10 @@ Completed task IDs stay here so active ralph ledgers can stay small.
 
 ## Foundation
 
+- [x] B060a | B024b,B052a | `internal/plan/**` | BuildPlan returns empty plan when local and remote summary and description are unchanged.
+
+## Foundation
+
 - [x] B001 | none | `go.mod`, `cmd/jirafs/**`, `internal/**`, `tests/**`, `bin/**` | Go module, `jirafs` builds, `bin/test` and `bin/lint` pass.
 - [x] B002 | B001 | `cmd/jirafs/**`, `internal/cli/**`, `tests/cli/**` | Help lists `init`, `export`, `plan`, `sync`, `new`, `registry`, `board`, `archive`.
 - [x] B003 | B001 | `tests/**`, `internal/testutil/**` | Fixture loading and golden-output diff helpers exist.
