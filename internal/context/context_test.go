@@ -278,6 +278,161 @@ func TestContextError(t *testing.T) {
 	}
 }
 
+func TestResolveCwdAmbiguousMirrorDirs(t *testing.T) {
+	tmpDir := t.TempDir()
+	// Two mirror_dirs at the same depth under tmpDir.
+	platMirror := filepath.Join(tmpDir, "mirror", "plat")
+	growMirror := filepath.Join(tmpDir, "mirror", "grow")
+	if err := os.MkdirAll(platMirror, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(growMirror, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	projects := map[string]config.Project{
+		"platform": {Key: "PLAT", Instance: "work", MirrorDir: platMirror},
+		"growth":   {Key: "GROW", Instance: "work", MirrorDir: growMirror},
+	}
+	s := makeSettings(projects, config.State{})
+
+	// A path that is NOT inside either mirror_dir should not trigger ambiguity.
+	r := NewResolver(s, "")
+	_, err := r.Resolve(filepath.Join(tmpDir, "other"))
+	if err == nil {
+		t.Fatal("Resolve() expected error for non-matching cwd, got nil")
+	}
+
+	// Now create an ambiguous scenario: two projects with the same mirror_dir depth
+	// but nested mirror_dirs that overlap.
+	platMirror2 := filepath.Join(tmpDir, "mirror", "plat")
+	nestedMirror := filepath.Join(tmpDir, "mirror", "plat", "child")
+	if err := os.MkdirAll(nestedMirror, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	projects2 := map[string]config.Project{
+		"platform": {Key: "PLAT", Instance: "work", MirrorDir: platMirror2},
+		"child":    {Key: "CHLD", Instance: "work", MirrorDir: nestedMirror},
+	}
+	s2 := makeSettings(projects2, config.State{})
+
+	// "child" is more specific (deeper) so it should win.
+	r2 := NewResolver(s2, "")
+	ctx, err := r2.Resolve(nestedMirror)
+	if err != nil {
+		t.Fatalf("Resolve() error = %v", err)
+	}
+	if ctx.Name != "child" {
+		t.Errorf("Name = %q, want %q (deeper mirror wins)", ctx.Name, "child")
+	}
+}
+
+func TestResolveCwdAmbiguousSameDepth(t *testing.T) {
+	// Two mirror_dirs at the same depth that are siblings (non-overlapping).
+	// A cwd inside one should match only that one, not both.
+	tmpDir := t.TempDir()
+	eqMirror1 := filepath.Join(tmpDir, "mirror", "proj-a")
+	eqMirror2 := filepath.Join(tmpDir, "mirror", "proj-b")
+	if err := os.MkdirAll(eqMirror1, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(eqMirror2, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	projects := map[string]config.Project{
+		"proj-a": {Key: "PA", Instance: "work", MirrorDir: eqMirror1},
+		"proj-b": {Key: "PB", Instance: "work", MirrorDir: eqMirror2},
+	}
+	s := makeSettings(projects, config.State{})
+
+	r := NewResolver(s, "")
+
+	// Cwd inside proj-a should only match proj-a (no ambiguity since
+	// proj-b's mirror_dir is not a prefix of the cwd).
+	ctx, err := r.Resolve(eqMirror1)
+	if err != nil {
+		t.Fatalf("Resolve() error = %v", err)
+	}
+	if ctx.Name != "proj-a" {
+		t.Errorf("Name = %q, want %q", ctx.Name, "proj-a")
+	}
+
+	// Cwd inside proj-b should only match proj-b.
+	ctx, err = r.Resolve(eqMirror2)
+	if err != nil {
+		t.Fatalf("Resolve() error = %v", err)
+	}
+	if ctx.Name != "proj-b" {
+		t.Errorf("Name = %q, want %q", ctx.Name, "proj-b")
+	}
+}
+
+func TestResolveCwdAmbiguousMirrorVsLocalDir(t *testing.T) {
+	// mirror_dir of project A and local_dir of project B at same depth.
+	tmpDir := t.TempDir()
+	pathA := filepath.Join(tmpDir, "mirror", "proj-a")
+	pathB := filepath.Join(tmpDir, "mirror", "proj-b")
+	if err := os.MkdirAll(pathA, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(pathB, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	projects := map[string]config.Project{
+		"proj-a": {Key: "PA", Instance: "work", MirrorDir: pathA},
+		"proj-b": {Key: "PB", Instance: "work", MirrorDir: filepath.Join(tmpDir, "mirror", "proj-b-mirror"), LocalDirs: []string{pathB}},
+	}
+	s := makeSettings(projects, config.State{})
+
+	r := NewResolver(s, "")
+	// pathA only matches proj-a's mirror_dir.
+	ctx, err := r.Resolve(pathA)
+	if err != nil {
+		t.Fatalf("Resolve() error = %v", err)
+	}
+	if ctx.Name != "proj-a" {
+		t.Errorf("Name = %q, want %q", ctx.Name, "proj-a")
+	}
+
+	// pathB only matches proj-b's local_dir.
+	ctx, err = r.Resolve(pathB)
+	if err != nil {
+		t.Fatalf("Resolve() error = %v", err)
+	}
+	if ctx.Name != "proj-b" {
+		t.Errorf("Name = %q, want %q", ctx.Name, "proj-b")
+	}
+}
+
+func TestResolveCwdAmbiguousIdenticalMirrorDirs(t *testing.T) {
+	// Two projects with the same mirror_dir should be caught by config validation,
+	// but test that resolveCwd also handles it gracefully.
+	tmpDir := t.TempDir()
+	dupMirror := filepath.Join(tmpDir, "mirror", "dup")
+	if err := os.MkdirAll(dupMirror, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	projects := map[string]config.Project{
+		"proj-a": {Key: "PA", Instance: "work", MirrorDir: dupMirror},
+		"proj-b": {Key: "PB", Instance: "work", MirrorDir: dupMirror},
+	}
+	s := makeSettings(projects, config.State{})
+
+	r := NewResolver(s, "")
+	_, err := r.Resolve(dupMirror)
+	if err == nil {
+		t.Fatal("Resolve() expected ambiguity error for identical mirror_dirs, got nil")
+	}
+	var ce *Error
+	if !errorsAs(err, &ce) || ce.Code != config.ErrAmbiguousMatch {
+		t.Errorf("error code = %q, want %q", errCode(err), config.ErrAmbiguousMatch)
+	}
+}
+
 func TestIsPrefixOf(t *testing.T) {
 	tests := []struct {
 		prefix, target string

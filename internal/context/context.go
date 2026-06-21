@@ -65,6 +65,9 @@ func (r *Resolver) Resolve(cwd string) (*Context, error) {
 	// 2. Cwd mapping (most-specific match).
 	if ctx, err := r.resolveCwd(cwd); err == nil {
 		return ctx, nil
+	} else if isAmbiguous(err) {
+		// Preserve ambiguity errors; do not fall through to state.
+		return nil, err
 	}
 
 	// 3. Remembered state (lowest precedence).
@@ -102,7 +105,8 @@ func (r *Resolver) resolveExplicit() (*Context, error) {
 
 // resolveCwd maps the current working directory to a project by matching
 // against mirror_dir and local_dirs prefixes. Returns the most-specific
-// (longest prefix) match.
+// (longest prefix) match. If two different projects match at the same
+// depth, returns an ErrAmbiguousMatch error with candidates.
 func (r *Resolver) resolveCwd(cwd string) (*Context, error) {
 	abs, err := filepath.Abs(cwd)
 	if err != nil {
@@ -129,6 +133,11 @@ func (r *Resolver) resolveCwd(cwd string) (*Context, error) {
 					MirrorDir: proj.MirrorDir,
 					Instance:  proj.Instance,
 				}
+			} else if d == bestLen && best != nil && best.Name != name {
+				// Ambiguity: two different projects at the same depth.
+				return nil, NewError(config.ErrAmbiguousMatch,
+					fmt.Sprintf("multiple projects match cwd %q at depth %d: %q and %q",
+						cwd, d, best.Name, name))
 			}
 		}
 
@@ -145,6 +154,11 @@ func (r *Resolver) resolveCwd(cwd string) (*Context, error) {
 						MirrorDir: proj.MirrorDir,
 						Instance:  proj.Instance,
 					}
+				} else if d == bestLen && best != nil && best.Name != name {
+					// Ambiguity: two different projects at the same depth.
+					return nil, NewError(config.ErrAmbiguousMatch,
+						fmt.Sprintf("multiple projects match cwd %q at depth %d: %q and %q",
+							cwd, d, best.Name, name))
 				}
 			}
 		}
@@ -178,6 +192,27 @@ func (r *Resolver) resolveState() (*Context, error) {
 		MirrorDir: proj.MirrorDir,
 		Instance:  proj.Instance,
 	}, nil
+}
+
+// isAmbiguous reports whether err is an ErrAmbiguousMatch error.
+func isAmbiguous(err error) bool {
+	if err == nil {
+		return false
+	}
+	var ce *Error
+	for err != nil {
+		if target, ok := err.(*Error); ok {
+			ce = target
+			break
+		}
+		type unwrapper interface{ Unwrap() error }
+		if u, ok := err.(unwrapper); ok {
+			err = u.Unwrap()
+			continue
+		}
+		break
+	}
+	return ce != nil && ce.Code == config.ErrAmbiguousMatch
 }
 
 // isPrefixOf reports whether prefix is a directory prefix of target.

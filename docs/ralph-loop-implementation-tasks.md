@@ -10,8 +10,8 @@ Rules:
 - Required final gates: `bin/test` and `bin/lint`.
 - Only mark `[x]` after gates pass and the task commit exists.
 - Commit done work with conventional commit wording. Do not commit blocked work.
-- The checked task ledger is the only progress pointer. A new loop starts at
-  the first unchecked task whose deps are checked.
+- The checked task ledger is the only progress pointer. Each iteration starts
+  at the first unchecked task whose deps are checked.
 
 Task format:
 `ID | deps | owned paths | acceptance`
@@ -27,8 +27,8 @@ Task format:
 - [x] B010 | B001 | `internal/config/**`, `tests/config/**` | Settings errors expose stable codes and messages.
 - [x] B011 | B010 | `internal/config/**`, `tests/config/**` | Parse `~/.jirafs/settings.toml`; load instances/projects; expand paths.
 - [x] B012 | B011 | `internal/config/**`, `tests/config/**` | Reject duplicate keys, missing instances, bad project refs, bad mirror dirs.
-- [ ] B013 | B011 | `internal/context/**`, `tests/context/**` | Explicit `--project` beats every other source.
-- [ ] B014 | B013 | `internal/context/**`, `tests/context/**` | Cwd mapping uses most-specific match; ambiguity fails clearly.
+- [x] B013 | B011 | `internal/context/**`, `tests/context/**` | Explicit `--project` beats every other source.
+- [x] B014 | B013 | `internal/context/**`, `tests/context/**` | Cwd mapping uses most-specific match; ambiguity fails clearly.
 - [ ] B015 | B013 | `internal/context/**`, `tests/context/**` | Remembered current project is read/written and lower precedence.
 - [ ] B016 | B013 | `internal/context/**`, `tests/context/**` | Non-interactive unresolved context fails without prompting.
 
