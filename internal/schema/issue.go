@@ -93,3 +93,19 @@ type MachineOwned struct {
 func (m MachineOwned) IsZero() bool {
 	return m.SchemaVersion == ""
 }
+
+// Issue represents a parsed issue file with identity, machine-owned fields,
+// remote metadata, and section content.
+type Issue struct {
+	Identity       IssueIdentity
+	MachineOwned   MachineOwned
+	RemoteMetadata RemoteMetadata
+	// Sections holds the body sections keyed by their fixed section name.
+	// Only populated by ParseIssue when section parsing is enabled.
+	Sections map[FixedSectionName]string
+}
+
+// IsZero reports whether i has no identity set.
+func (i Issue) IsZero() bool {
+	return i.Identity.IsZero() && i.MachineOwned.IsZero()
+}
