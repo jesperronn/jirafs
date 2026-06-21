@@ -33,7 +33,7 @@ Completed dependency IDs archived in [Ralph Task Archive](ralph-task-archive.md)
 - [x] B031b | B031a | Populate `Issue.Sections` for `Description` and `Acceptance Criteria`, including empty sections.
 - [x] B031c | B031b | Reject unknown section headings explicitly.
 - [x] B032a | B031b | Render frontmatter with stable field order.
-- [ ] B032b | B032a | Render fixed sections with stable section order.
+- [x] B032b | B032a | Render fixed sections with stable section order.
 
 Integration handoff after each commit:
 

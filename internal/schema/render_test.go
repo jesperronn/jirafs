@@ -291,3 +291,120 @@ func TestRenderIssue_linked_issues_stable_order(t *testing.T) {
 		t.Errorf("linked_issues not in insertion order:\n%s", out)
 	}
 }
+
+func TestRenderIssue_sections_rendered_in_canonical_order(t *testing.T) {
+	issue := Issue{
+		Identity: IssueIdentity{
+			Key:     "SEC-1",
+			Type:    "story",
+			Project: TypedRef{Type: RefProject, Value: "SEC"},
+		},
+		MachineOwned: MachineOwned{SchemaVersion: "1"},
+		Sections: map[FixedSectionName]string{
+			SecDescription:        "This is the description.",
+			SecAcceptanceCriteria: "AC content here.",
+			SecNotes:              "Some notes.",
+		},
+	}
+
+	out := RenderIssue(issue)
+
+	// Sections must appear in canonical order.
+	expectedOrder := []FixedSectionName{
+		SecDescription,
+		SecAcceptanceCriteria,
+		SecDefinitionOfReady,
+		SecNotes,
+	}
+
+	var positions []int
+	for _, sec := range expectedOrder {
+		pos := strings.Index(out, "## "+string(sec))
+		if pos < 0 {
+			t.Fatalf("section %q not found in output:\n%s", sec, out)
+		}
+		positions = append(positions, pos)
+	}
+
+	for i := 1; i < len(positions); i++ {
+		if positions[i-1] >= positions[i] {
+			t.Errorf("section %q at %d should come before %q at %d", expectedOrder[i-1], positions[i-1], expectedOrder[i], positions[i])
+		}
+	}
+}
+
+func TestRenderIssue_empty_sections_included(t *testing.T) {
+	issue := Issue{
+		Identity: IssueIdentity{
+			Key:     "ESC-1",
+			Type:    "story",
+			Project: TypedRef{Type: RefProject, Value: "ESC"},
+		},
+		MachineOwned: MachineOwned{SchemaVersion: "1"},
+		Sections: map[FixedSectionName]string{
+			SecDescription:        "",
+			SecAcceptanceCriteria: "",
+		},
+	}
+
+	out := RenderIssue(issue)
+
+	// Empty sections must still have their headings.
+	for _, sec := range AllFixedSections() {
+		want := "## " + string(sec)
+		if !strings.Contains(out, want) {
+			t.Errorf("missing section heading %q in output:\n%s", sec, out)
+		}
+	}
+}
+
+func TestRenderSections_skips_unknown_sections(t *testing.T) {
+	sections := map[FixedSectionName]string{
+		SecDescription:        "desc",
+		SecAcceptanceCriteria: "ac",
+		SecNotes:              "notes",
+		"Unknown Section":     "should not appear",
+	}
+
+	out := RenderSections(sections)
+
+	if strings.Contains(out, "Unknown Section") {
+		t.Errorf("unknown section should not appear:\n%s", out)
+	}
+}
+
+func TestRenderSections_deterministic(t *testing.T) {
+	sections := map[FixedSectionName]string{
+		SecRemoteComments:     "remote",
+		SecDescription:        "desc",
+		SecCommentsToAdd:      "to add",
+		SecAcceptanceCriteria: "ac",
+		SecNotes:              "notes",
+	}
+
+	first := RenderSections(sections)
+	for i := 0; i < 10; i++ {
+		if got := RenderSections(sections); got != first {
+			t.Fatalf("render %d differed from first:\nfirst:\n%s\ngot:\n%s", i, first, got)
+		}
+	}
+}
+
+func TestRenderIssue_no_sections_when_nil(t *testing.T) {
+	issue := Issue{
+		Identity: IssueIdentity{
+			Key:     "NS-1",
+			Type:    "task",
+			Project: TypedRef{Type: RefProject, Value: "NS"},
+		},
+		MachineOwned: MachineOwned{SchemaVersion: "1"},
+		// Sections is nil.
+	}
+
+	out := RenderIssue(issue)
+
+	// Should not contain any ## headings.
+	if strings.Contains(out, "## ") {
+		t.Errorf("nil sections should not produce headings:\n%s", out)
+	}
+}
