@@ -15,10 +15,10 @@ Rules:
 Task format: `ID | deps | acceptance`
 
 Completed dependency IDs archived in [Ralph Task Archive](ralph-task-archive.md):
-`B001`, `B020a`, `B020b`, `B020c`, `B021a`.
+`B001`, `B020a`, `B020b`, `B020c`, `B021a`, `B021b`.
 
 - [x] B021a | B020c | Define issue identity and machine-owned frontmatter fields.
-- [ ] B021b | B021a | Define editable issue fields and fixed section names.
+- [x] B021b | B021a | Define editable issue fields and fixed section names.
 - [ ] B021c | B021b | Validate required issue fields and unknown sections.
 - [ ] B022a | B021a | Define remote version, content hash, and sync timestamp metadata.
 - [ ] B022b | B022a | Validate syncable, unsynced, archived, and draft states.
