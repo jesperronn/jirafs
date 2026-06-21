@@ -114,3 +114,236 @@ func TestMirror_ImportReasonFor_empty(t *testing.T) {
 		t.Errorf("empty mirror ImportReasonFor(PROJ-123) = %q, want \"\"", got)
 	}
 }
+
+func TestIsValidScopeType(t *testing.T) {
+	for _, tpe := range ValidScopeTypes {
+		if !IsValidScopeType(tpe) {
+			t.Errorf("IsValidScopeType(%q) = false, want true", tpe)
+		}
+	}
+	if IsValidScopeType("bogus") {
+		t.Error("IsValidScopeType(\"bogus\") = true, want false")
+	}
+	var zero ScopeType
+	if IsValidScopeType(zero) {
+		t.Error("IsValidScopeType(\"\") = true, want false")
+	}
+}
+
+func TestScope_IsZero(t *testing.T) {
+	var zero Scope
+	if !zero.IsZero() {
+		t.Error("zero Scope should be zero")
+	}
+	partial := Scope{Name: "active"}
+	if partial.IsZero() {
+		t.Error("Scope with only Name set should not be zero")
+	}
+	nonZero := Scope{Name: "active", Type: ScopeTypeJQL, Target: "status=Active"}
+	if nonZero.IsZero() {
+		t.Error("non-zero Scope should not be zero")
+	}
+}
+
+func TestScopeMember_IsZero(t *testing.T) {
+	var zero ScopeMember
+	if !zero.IsZero() {
+		t.Error("zero ScopeMember should be zero")
+	}
+	partial := ScopeMember{Key: "PROJ-123"}
+	if partial.IsZero() {
+		t.Error("ScopeMember with only Key set should not be zero")
+	}
+	nonZero := ScopeMember{Key: "PROJ-123", Scope: "active"}
+	if nonZero.IsZero() {
+		t.Error("non-zero ScopeMember should not be zero")
+	}
+}
+
+func TestScopeMember_String(t *testing.T) {
+	mem := ScopeMember{Key: "PROJ-123", Scope: "active"}
+	got := mem.String()
+	want := "PROJ-123 (@active)"
+	if got != want {
+		t.Errorf("ScopeMember.String() = %q, want %q", got, want)
+	}
+}
+
+func TestMirror_HasScope(t *testing.T) {
+	m := Mirror{
+		Scopes: []Scope{
+			{Name: "active", Type: ScopeTypeJQL, Target: "status=Active"},
+			{Name: "epics", Type: ScopeTypeComponent, Target: "Epic"},
+		},
+	}
+	if !m.HasScope("active") {
+		t.Error("mirror should have active scope")
+	}
+	if !m.HasScope("epics") {
+		t.Error("mirror should have epics scope")
+	}
+	if m.HasScope("inactive") {
+		t.Error("mirror should not have inactive scope")
+	}
+}
+
+func TestMirror_HasScope_empty(t *testing.T) {
+	var m Mirror
+	if m.HasScope("active") {
+		t.Error("empty mirror should not have any scopes")
+	}
+	m.Scopes = nil
+	if m.HasScope("active") {
+		t.Error("mirror with nil scopes should not have any scopes")
+	}
+}
+
+func TestMirror_ScopeFor(t *testing.T) {
+	m := Mirror{
+		Scopes: []Scope{
+			{Name: "active", Type: ScopeTypeJQL, Target: "status=Active"},
+		},
+	}
+	got := m.ScopeFor("active")
+	if got.Name != "active" || got.Type != ScopeTypeJQL || got.Target != "status=Active" {
+		t.Errorf("ScopeFor(active) = %+v, want {Name:active Type:jql Target:status=Active}", got)
+	}
+	got = m.ScopeFor("inactive")
+	if !got.IsZero() {
+		t.Errorf("ScopeFor(inactive) = %+v, want zero Scope", got)
+	}
+}
+
+func TestMirror_ScopeTypeFor(t *testing.T) {
+	m := Mirror{
+		Scopes: []Scope{
+			{Name: "active", Type: ScopeTypeJQL, Target: "status=Active"},
+		},
+	}
+	if got := m.ScopeTypeFor("active"); got != ScopeTypeJQL {
+		t.Errorf("ScopeTypeFor(active) = %q, want %q", got, ScopeTypeJQL)
+	}
+	if got := m.ScopeTypeFor("inactive"); got != "" {
+		t.Errorf("ScopeTypeFor(inactive) = %q, want \"\"", got)
+	}
+}
+
+func TestMirror_HasScopeMember(t *testing.T) {
+	m := Mirror{
+		ScopeMembers: []ScopeMember{
+			{Key: "PROJ-123", Scope: "active"},
+			{Key: "PROJ-456", Scope: "epics"},
+		},
+	}
+	if !m.HasScopeMember("PROJ-123") {
+		t.Error("mirror should have PROJ-123 as scope member")
+	}
+	if !m.HasScopeMember("PROJ-456") {
+		t.Error("mirror should have PROJ-456 as scope member")
+	}
+	if m.HasScopeMember("PROJ-789") {
+		t.Error("mirror should not have PROJ-789 as scope member")
+	}
+}
+
+func TestMirror_HasScopeMember_empty(t *testing.T) {
+	var m Mirror
+	if m.HasScopeMember("PROJ-123") {
+		t.Error("empty mirror should not have any scope members")
+	}
+	m.ScopeMembers = nil
+	if m.HasScopeMember("PROJ-123") {
+		t.Error("mirror with nil scope members should not have any")
+	}
+}
+
+func TestMirror_ScopeMemberFor(t *testing.T) {
+	m := Mirror{
+		ScopeMembers: []ScopeMember{
+			{Key: "PROJ-123", Scope: "active"},
+			{Key: "PROJ-456", Scope: "epics"},
+		},
+	}
+	if got := m.ScopeMemberFor("PROJ-123"); got != "active" {
+		t.Errorf("ScopeMemberFor(PROJ-123) = %q, want %q", got, "active")
+	}
+	if got := m.ScopeMemberFor("PROJ-456"); got != "epics" {
+		t.Errorf("ScopeMemberFor(PROJ-456) = %q, want %q", got, "epics")
+	}
+	if got := m.ScopeMemberFor("PROJ-789"); got != "" {
+		t.Errorf("ScopeMemberFor(PROJ-789) = %q, want \"\"", got)
+	}
+}
+
+func TestMirror_AddScope(t *testing.T) {
+	m := Mirror{}
+	if !m.AddScope(Scope{Name: "active", Type: ScopeTypeJQL, Target: "status=Active"}) {
+		t.Error("AddScope should return true for new scope")
+	}
+	if len(m.Scopes) != 1 {
+		t.Errorf("expected 1 scope, got %d", len(m.Scopes))
+	}
+	// Adding same name again should fail
+	if m.AddScope(Scope{Name: "active", Type: ScopeTypeJQL, Target: "status=Active"}) {
+		t.Error("AddScope should return false for duplicate scope")
+	}
+	if len(m.Scopes) != 1 {
+		t.Errorf("expected 1 scope after duplicate add, got %d", len(m.Scopes))
+	}
+	// Zero scope should fail
+	if m.AddScope(Scope{}) {
+		t.Error("AddScope should return false for zero scope")
+	}
+}
+
+func TestMirror_AddScopeMember(t *testing.T) {
+	m := Mirror{}
+	if !m.AddScopeMember(ScopeMember{Key: "PROJ-123", Scope: "active"}) {
+		t.Error("AddScopeMember should return true for new member")
+	}
+	if len(m.ScopeMembers) != 1 {
+		t.Errorf("expected 1 scope member, got %d", len(m.ScopeMembers))
+	}
+	// Adding same key again should fail
+	if m.AddScopeMember(ScopeMember{Key: "PROJ-123", Scope: "active"}) {
+		t.Error("AddScopeMember should return false for duplicate member")
+	}
+	if len(m.ScopeMembers) != 1 {
+		t.Errorf("expected 1 scope member after duplicate add, got %d", len(m.ScopeMembers))
+	}
+	// Zero member should fail
+	if m.AddScopeMember(ScopeMember{}) {
+		t.Error("AddScopeMember should return false for zero member")
+	}
+}
+
+func TestMirror_ExplicitAndScopeMembers(t *testing.T) {
+	// Verify that explicit imports and scope memberships are tracked separately.
+	m := Mirror{
+		Project: schema.TypedRef{Type: schema.RefProject, Value: "ABC"},
+		Issues: []ImportedIssue{
+			{Key: "PROJ-100", Reason: ImportReasonManual},
+		},
+		Scopes: []Scope{
+			{Name: "active", Type: ScopeTypeJQL, Target: "status=Active"},
+		},
+		ScopeMembers: []ScopeMember{
+			{Key: "PROJ-200", Scope: "active"},
+		},
+	}
+	// Explicit import is not a scope member
+	if m.HasScopeMember("PROJ-100") {
+		t.Error("PROJ-100 should not be a scope member")
+	}
+	// Scope member is not an explicit import
+	if m.HasIssue("PROJ-200") {
+		t.Error("PROJ-200 should not be an explicit import")
+	}
+	// Both can coexist
+	if !m.HasIssue("PROJ-100") {
+		t.Error("PROJ-100 should be an explicit import")
+	}
+	if !m.HasScopeMember("PROJ-200") {
+		t.Error("PROJ-200 should be a scope member")
+	}
+}

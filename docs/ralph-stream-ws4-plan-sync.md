@@ -24,8 +24,8 @@ Completed dependency IDs archived in [Ralph Task Archive](ralph-task-archive.md)
 - [x] B060b | B060a,B052b | Unchanged refs and metadata produce empty plan.
 - [x] B061a | B060a | Summary and description changes become typed operations.
 - [x] B061b | B061a | Labels, assignee, status, sprint, and fix-version changes become typed operations.
-- [x] B062a | B060b | Stale remote version produces conflict, not operations.
-- [x] B062b | B062a | Stale content hash produces conflict, not operations.
+- [ ] B062a | B060b | Stale remote version produces conflict, not operations.
+- [ ] B062b | B062a | Stale content hash produces conflict, not operations.
 - [ ] B063a | B061a | Sync applies a validated no-op plan without mutation.
 - [ ] B063b | B063a,B061b | Sync applies one validated field-change operation.
 - [ ] B064a | B063b | Archive paths and unresolved refs fail before mutation.

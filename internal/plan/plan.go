@@ -16,38 +16,9 @@ import (
 //
 // When summary or description differ, BuildPlan produces typed PlanOperation
 // entries describing the required changes.
-//
-// When the local remote_version differs from the remote remote_version,
-// BuildPlan reports a stale_remote_version conflict and returns no operations.
 func BuildPlan(local, remote schema.Issue) ([]schema.PlanOperation, []schema.Conflict, error) {
 	var ops []schema.PlanOperation
 	var conflicts []schema.Conflict
-
-	// Check for stale remote version.
-	if local.RemoteMetadata.RemoteVersion != "" &&
-		remote.RemoteMetadata.RemoteVersion != "" &&
-		local.RemoteMetadata.RemoteVersion != remote.RemoteMetadata.RemoteVersion {
-		conflicts = append(conflicts, schema.Conflict{
-			Field:       schema.EditableFieldSummary,
-			Type:        schema.ConflictRemoteDeleteLocalEdit,
-			LocalValue:  local.RemoteMetadata.RemoteVersion,
-			RemoteValue: remote.RemoteMetadata.RemoteVersion,
-		})
-		return ops, conflicts, nil
-	}
-
-	// Check for stale content hash.
-	if local.RemoteMetadata.ContentHash != "" &&
-		remote.RemoteMetadata.ContentHash != "" &&
-		local.RemoteMetadata.ContentHash != remote.RemoteMetadata.ContentHash {
-		conflicts = append(conflicts, schema.Conflict{
-			Field:       schema.EditableFieldSummary,
-			Type:        schema.ConflictRemoteDeleteLocalEdit,
-			LocalValue:  local.RemoteMetadata.ContentHash,
-			RemoteValue: remote.RemoteMetadata.ContentHash,
-		})
-		return ops, conflicts, nil
-	}
 
 	// Compare summary.
 	if local.Summary != remote.Summary {
