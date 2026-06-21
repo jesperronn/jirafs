@@ -29,7 +29,7 @@ Completed dependency IDs archived in [Ralph Task Archive](ralph-task-archive.md)
 - [x] B042a | B041a | Missing refs include type and lookup value.
 - [x] B042b | B042a | Ambiguous refs include candidate context.
 - [x] B017a | B012 | Parse one credential ref string into `scheme` and `target`, and return `ErrInvalidCredentialRef` for malformed refs.
-- [ ] B017b | B017a | Accept only `env://` and `file://` schemes in the first implementation and reject unsupported schemes with structured errors.
+- [x] B017b | B017a | Accept only `env://` and `file://` schemes in the first implementation and reject unsupported schemes with structured errors.
 - [ ] B017c | B017b | Parse every instance `credential_refs` entry into an ordered typed slice without resolving provider values yet.
 - [ ] B017d | B017c | Resolve `env://VAR_NAME` credentials into normalized auth fields.
 - [ ] B017e | B017c | Resolve `file://path` credentials into normalized auth fields.
