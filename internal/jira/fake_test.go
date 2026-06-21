@@ -154,6 +154,61 @@ func TestFakeTransportSearchMyIssuesOverride(t *testing.T) {
 	}
 }
 
+func TestFakeTransportSearchCurrentSprintDeterministic(t *testing.T) {
+	fake := NewFakeTransport()
+
+	got, err := fake.SearchIssues(context.Background(), "current-sprint")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(got) != 2 {
+		t.Fatalf("expected 2 issues, got %d", len(got))
+	}
+	wantKeys := []string{"PROJ-4", "PROJ-5"}
+	wantTypes := []string{"Story", "Story"}
+	for i, g := range got {
+		if string(g.Identity.Key) != wantKeys[i] {
+			t.Errorf("issue %d key = %q, want %q", i, g.Identity.Key, wantKeys[i])
+		}
+		if string(g.Identity.Type) != wantTypes[i] {
+			t.Errorf("issue %d type = %q, want %q", i, g.Identity.Type, wantTypes[i])
+		}
+	}
+
+	got2, err := fake.SearchIssues(context.Background(), "current-sprint")
+	if err != nil {
+		t.Fatalf("unexpected error on second call: %v", err)
+	}
+	if len(got2) != 2 {
+		t.Fatalf("expected 2 issues on second call, got %d", len(got2))
+	}
+	for i := range got {
+		if string(got[i].Identity.Key) != string(got2[i].Identity.Key) {
+			t.Errorf("key changed between calls: %q vs %q", got[i].Identity.Key, got2[i].Identity.Key)
+		}
+	}
+}
+
+func TestFakeTransportSearchCurrentSprintOverride(t *testing.T) {
+	fake := NewFakeTransport()
+
+	customIssues := []*schema.Issue{
+		{Identity: schema.IssueIdentity{Key: "PROJ-100", Type: "Bug"}},
+	}
+	fake.SetIssuesByScope("current-sprint", customIssues)
+
+	got, err := fake.SearchIssues(context.Background(), "current-sprint")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(got) != 1 {
+		t.Fatalf("expected 1 issue, got %d", len(got))
+	}
+	if string(got[0].Identity.Key) != "PROJ-100" {
+		t.Errorf("key = %q, want %q", got[0].Identity.Key, "PROJ-100")
+	}
+}
+
 func TestFakeTransportClearsErrorAfterRead(t *testing.T) {
 	fake := NewFakeTransport()
 	wantErr := errors.New("one-shot error")
