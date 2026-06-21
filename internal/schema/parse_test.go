@@ -284,9 +284,16 @@ schema_version: "1"
 		t.Fatalf("ParseIssue returned error: %v", err)
 	}
 
-	// B030a does not parse sections yet; Sections should be nil.
-	if issue.Sections != nil {
-		t.Errorf("Sections should be nil for B030a, got %v", issue.Sections)
+	// B031b populates Sections for every issue with a body.
+	if issue.Sections == nil {
+		t.Fatal("Sections should be populated, got nil")
+	}
+	// Both Description and Acceptance Criteria must exist, even when empty.
+	if issue.Sections[SecDescription] != "" {
+		t.Errorf("Sections[Description] = %q, want %q", issue.Sections[SecDescription], "")
+	}
+	if issue.Sections[SecAcceptanceCriteria] != "" {
+		t.Errorf("Sections[Acceptance Criteria] = %q, want %q", issue.Sections[SecAcceptanceCriteria], "")
 	}
 }
 
@@ -367,6 +374,94 @@ func TestSplitSectionBlocks_keepsEmptySectionBodies(t *testing.T) {
 	}
 	if got[1].Heading != "Acceptance Criteria" || got[1].Body != "" {
 		t.Fatalf("second section = %+v, want empty Acceptance Criteria body", got[1])
+	}
+}
+
+func TestParseIssue_populates_description_and_acceptance_criteria(t *testing.T) {
+	content := `---
+key: POP-1
+type: story
+project: project:POP
+schema_version: "1"
+---
+## Description
+This is the description.
+
+## Acceptance Criteria
+- one thing
+- another thing
+`
+
+	issue, err := ParseIssue(content)
+	if err != nil {
+		t.Fatalf("ParseIssue returned error: %v", err)
+	}
+
+	if issue.Sections == nil {
+		t.Fatal("Sections should be populated")
+	}
+	if issue.Sections[SecDescription] != "This is the description." {
+		t.Errorf("Sections[Description] = %q, want %q", issue.Sections[SecDescription], "This is the description.")
+	}
+	if issue.Sections[SecAcceptanceCriteria] != "- one thing\n- another thing" {
+		t.Errorf("Sections[Acceptance Criteria] = %q, want %q", issue.Sections[SecAcceptanceCriteria], "- one thing\n- another thing")
+	}
+}
+
+func TestParseIssue_sections_missing_always_present(t *testing.T) {
+	content := `---
+key: MISS-1
+type: story
+project: project:MISS
+schema_version: "1"
+---
+## Notes
+Just some notes.
+`
+
+	issue, err := ParseIssue(content)
+	if err != nil {
+		t.Fatalf("ParseIssue returned error: %v", err)
+	}
+
+	if issue.Sections == nil {
+		t.Fatal("Sections should be populated")
+	}
+	// Missing sections should still be present as empty strings.
+	if _, ok := issue.Sections[SecDescription]; !ok {
+		t.Errorf("Sections missing key for %q", SecDescription)
+	}
+	if issue.Sections[SecDescription] != "" {
+		t.Errorf("Sections[Description] = %q, want empty", issue.Sections[SecDescription])
+	}
+	if _, ok := issue.Sections[SecAcceptanceCriteria]; !ok {
+		t.Errorf("Sections missing key for %q", SecAcceptanceCriteria)
+	}
+	if issue.Sections[SecAcceptanceCriteria] != "" {
+		t.Errorf("Sections[Acceptance Criteria] = %q, want empty", issue.Sections[SecAcceptanceCriteria])
+	}
+	// Notes should be present with its body.
+	if issue.Sections[SecNotes] != "Just some notes." {
+		t.Errorf("Sections[Notes] = %q, want %q", issue.Sections[SecNotes], "Just some notes.")
+	}
+}
+
+func TestParseIssue_no_body_sections_nil(t *testing.T) {
+	content := `---
+key: NOBODY-1
+type: story
+project: project:NOBODY
+schema_version: "1"
+---`
+
+	issue, err := ParseIssue(content)
+	if err != nil {
+		t.Fatalf("ParseIssue returned error: %v", err)
+	}
+
+	// No body means Sections stays nil.
+	if issue.Sections != nil {
+		t.Errorf("Sections should be nil when there is no body, got %v", issue.Sections)
 	}
 }
 
