@@ -31,7 +31,7 @@ Completed dependency IDs archived in [Ralph Task Archive](ralph-task-archive.md)
 - [x] B017a | B012 | Parse one credential ref string into `scheme` and `target`, and return `ErrInvalidCredentialRef` for malformed refs.
 - [x] B017b | B017a | Accept only `env://` and `file://` schemes in the first implementation and reject unsupported schemes with structured errors.
 - [x] B017c | B017b | Parse every instance `credential_refs` entry into an ordered typed slice without resolving provider values yet.
-- [ ] B017d | B017c | Resolve `env://VAR_NAME` credentials into normalized auth fields.
+- [x] B017d | B017c | Resolve `env://VAR_NAME` credentials into normalized auth fields.
 - [ ] B017e | B017c | Resolve `file://path` credentials into normalized auth fields.
 - [ ] B017f | B017d,B017e | Merge ordered credential sources with later-source override.
 - [ ] B017g | B017f | Validate required resolved auth fields by instance `auth_type`.
