@@ -250,6 +250,27 @@ func ResolveFileCredential(ref CredentialRef) (ResolvedCredential, error) {
 	}, nil
 }
 
+// MergeCredentials merges an ordered slice of resolved credentials into a
+// single ResolvedCredential. The merged result preserves the Scheme and
+// Target from the last (highest-index) source. All Fields maps are
+// deep-merged with later sources overriding earlier ones for the same key.
+// An empty input returns an empty Fields map with no error.
+func MergeCredentials(creds []ResolvedCredential) ResolvedCredential {
+	merged := ResolvedCredential{
+		Fields: make(map[string]string),
+	}
+
+	for _, c := range creds {
+		merged.Scheme = c.Scheme
+		merged.Target = c.Target
+		for k, v := range c.Fields {
+			merged.Fields[k] = v
+		}
+	}
+
+	return merged
+}
+
 // ParseCredentialRefs parses a slice of raw credential ref strings into an
 // ordered slice of typed CredentialRef values. It preserves the input order
 // and returns the first error encountered (from the lowest-index entry).

@@ -423,6 +423,118 @@ ssl = true
 	}
 }
 
+func TestMergeCredentials(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    []ResolvedCredential
+		wantScheme string
+		wantTarget string
+		wantFields map[string]string
+	}{
+		{
+			name:     "empty slice returns empty fields",
+			input:    []ResolvedCredential{},
+			wantScheme: "",
+			wantTarget: "",
+			wantFields: map[string]string{},
+		},
+		{
+			name: "nil slice returns empty fields",
+			input: nil,
+			wantScheme: "",
+			wantTarget: "",
+			wantFields: map[string]string{},
+		},
+		{
+			name: "single credential passes through",
+			input: []ResolvedCredential{
+				{Scheme: "env", Target: "MY_TOKEN", Fields: map[string]string{"MY_TOKEN": "env-val"}},
+			},
+			wantScheme: "env",
+			wantTarget: "MY_TOKEN",
+			wantFields: map[string]string{"MY_TOKEN": "env-val"},
+		},
+		{
+			name: "non-overlapping keys combine",
+			input: []ResolvedCredential{
+				{Scheme: "env", Target: "TOKEN", Fields: map[string]string{"TOKEN": "env-val"}},
+				{Scheme: "file", Target: "creds.toml", Fields: map[string]string{"username": "from-file"}},
+			},
+			wantScheme: "file",
+			wantTarget: "creds.toml",
+			wantFields: map[string]string{
+				"TOKEN":    "env-val",
+				"username": "from-file",
+			},
+		},
+		{
+			name: "later source overrides earlier for same key",
+			input: []ResolvedCredential{
+				{Scheme: "env", Target: "TOKEN", Fields: map[string]string{"TOKEN": "env-val", "username": "envuser"}},
+				{Scheme: "file", Target: "creds.toml", Fields: map[string]string{"TOKEN": "file-val", "password": "filepass"}},
+			},
+			wantScheme: "file",
+			wantTarget: "creds.toml",
+			wantFields: map[string]string{
+				"TOKEN":    "file-val",
+				"username": "envuser",
+				"password": "filepass",
+			},
+		},
+		{
+			name: "three sources merge correctly",
+			input: []ResolvedCredential{
+				{Scheme: "env", Target: "A", Fields: map[string]string{"A": "1", "B": "1"}},
+				{Scheme: "env", Target: "B", Fields: map[string]string{"B": "2", "C": "2"}},
+				{Scheme: "file", Target: "f.toml", Fields: map[string]string{"C": "3"}},
+			},
+			wantScheme: "file",
+			wantTarget: "f.toml",
+			wantFields: map[string]string{
+				"A": "1",
+				"B": "2",
+				"C": "3",
+			},
+		},
+		{
+			name: "empty fields in middle source does not erase",
+			input: []ResolvedCredential{
+				{Scheme: "env", Target: "A", Fields: map[string]string{"A": "1"}},
+				{Scheme: "file", Target: "empty.toml", Fields: map[string]string{}},
+				{Scheme: "env", Target: "B", Fields: map[string]string{"B": "2"}},
+			},
+			wantScheme: "env",
+			wantTarget: "B",
+			wantFields: map[string]string{
+				"A": "1",
+				"B": "2",
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := MergeCredentials(tt.input)
+
+			if got.Scheme != tt.wantScheme {
+				t.Errorf("MergeCredentials().Scheme = %q, want %q", got.Scheme, tt.wantScheme)
+			}
+			if got.Target != tt.wantTarget {
+				t.Errorf("MergeCredentials().Target = %q, want %q", got.Target, tt.wantTarget)
+			}
+			if len(got.Fields) != len(tt.wantFields) {
+				t.Errorf("MergeCredentials().Fields length = %d, want %d", len(got.Fields), len(tt.wantFields))
+				return
+			}
+			for k, wantVal := range tt.wantFields {
+				if got.Fields[k] != wantVal {
+					t.Errorf("MergeCredentials().Fields[%q] = %q, want %q", k, got.Fields[k], wantVal)
+				}
+			}
+		})
+	}
+}
+
 func TestValidateResolvedCredential(t *testing.T) {
 	tests := []struct {
 		name      string
