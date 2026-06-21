@@ -27,7 +27,7 @@ Completed dependency IDs archived in [Ralph Task Archive](ralph-task-archive.md)
 - [x] B024a | B021b | Define typed plan operation model for one editable field.
 - [x] B024b | B024a | Define conflict model without Jira transport dependencies.
 - [x] B030a | B021c | Parse valid synced issue frontmatter into schema model.
-- [ ] B030b | B030a | Parse valid draft issue frontmatter into schema model.
+- [x] B030b | B030a | Parse valid draft issue frontmatter into schema model.
 - [ ] B030c | B030b | Return structured errors for invalid frontmatter.
 - [ ] B031a | B030a | Parse description and acceptance sections.
 - [ ] B031b | B031a | Reject unknown sections explicitly.

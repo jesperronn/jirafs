@@ -212,6 +212,43 @@ func TestParseIssue_zero_issue(t *testing.T) {
 	}
 }
 
+func TestParseIssue_draft_frontmatter(t *testing.T) {
+	content := `---
+key: DRAFT-1
+type: story
+project: project:DRAFT
+schema_version: "1"
+state: draft
+---`
+
+	issue, err := ParseIssue(content)
+	if err != nil {
+		t.Fatalf("ParseIssue returned error: %v", err)
+	}
+
+	if issue.Identity.Key != "DRAFT-1" {
+		t.Errorf("Identity.Key = %q, want %q", issue.Identity.Key, "DRAFT-1")
+	}
+	if issue.Identity.Type != "story" {
+		t.Errorf("Identity.Type = %q, want %q", issue.Identity.Type, "story")
+	}
+	if !issue.Identity.Project.Equals(TypedRef{Type: RefProject, Value: "DRAFT"}) {
+		t.Errorf("Identity.Project = %+v, want {Type: project, Value: DRAFT}", issue.Identity.Project)
+	}
+	if issue.MachineOwned.SchemaVersion != "1" {
+		t.Errorf("MachineOwned.SchemaVersion = %q, want %q", issue.MachineOwned.SchemaVersion, "1")
+	}
+	if issue.RemoteMetadata.State() != StateDraft {
+		t.Errorf("RemoteMetadata.State() = %q, want %q", issue.RemoteMetadata.State(), StateDraft)
+	}
+	if issue.RemoteMetadata.IsSyncable() {
+		t.Error("draft issue should not be IsSyncable")
+	}
+	if !issue.RemoteMetadata.IsZero() {
+		t.Error("draft issue RemoteMetadata should be IsZero (no remote fields)")
+	}
+}
+
 func TestParseIssue_empty_sections(t *testing.T) {
 	content := `---
 key: SEC-1
