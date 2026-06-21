@@ -74,6 +74,12 @@ func RenderIssue(i Issue) string {
 	}
 
 	sb.WriteString("---\n")
+
+	// Render fixed sections in stable canonical order.
+	if len(i.Sections) > 0 {
+		sb.WriteString(RenderSections(i.Sections))
+	}
+
 	return sb.String()
 }
 
@@ -82,4 +88,25 @@ func RenderIssue(i Issue) string {
 func quoteScalar(s string) string {
 	// Use single quotes for simplicity and safety.
 	return "'" + strings.ReplaceAll(s, "'", "''") + "'"
+}
+
+// RenderSections renders the fixed sections of an issue body in stable,
+// canonical order (the order returned by AllFixedSections).  For every known
+// section the heading is always emitted; the body is emitted only when the
+// map contains a non-empty entry for that key.
+//
+// The output is a plain-text block suitable for appending after the
+// frontmatter delimiter.
+func RenderSections(sections map[FixedSectionName]string) string {
+	var sb strings.Builder
+
+	for _, name := range AllFixedSections() {
+		sb.WriteString("## " + string(name) + "\n")
+		if body, ok := sections[name]; ok && body != "" {
+			sb.WriteString(body + "\n")
+		}
+		sb.WriteString("\n")
+	}
+
+	return sb.String()
 }
