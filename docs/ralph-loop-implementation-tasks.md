@@ -21,6 +21,7 @@ Task format:
 - [x] B001 | none | `go.mod`, `cmd/jirafs/**`, `internal/**`, `tests/**`, `bin/**` | Go module, `jirafs` builds, `bin/test` and `bin/lint` pass.
 - [x] B002 | B001 | `cmd/jirafs/**`, `internal/cli/**`, `tests/cli/**` | Help lists `init`, `export`, `plan`, `sync`, `new`, `registry`, `board`, `archive`.
 - [x] B003 | B001 | `tests/**`, `internal/testutil/**` | Fixture loading and golden-output diff helpers exist.
+- [ ] B004 | B001 | `bin/**`, `tests/**`, `tools/**` | Add behavioral tests for bash wrappers: `bin/test`, `bin/lint`, and `bin/integrate_stream_commit`, including argument handling, defaults, invalid args, retry/backoff, and dirty-worktree failure paths.
 
 ## Settings And Context
 
