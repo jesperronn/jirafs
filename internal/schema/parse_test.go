@@ -465,6 +465,93 @@ schema_version: "1"
 	}
 }
 
+func TestParseIssue_unknown_section_rejected(t *testing.T) {
+	content := `---
+key: UKN-1
+type: story
+project: project:UKN
+schema_version: "1"
+---
+## Description
+Some description.
+
+## Unknown Section
+This should be rejected.
+`
+
+	_, err := ParseIssue(content)
+	if err == nil {
+		t.Fatal("ParseIssue should return error for unknown section")
+	}
+	if err.Kind != ErrKindUnknownSection {
+		t.Errorf("ParseError.Kind = %q, want %q", err.Kind, ErrKindUnknownSection)
+	}
+	if !strings.Contains(err.Msg, "unknown section") {
+		t.Errorf("error should mention unknown section, got: %v", err)
+	}
+}
+
+func TestParseIssue_unknown_section_only(t *testing.T) {
+	content := `---
+key: UKN2-1
+type: story
+project: project:UKN2
+schema_version: "1"
+---
+## RandomHeading
+Some content.
+`
+
+	_, err := ParseIssue(content)
+	if err == nil {
+		t.Fatal("ParseIssue should return error for unknown section")
+	}
+	if err.Kind != ErrKindUnknownSection {
+		t.Errorf("ParseError.Kind = %q, want %q", err.Kind, ErrKindUnknownSection)
+	}
+}
+
+func TestParseIssue_known_sections_pass(t *testing.T) {
+	content := `---
+key: KN-1
+type: story
+project: project:KN
+schema_version: "1"
+---
+## Description
+Some description.
+
+## Acceptance Criteria
+- criteria one
+
+## Notes
+Just notes.
+
+## Definition of Ready
+Ready criteria.
+
+## Comments To Add
+to add.
+
+## Remote Comments
+remote.
+`
+
+	issue, err := ParseIssue(content)
+	if err != nil {
+		t.Fatalf("ParseIssue returned error for all known sections: %v", err)
+	}
+	if issue.Sections == nil {
+		t.Fatal("Sections should be populated")
+	}
+	if issue.Sections[SecDescription] != "Some description." {
+		t.Errorf("Sections[Description] = %q", issue.Sections[SecDescription])
+	}
+	if issue.Sections[SecNotes] != "Just notes." {
+		t.Errorf("Sections[Notes] = %q", issue.Sections[SecNotes])
+	}
+}
+
 func TestParseErrorError(t *testing.T) {
 	err := (&ParseError{
 		Kind: ErrKindInvalidYAML,

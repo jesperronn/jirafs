@@ -22,6 +22,8 @@ const (
 	ErrKindInvalidProjectRef ParseErrorKind = "invalid_project_ref"
 	// ErrKindInvalidSyncTime means the sync_time field was not a valid RFC3339 date.
 	ErrKindInvalidSyncTime ParseErrorKind = "invalid_sync_time"
+	// ErrKindUnknownSection means a body heading is not a known fixed section.
+	ErrKindUnknownSection ParseErrorKind = "unknown_section"
 )
 
 // ParseError is a structured error returned by ParseIssue when frontmatter
@@ -144,6 +146,14 @@ func ParseIssue(content string) (Issue, *ParseError) {
 	// Populate Sections from body when present.
 	if body != "" {
 		blocks := splitSectionBlocks(body)
+		for _, b := range blocks {
+			if !FixedSectionName(b.Heading).IsKnown() {
+				return Issue{}, &ParseError{
+					Kind: ErrKindUnknownSection,
+					Msg:  fmt.Sprintf("unknown section %q", b.Heading),
+				}
+			}
+		}
 		issue.Sections = make(map[FixedSectionName]string)
 		for _, b := range blocks {
 			name := FixedSectionName(b.Heading)
