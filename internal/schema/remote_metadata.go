@@ -24,11 +24,12 @@ type RemoteMetadata struct {
 	SyncTime       time.Time    `yaml:"sync_time"`
 	StateFile      string       `yaml:"state,omitempty"`
 	ResolvedStatus string       `yaml:"resolved_status,omitempty"`
+	Pinned         bool         `yaml:"pinned,omitempty"`
 }
 
 // IsZero reports whether r has no remote metadata set.
 func (r RemoteMetadata) IsZero() bool {
-	return r.RemoteVersion == "" && r.ContentHash == "" && r.SyncTime.IsZero() && r.ResolvedStatus == ""
+	return r.RemoteVersion == "" && r.ContentHash == "" && r.SyncTime.IsZero() && r.ResolvedStatus == "" && !r.Pinned
 }
 
 // State returns the IssueState derived from r's fields.

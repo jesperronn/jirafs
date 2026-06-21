@@ -44,6 +44,24 @@ func TestRemoteMetadata_IsZero_partial(t *testing.T) {
 	}
 }
 
+func TestRemoteMetadata_IsZero_pinned(t *testing.T) {
+	// A RemoteMetadata with only Pinned set is not zero (Pinned is set).
+	pinned := RemoteMetadata{
+		Pinned: true,
+	}
+	if pinned.IsZero() {
+		t.Error("RemoteMetadata with only Pinned set should not be IsZero")
+	}
+	// But with other fields set, it should not be zero.
+	filled := RemoteMetadata{
+		RemoteVersion: "1",
+		Pinned:        true,
+	}
+	if filled.IsZero() {
+		t.Error("RemoteMetadata with RemoteVersion and Pinned should not be IsZero")
+	}
+}
+
 func TestRemoteMetadata_State_draft(t *testing.T) {
 	r := RemoteMetadata{StateFile: "draft"}
 	if got := r.State(); got != StateDraft {

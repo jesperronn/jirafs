@@ -272,12 +272,19 @@ func (a ArchiveEligible) String() string {
 
 // IsArchiveEligible reports whether the given issue key is eligible for
 // archiving: it must be out of scope (not explicitly imported and not a scope
-// member) and its resolved status must be ResolvedStatusResolved.
-func (m Mirror) IsArchiveEligible(key schema.IssueKey, resolved ResolvedStatus) bool {
+// member), its resolved status must be ResolvedStatusResolved, it must not be
+// pinned, and it must have remote metadata (not unsynced).
+func (m Mirror) IsArchiveEligible(key schema.IssueKey, resolved ResolvedStatus, remote schema.RemoteMetadata) bool {
 	if m.HasIssue(key) {
 		return false
 	}
 	if m.HasScopeMember(key) {
+		return false
+	}
+	if remote.Pinned {
+		return false
+	}
+	if remote.IsZero() {
 		return false
 	}
 	return resolved == ResolvedStatusResolved
