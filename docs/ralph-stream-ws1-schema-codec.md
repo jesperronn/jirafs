@@ -14,14 +14,25 @@ Rules:
 
 Task format: `ID | deps | acceptance`
 
-- [ ] B020 | B001 | One typed-ref representation for users, projects, statuses, sprints, versions, epics, issues.
-- [ ] B021 | B020 | Issue model covers required frontmatter and fixed sections from `docs/issue-format.md`.
-- [ ] B022 | B021 | Sync metadata validates remote version, hash, timestamps, syncable state.
-- [ ] B023 | B020 | Registry models match `docs/references.md`.
-- [ ] B024 | B021 | Plan/operation models type editable changes and conflicts without Jira transport.
-- [ ] B030 | B021 | Parse synced/draft frontmatter; invalid frontmatter gives structured errors.
-- [ ] B031 | B030 | Parse known sections; unknown sections fail.
-- [ ] B032 | B031 | Render issue docs with stable field and section order.
+Completed dependency IDs archived in [Ralph Task Archive](ralph-task-archive.md):
+`B001`, `B020a`, `B020b`, `B020c`.
+
+- [ ] B021a | B020c | Define issue identity and machine-owned frontmatter fields.
+- [ ] B021b | B021a | Define editable issue fields and fixed section names.
+- [ ] B021c | B021b | Validate required issue fields and unknown sections.
+- [ ] B022a | B021a | Define remote version, content hash, and sync timestamp metadata.
+- [ ] B022b | B022a | Validate syncable, unsynced, archived, and draft states.
+- [ ] B023a | B020c | Define user and project registry models.
+- [ ] B023b | B023a | Define status, sprint, and fix-version registry models.
+- [ ] B024a | B021b | Define typed plan operation model for one editable field.
+- [ ] B024b | B024a | Define conflict model without Jira transport dependencies.
+- [ ] B030a | B021c | Parse valid synced issue frontmatter into schema model.
+- [ ] B030b | B030a | Parse valid draft issue frontmatter into schema model.
+- [ ] B030c | B030b | Return structured errors for invalid frontmatter.
+- [ ] B031a | B030a | Parse description and acceptance sections.
+- [ ] B031b | B031a | Reject unknown sections explicitly.
+- [ ] B032a | B031a | Render frontmatter with stable field order.
+- [ ] B032b | B032a | Render fixed sections with stable section order.
 
 Integration handoff after each commit:
 

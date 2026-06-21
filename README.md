@@ -47,6 +47,7 @@ used for analysis, agent workflows, and team process improvement.
 - [Project Selection CLI](docs/project-selection-cli.md)
 - [Implementation Packets](docs/implementation-packets.md)
 - [Ralph Loop Implementation Tasks](docs/ralph-loop-implementation-tasks.md)
+- [Ralph Task Archive](docs/ralph-task-archive.md)
 - [Ralph Parallel Workflow](docs/ralph-parallel-workflow.md)
 
 ## Implementation Direction
@@ -77,6 +78,7 @@ The execution plan for that work now lives in:
 - [Project Selection CLI](docs/project-selection-cli.md)
 - [Implementation Packets](docs/implementation-packets.md)
 - [Ralph Loop Implementation Tasks](docs/ralph-loop-implementation-tasks.md)
+- [Ralph Task Archive](docs/ralph-task-archive.md)
 - [Ralph Parallel Workflow](docs/ralph-parallel-workflow.md)
 
 ## Language Direction

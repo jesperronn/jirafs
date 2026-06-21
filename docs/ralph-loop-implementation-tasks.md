@@ -16,68 +16,99 @@ Rules:
 Task format:
 `ID | deps | owned paths | acceptance`
 
+Completed dependency IDs archived in [Ralph Task Archive](ralph-task-archive.md):
+`B001`, `B002`, `B003`, `B010`, `B011`, `B012`, `B013`, `B014`, `B020a`,
+`B020b`, `B020c`.
+
 ## Foundation
 
-- [x] B001 | none | `go.mod`, `cmd/jirafs/**`, `internal/**`, `tests/**`, `bin/**` | Go module, `jirafs` builds, `bin/test` and `bin/lint` pass.
-- [x] B002 | B001 | `cmd/jirafs/**`, `internal/cli/**`, `tests/cli/**` | Help lists `init`, `export`, `plan`, `sync`, `new`, `registry`, `board`, `archive`.
-- [x] B003 | B001 | `tests/**`, `internal/testutil/**` | Fixture loading and golden-output diff helpers exist.
-- [ ] B004 | B001 | `bin/**`, `tests/**`, `tools/**` | Add behavioral tests for bash wrappers: `bin/test`, `bin/lint`, and `bin/integrate_stream_commit`, including argument handling, defaults, invalid args, retry/backoff, and dirty-worktree failure paths.
+- [ ] B004a | B001 | `bin/**`, `tests/**`, `tools/**` | Add bash test runner and one passing shell-test fixture wired into `bin/test`.
+- [ ] B004b | B004a | `bin/test`, `tests/**` | Bash-test `bin/test` argument handling: default behavior and invalid args.
+- [ ] B004c | B004a | `bin/lint`, `tests/**` | Bash-test `bin/lint` argument handling: default behavior and invalid args.
+- [ ] B004d | B004a | `bin/integrate_stream_commit`, `tests/**` | Bash-test clean-worktree guard and default `main` target behavior.
+- [ ] B004e | B004d | `bin/integrate_stream_commit`, `tests/**` | Bash-test retry/backoff after non-fast-forward push failure.
+- [ ] B004f | B004d | `bin/integrate_stream_commit`, `tests/**` | Bash-test rebase, test, and lint failure paths stop before push.
 
 ## Settings And Context
 
-- [x] B010 | B001 | `internal/config/**`, `tests/config/**` | Settings errors expose stable codes and messages.
-- [x] B011 | B010 | `internal/config/**`, `tests/config/**` | Parse `~/.jirafs/settings.toml`; load instances/projects; expand paths.
-- [x] B012 | B011 | `internal/config/**`, `tests/config/**` | Reject duplicate keys, missing instances, bad project refs, bad mirror dirs.
-- [x] B013 | B011 | `internal/context/**`, `tests/context/**` | Explicit `--project` beats every other source.
-- [x] B014 | B013 | `internal/context/**`, `tests/context/**` | Cwd mapping uses most-specific match; ambiguity fails clearly.
-- [ ] B015 | B013 | `internal/context/**`, `tests/context/**` | Remembered current project is read/written and lower precedence.
-- [ ] B016 | B013 | `internal/context/**`, `tests/context/**` | Non-interactive unresolved context fails without prompting.
+- [ ] B015a | B013 | `internal/context/**`, `tests/context/**` | Read remembered current project when no explicit project or cwd match exists.
+- [ ] B015b | B015a | `internal/context/**`, `tests/context/**` | Write remembered current project after successful explicit selection.
+- [ ] B016a | B013 | `internal/context/**`, `tests/context/**` | Non-interactive unresolved context returns a structured no-project error.
+- [ ] B016b | B016a | `internal/context/**`, `tests/context/**` | Interactive unresolved context selects from known projects.
 
 ## Schema
 
-- [ ] B020 | B001 | `internal/schema/**`, `tests/schema/**` | One typed-ref representation for users, projects, statuses, sprints, versions, epics, issues.
-- [ ] B021 | B020 | `internal/schema/**`, `tests/schema/**` | Issue model covers required frontmatter and fixed sections from `docs/issue-format.md`.
-- [ ] B022 | B021 | `internal/schema/**`, `tests/schema/**` | Sync metadata validates remote version, hash, timestamps, syncable state.
-- [ ] B023 | B020 | `internal/schema/**`, `tests/schema/**` | Registry models match `docs/references.md`.
-- [ ] B024 | B021 | `internal/schema/**`, `tests/schema/**` | Plan/operation models type editable changes and conflicts without Jira transport.
+- [ ] B021a | B020c | `internal/schema/**`, `tests/schema/**` | Define issue identity and machine-owned frontmatter fields.
+- [ ] B021b | B021a | `internal/schema/**`, `tests/schema/**` | Define editable issue fields and fixed section names.
+- [ ] B021c | B021b | `internal/schema/**`, `tests/schema/**` | Validate required issue fields and unknown sections.
+- [ ] B022a | B021a | `internal/schema/**`, `tests/schema/**` | Define remote version, content hash, and sync timestamp metadata.
+- [ ] B022b | B022a | `internal/schema/**`, `tests/schema/**` | Validate syncable, unsynced, archived, and draft states.
+- [ ] B023a | B020c | `internal/schema/**`, `tests/schema/**` | Define user and project registry models.
+- [ ] B023b | B023a | `internal/schema/**`, `tests/schema/**` | Define status, sprint, and fix-version registry models.
+- [ ] B024a | B021b | `internal/schema/**`, `tests/schema/**` | Define typed plan operation model for one editable field.
+- [ ] B024b | B024a | `internal/schema/**`, `tests/schema/**` | Define conflict model without Jira transport dependencies.
 
 ## Codec
 
-- [ ] B030 | B021 | `internal/codec/**`, `tests/codec/**` | Parse synced/draft frontmatter; invalid frontmatter gives structured errors.
-- [ ] B031 | B030 | `internal/codec/**`, `tests/codec/**` | Parse known sections; unknown sections fail.
-- [ ] B032 | B031 | `internal/codec/**`, `tests/codec/**` | Render issue docs with stable field and section order.
-- [ ] B033 | B032 | `tests/codec/**` | Synced and draft fixtures are stable on second render.
+- [ ] B030a | B021c | `internal/codec/**`, `tests/codec/**` | Parse valid synced issue frontmatter into schema model.
+- [ ] B030b | B030a | `internal/codec/**`, `tests/codec/**` | Parse valid draft issue frontmatter into schema model.
+- [ ] B030c | B030b | `internal/codec/**`, `tests/codec/**` | Return structured errors for invalid frontmatter.
+- [ ] B031a | B030a | `internal/codec/**`, `tests/codec/**` | Parse description and acceptance sections.
+- [ ] B031b | B031a | `internal/codec/**`, `tests/codec/**` | Reject unknown sections explicitly.
+- [ ] B032a | B031a | `internal/codec/**`, `tests/codec/**` | Render frontmatter with stable field order.
+- [ ] B032b | B032a | `internal/codec/**`, `tests/codec/**` | Render fixed sections with stable section order.
+- [ ] B033a | B032b | `tests/codec/**` | Add synced issue round-trip golden fixture.
+- [ ] B033b | B033a | `tests/codec/**` | Add draft issue round-trip golden fixture.
 
 ## Registry And References
 
-- [ ] B040 | B011,B023 | `internal/registry/**`, `tests/registry/**` | Load each registry family with structured file errors.
-- [ ] B041 | B040 | `internal/references/**`, `tests/references/**` | Resolve all typed refs to Jira ids through registries.
-- [ ] B042 | B041 | `internal/references/**`, `tests/references/**` | Missing/ambiguous refs include type, lookup value, candidates when available.
+- [ ] B040a | B011,B023b | `internal/registry/**`, `tests/registry/**` | Load user and project registry files with structured file errors.
+- [ ] B040b | B040a | `internal/registry/**`, `tests/registry/**` | Load status, sprint, and fix-version registry files.
+- [ ] B041a | B040a | `internal/references/**`, `tests/references/**` | Resolve user and project typed refs to Jira ids.
+- [ ] B041b | B041a,B040b | `internal/references/**`, `tests/references/**` | Resolve status, sprint, and fix-version typed refs to Jira ids.
+- [ ] B042a | B041a | `internal/references/**`, `tests/references/**` | Missing refs include type and lookup value.
+- [ ] B042b | B042a | `internal/references/**`, `tests/references/**` | Ambiguous refs include candidate context.
 
 ## Jira Read Path
 
-- [ ] B050 | B021 | `internal/jira/**`, `tests/jira/**` | Jira client interface and fake transport allow JSON tests without network.
-- [ ] B051 | B050 | `internal/jira/**`, `tests/jira/**` | Fetch one issue payload into normalized remote data.
-- [ ] B052 | B021,B051 | `internal/export/**`, `tests/export/**` | Normalize one remote issue into canonical issue model; links stay shallow refs.
-- [ ] B053 | B050 | `internal/jira/**`, `tests/jira/**` | Fake `my-issues` or `current-sprint` search returns deterministic issue keys.
+- [ ] B050a | B021a | `internal/jira/**`, `tests/jira/**` | Define Jira client interface and request/response error type.
+- [ ] B050b | B050a | `internal/jira/**`, `tests/jira/**` | Add fake transport for JSON tests without network.
+- [ ] B051a | B050b | `internal/jira/**`, `tests/jira/**` | Fetch one issue payload by key into remote data.
+- [ ] B051b | B051a | `internal/jira/**`, `tests/jira/**` | Map Jira fetch errors to structured client errors.
+- [ ] B052a | B021b,B051a | `internal/export/**`, `tests/export/**` | Normalize summary, description, labels, and assignee into issue model.
+- [ ] B052b | B052a | `internal/export/**`, `tests/export/**` | Normalize linked issues as shallow typed refs.
+- [ ] B053a | B050b | `internal/jira/**`, `tests/jira/**` | Search fake `my-issues` scope with deterministic keys.
+- [ ] B053b | B053a | `internal/jira/**`, `tests/jira/**` | Search fake `current-sprint` scope with deterministic keys.
 
 ## Planner And Sync
 
-- [ ] B060 | B024,B052 | `internal/plan/**`, `tests/plan/**` | Unchanged local/remote models produce empty typed plan.
-- [ ] B061 | B060 | `internal/plan/**`, `tests/plan/**` | Editable fields become typed operations.
-- [ ] B062 | B060 | `internal/plan/**`, `tests/plan/**` | Stale version/hash produces conflicts, not operations.
-- [ ] B063 | B061 | `internal/sync/**`, `tests/sync/**` | Sync accepts only validated plan objects.
-- [ ] B064 | B063 | `internal/sync/**`, `tests/sync/**` | Archive paths, unresolved refs, stale state, invalid transitions fail before mutation.
+- [ ] B060a | B024b,B052a | `internal/plan/**`, `tests/plan/**` | Unchanged local/remote summary and description produce empty plan.
+- [ ] B060b | B060a,B052b | `internal/plan/**`, `tests/plan/**` | Unchanged refs and metadata produce empty plan.
+- [ ] B061a | B060a | `internal/plan/**`, `tests/plan/**` | Summary and description changes become typed operations.
+- [ ] B061b | B061a | `internal/plan/**`, `tests/plan/**` | Labels, assignee, status, sprint, and fix-version changes become typed operations.
+- [ ] B062a | B060b | `internal/plan/**`, `tests/plan/**` | Stale remote version produces conflict, not operations.
+- [ ] B062b | B062a | `internal/plan/**`, `tests/plan/**` | Stale content hash produces conflict, not operations.
+- [ ] B063a | B061a | `internal/sync/**`, `tests/sync/**` | Sync applies a validated no-op plan without mutation.
+- [ ] B063b | B063a,B061b | `internal/sync/**`, `tests/sync/**` | Sync applies one validated field-change operation.
+- [ ] B064a | B063b | `internal/sync/**`, `tests/sync/**` | Archive paths and unresolved refs fail before mutation.
+- [ ] B064b | B064a | `internal/sync/**`, `tests/sync/**` | Stale state and invalid transitions fail before mutation.
 
 ## Mirror, CLI, Archive, Board
 
-- [ ] B070 | B011,B014 | `internal/mirror/**`, `tests/mirror/**` | Explicit imports and named scopes coexist with explainable membership.
-- [ ] B071 | B070 | `internal/mirror/**`, `tests/mirror/**` | Resolved out-of-scope issues can archive; pinned/unsynced stay live.
-- [ ] B080 | B015,B016 | `internal/cli/**`, `tests/cli/**` | `jirafs use` matches interactive/non-interactive project selection docs.
-- [ ] B081 | B052,B053,B070 | `internal/cli/**`, `tests/cli/**` | `jirafs mirror refresh` uses project context and service interfaces.
-- [ ] B082 | B071 | `internal/cli/**`, `tests/cli/**` | `jirafs mirror archive-sweep` reports actions; mutates only when requested.
-- [ ] B090 | B064,B071 | `internal/archive/**`, `tests/archive/**` | Archive movement preserves snapshots and live membership rules.
-- [ ] B091 | B052,B070 | `internal/board/**`, `tests/board/**` | Board groups mirror issues by status, assignee, epic.
+- [ ] B070a | B011,B014 | `internal/mirror/**`, `tests/mirror/**` | Model explicit issue imports with explainable membership reason.
+- [ ] B070b | B070a | `internal/mirror/**`, `tests/mirror/**` | Model named scope membership alongside explicit imports.
+- [ ] B071a | B070b | `internal/mirror/**`, `tests/mirror/**` | Resolved out-of-scope issues become archive-eligible.
+- [ ] B071b | B071a | `internal/mirror/**`, `tests/mirror/**` | Pinned or unsynced issues remain live.
+- [ ] B080a | B015b,B016a | `internal/cli/**`, `tests/cli/**` | `jirafs use --project` updates remembered project.
+- [ ] B080b | B080a,B016b | `internal/cli/**`, `tests/cli/**` | `jirafs use` interactive and non-interactive selection behavior matches docs.
+- [ ] B081a | B052a,B053a,B070b | `internal/cli/**`, `tests/cli/**` | `jirafs mirror refresh` resolves project context and calls refresh service interface.
+- [ ] B081b | B081a,B053b | `internal/cli/**`, `tests/cli/**` | `jirafs mirror refresh` reports deterministic changed issue keys.
+- [ ] B082a | B071a | `internal/cli/**`, `tests/cli/**` | `jirafs mirror archive-sweep` reports eligible actions without mutation.
+- [ ] B082b | B082a | `internal/cli/**`, `tests/cli/**` | `jirafs mirror archive-sweep --apply` calls archive service interface.
+- [ ] B090a | B064a,B071a | `internal/archive/**`, `tests/archive/**` | Archive movement preserves issue snapshot files.
+- [ ] B090b | B090a,B071b | `internal/archive/**`, `tests/archive/**` | Archive movement preserves live membership rules.
+- [ ] B091a | B052a,B070b | `internal/board/**`, `tests/board/**` | Board groups mirror issues by status.
+- [ ] B091b | B091a,B052b | `internal/board/**`, `tests/board/**` | Board groups mirror issues by assignee and epic.
 
 Notes: packets in `docs/implementation-packets.md` are orchestrator-sized. These
 tasks are builder-sized. Start with B001; B020 can run after B001. Do not start

@@ -15,16 +15,19 @@ Rules:
 
 Task format: `ID | deps | acceptance`
 
-- [x] B010 | B001 | Settings errors expose stable codes and messages.
-- [x] B011 | B010 | Parse `~/.jirafs/settings.toml`; load instances/projects; expand paths.
-- [x] B012 | B011 | Reject duplicate keys, missing instances, bad project refs, bad mirror dirs.
-- [x] B013 | B011 | Explicit `--project` beats every other source.
-- [x] B014 | B013 | Cwd mapping uses most-specific match; ambiguity fails clearly.
-- [ ] B015 | B013 | Remembered current project is read/written and lower precedence.
-- [ ] B016 | B013 | Non-interactive unresolved context fails without prompting.
-- [ ] B040 | B011,B023 | Load each registry family with structured file errors.
-- [ ] B041 | B040 | Resolve all typed refs to Jira ids through registries.
-- [ ] B042 | B041 | Missing/ambiguous refs include type, lookup value, candidates when available.
+Completed dependency IDs archived in [Ralph Task Archive](ralph-task-archive.md):
+`B001`, `B010`, `B011`, `B012`, `B013`, `B014`.
+
+- [ ] B015a | B013 | Read remembered current project when no explicit project or cwd match exists.
+- [ ] B015b | B015a | Write remembered current project after successful explicit selection.
+- [ ] B016a | B013 | Non-interactive unresolved context returns a structured no-project error.
+- [ ] B016b | B016a | Interactive unresolved context selects from known projects.
+- [ ] B040a | B011,B023b | Load user and project registry files with structured file errors.
+- [ ] B040b | B040a | Load status, sprint, and fix-version registry files.
+- [ ] B041a | B040a | Resolve user and project typed refs to Jira ids.
+- [ ] B041b | B041a,B040b | Resolve status, sprint, and fix-version typed refs to Jira ids.
+- [ ] B042a | B041a | Missing refs include type and lookup value.
+- [ ] B042b | B042a | Ambiguous refs include candidate context.
 
 Integration handoff after each commit:
 

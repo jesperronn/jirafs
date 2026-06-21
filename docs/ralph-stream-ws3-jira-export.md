@@ -14,10 +14,17 @@ Rules:
 
 Task format: `ID | deps | acceptance`
 
-- [ ] B050 | B021 | Jira client interface and fake transport allow JSON tests without network.
-- [ ] B051 | B050 | Fetch one issue payload into normalized remote data.
-- [ ] B052 | B021,B051 | Normalize one remote issue into canonical issue model; links stay shallow refs.
-- [ ] B053 | B050 | Fake `my-issues` or `current-sprint` search returns deterministic issue keys.
+Completed dependency IDs archived in [Ralph Task Archive](ralph-task-archive.md):
+`B001`.
+
+- [ ] B050a | B021a | Define Jira client interface and request/response error type.
+- [ ] B050b | B050a | Add fake transport for JSON tests without network.
+- [ ] B051a | B050b | Fetch one issue payload by key into remote data.
+- [ ] B051b | B051a | Map Jira fetch errors to structured client errors.
+- [ ] B052a | B021b,B051a | Normalize summary, description, labels, and assignee into issue model.
+- [ ] B052b | B052a | Normalize linked issues as shallow typed refs.
+- [ ] B053a | B050b | Search fake `my-issues` scope with deterministic keys.
+- [ ] B053b | B053a | Search fake `current-sprint` scope with deterministic keys.
 
 Integration handoff after each commit:
 
