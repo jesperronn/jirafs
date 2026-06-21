@@ -1,6 +1,7 @@
 package config
 
 import (
+	"os"
 	"testing"
 )
 
@@ -292,6 +293,130 @@ func TestParseCredentialRefs(t *testing.T) {
 				}
 				if got[i].Target != tt.want[i].Target {
 					t.Errorf("ParseCredentialRefs(%v)[%d].Target = %q, want %q", tt.input, i, got[i].Target, tt.want[i].Target)
+				}
+			}
+		})
+	}
+}
+
+func TestResolveFileCredential(t *testing.T) {
+	// Create a temp TOML credential file.
+	tmpDir := t.TempDir()
+	credsFile := tmpDir + "/creds.toml"
+	tomlContent := `
+username = "fileuser"
+password = "filepass"
+api_token = "file-token-123"
+port = 8080
+ssl = true
+`
+	err := os.WriteFile(credsFile, []byte(tomlContent), 0644)
+	if err != nil {
+		t.Fatalf("setup: write temp file: %v", err)
+	}
+
+	// Create a second file with only one field.
+	singleFile := tmpDir + "/single.toml"
+	singleContent := `api_token = "single-token"
+`
+	err = os.WriteFile(singleFile, []byte(singleContent), 0644)
+	if err != nil {
+		t.Fatalf("setup: write single file: %v", err)
+	}
+
+	tests := []struct {
+		name      string
+		ref       CredentialRef
+		wantErr   bool
+		wantCode  string
+		wantFields map[string]string
+	}{
+		{
+			name:     "file scheme resolves fields",
+			ref:      CredentialRef{Scheme: "file", Target: credsFile},
+			wantErr:  false,
+			wantFields: map[string]string{
+				"username":  "fileuser",
+				"password":  "filepass",
+				"api_token": "file-token-123",
+				"port":      "8080",
+				"ssl":       "true",
+			},
+		},
+		{
+			name:     "single field file resolves",
+			ref:      CredentialRef{Scheme: "file", Target: singleFile},
+			wantErr:  false,
+			wantFields: map[string]string{
+				"api_token": "single-token",
+			},
+		},
+		{
+			name:    "non-existent file returns error",
+			ref:     CredentialRef{Scheme: "file", Target: "/nonexistent/path/creds.toml"},
+			wantErr: true,
+			wantCode: ErrCredentialResolve,
+		},
+		{
+			name:    "non-TOML file returns error",
+			ref:     CredentialRef{Scheme: "file", Target: tmpDir + "/not-toml.txt"},
+			wantErr: true,
+			wantCode: ErrCredentialResolve,
+		},
+		{
+			name:    "env scheme returns error",
+			ref:     CredentialRef{Scheme: "env", Target: "SOME_VAR"},
+			wantErr: true,
+			wantCode: ErrCredentialResolve,
+		},
+		{
+			name:    "empty target returns error",
+			ref:     CredentialRef{Scheme: "file", Target: ""},
+			wantErr: true,
+			wantCode: ErrCredentialResolve,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := ResolveFileCredential(tt.ref)
+
+			if tt.wantErr {
+				if err == nil {
+					t.Errorf("ResolveFileCredential(%+v) expected error, got nil", tt.ref)
+					return
+				}
+				if tt.wantCode != "" {
+					if !IsSettingError(err, tt.wantCode) {
+						t.Errorf("ResolveFileCredential(%+v) error code = %v, want %v",
+							tt.ref, err, tt.wantCode)
+					}
+				}
+				return
+			}
+
+			if err != nil {
+				t.Errorf("ResolveFileCredential(%+v) unexpected error = %v", tt.ref, err)
+				return
+			}
+
+			if got.Scheme != "file" {
+				t.Errorf("ResolveFileCredential(%+v).Scheme = %q, want %q",
+					tt.ref, got.Scheme, "file")
+			}
+			if got.Target != tt.ref.Target {
+				t.Errorf("ResolveFileCredential(%+v).Target = %q, want %q",
+					tt.ref, got.Target, tt.ref.Target)
+			}
+			if len(got.Fields) != len(tt.wantFields) {
+				t.Errorf("ResolveFileCredential(%+v).Fields length = %d, want %d",
+					tt.ref, len(got.Fields), len(tt.wantFields))
+				return
+			}
+			for k, wantVal := range tt.wantFields {
+				if got.Fields[k] != wantVal {
+					t.Errorf("ResolveFileCredential(%+v).Fields[%q] = %q, want %q",
+						tt.ref, k, got.Fields[k], wantVal)
 				}
 			}
 		})
