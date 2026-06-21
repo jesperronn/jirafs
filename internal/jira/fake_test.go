@@ -95,6 +95,65 @@ func TestFakeTransportImplementsClient(t *testing.T) {
 	var _ Client = (*FakeTransport)(nil)
 }
 
+func TestFakeTransportSearchMyIssuesDeterministic(t *testing.T) {
+	fake := NewFakeTransport()
+
+	// First call should return deterministic keys.
+	got, err := fake.SearchIssues(context.Background(), "my-issues")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(got) != 3 {
+		t.Fatalf("expected 3 issues, got %d", len(got))
+	}
+	wantKeys := []string{"PROJ-1", "PROJ-2", "PROJ-3"}
+	wantTypes := []string{"Story", "Bug", "Task"}
+	for i, g := range got {
+		if string(g.Identity.Key) != wantKeys[i] {
+			t.Errorf("issue %d key = %q, want %q", i, g.Identity.Key, wantKeys[i])
+		}
+		if string(g.Identity.Type) != wantTypes[i] {
+			t.Errorf("issue %d type = %q, want %q", i, g.Identity.Type, wantTypes[i])
+		}
+	}
+
+	// Second call should return the same deterministic keys.
+	got2, err := fake.SearchIssues(context.Background(), "my-issues")
+	if err != nil {
+		t.Fatalf("unexpected error on second call: %v", err)
+	}
+	if len(got2) != 3 {
+		t.Fatalf("expected 3 issues on second call, got %d", len(got2))
+	}
+	for i := range got {
+		if string(got[i].Identity.Key) != string(got2[i].Identity.Key) {
+			t.Errorf("key changed between calls: %q vs %q", got[i].Identity.Key, got2[i].Identity.Key)
+		}
+	}
+}
+
+func TestFakeTransportSearchMyIssuesOverride(t *testing.T) {
+	fake := NewFakeTransport()
+
+	// Explicitly set issues for my-issues.
+	customIssues := []*schema.Issue{
+		{Identity: schema.IssueIdentity{Key: "PROJ-99", Type: "Story"}},
+	}
+	fake.SetIssuesByScope("my-issues", customIssues)
+
+	// Should return the explicit issues, not the deterministic ones.
+	got, err := fake.SearchIssues(context.Background(), "my-issues")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(got) != 1 {
+		t.Fatalf("expected 1 issue, got %d", len(got))
+	}
+	if string(got[0].Identity.Key) != "PROJ-99" {
+		t.Errorf("key = %q, want %q", got[0].Identity.Key, "PROJ-99")
+	}
+}
+
 func TestFakeTransportClearsErrorAfterRead(t *testing.T) {
 	fake := NewFakeTransport()
 	wantErr := errors.New("one-shot error")

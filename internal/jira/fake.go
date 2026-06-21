@@ -69,7 +69,8 @@ func (f *FakeTransport) FetchIssue(_ context.Context, key string) (*schema.Issue
 }
 
 // SearchIssues returns the issues registered for the given scope, or the
-// configured error if ErrOn == "search".
+// configured error if ErrOn == "search". When no explicit issues are set
+// for the scope, it falls back to GenerateScopeIssues for known scopes.
 func (f *FakeTransport) SearchIssues(_ context.Context, scope string) ([]*schema.Issue, error) {
 	f.mu.RLock()
 	defer f.mu.RUnlock()
@@ -78,7 +79,30 @@ func (f *FakeTransport) SearchIssues(_ context.Context, scope string) ([]*schema
 	}
 	issues := f.issuesByScope[scope]
 	if issues == nil {
-		return nil, NewNotFoundError("scope:" + scope)
+		issues = generateScopeIssues(scope)
+		if issues == nil {
+			return nil, NewNotFoundError("scope:" + scope)
+		}
 	}
 	return issues, nil
+}
+
+// generateScopeIssues returns deterministic issues for known scopes.
+// It is not thread-safe and must be called outside of locks.
+func generateScopeIssues(scope string) []*schema.Issue {
+	switch scope {
+	case "my-issues":
+		return []*schema.Issue{
+			{Identity: schema.IssueIdentity{Key: "PROJ-1", Type: "Story"}},
+			{Identity: schema.IssueIdentity{Key: "PROJ-2", Type: "Bug"}},
+			{Identity: schema.IssueIdentity{Key: "PROJ-3", Type: "Task"}},
+		}
+	case "current-sprint":
+		return []*schema.Issue{
+			{Identity: schema.IssueIdentity{Key: "PROJ-4", Type: "Story"}},
+			{Identity: schema.IssueIdentity{Key: "PROJ-5", Type: "Story"}},
+		}
+	default:
+		return nil
+	}
 }
