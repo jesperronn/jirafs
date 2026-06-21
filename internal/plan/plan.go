@@ -2,6 +2,9 @@
 package plan
 
 import (
+	"sort"
+	"strings"
+
 	"github.com/jirafs/jirafs/internal/schema"
 )
 
@@ -35,5 +38,100 @@ func BuildPlan(local, remote schema.Issue) ([]schema.PlanOperation, []schema.Con
 		})
 	}
 
+	// Compare labels.
+	if !labelsEqual(local.Labels, remote.Labels) {
+		ops = append(ops, schema.PlanOperation{
+			Field: schema.EditableFieldLabels,
+			Type:  schema.OpSet,
+			Value: labelsToString(local.Labels),
+		})
+	}
+
+	// Compare assignee.
+	if assigneeString(local.Assignee) != assigneeString(remote.Assignee) {
+		ops = append(ops, schema.PlanOperation{
+			Field: schema.EditableFieldAssignee,
+			Type:  schema.OpSet,
+			Value: assigneeString(local.Assignee),
+		})
+	}
+
+	// Compare status.
+	if local.Status != remote.Status {
+		ops = append(ops, schema.PlanOperation{
+			Field: schema.EditableFieldStatus,
+			Type:  schema.OpSet,
+			Value: local.Status,
+		})
+	}
+
+	// Compare sprint.
+	if local.Sprint != remote.Sprint {
+		ops = append(ops, schema.PlanOperation{
+			Field: schema.EditableFieldSprint,
+			Type:  schema.OpSet,
+			Value: local.Sprint,
+		})
+	}
+
+	// Compare fix versions.
+	if !fixVersionsEqual(local.FixVersions, remote.FixVersions) {
+		ops = append(ops, schema.PlanOperation{
+			Field: schema.EditableFieldFixVersions,
+			Type:  schema.OpSet,
+			Value: fixVersionsToString(local.FixVersions),
+		})
+	}
+
 	return ops, conflicts, nil
+}
+
+// labelsToString converts a slice of labels to a comma-separated string.
+// Labels are sorted for deterministic comparison.
+func labelsToString(labels []string) string {
+	sorted := make([]string, len(labels))
+	copy(sorted, labels)
+	sort.Strings(sorted)
+	return strings.Join(sorted, ",")
+}
+
+// labelsEqual compares two label slices for equality, ignoring order.
+func labelsEqual(a, b []string) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	sortedA := make([]string, len(a))
+	copy(sortedA, a)
+	sort.Strings(sortedA)
+	sortedB := make([]string, len(b))
+	copy(sortedB, b)
+	sort.Strings(sortedB)
+	for i := range sortedA {
+		if sortedA[i] != sortedB[i] {
+			return false
+		}
+	}
+	return true
+}
+
+// assigneeString converts an assignee pointer to a string.
+func assigneeString(a *string) string {
+	if a == nil {
+		return ""
+	}
+	return *a
+}
+
+// fixVersionsToString converts a slice of fix versions to a comma-separated string.
+// Fix versions are sorted for deterministic comparison.
+func fixVersionsToString(versions []string) string {
+	sorted := make([]string, len(versions))
+	copy(sorted, versions)
+	sort.Strings(sorted)
+	return strings.Join(sorted, ",")
+}
+
+// fixVersionsEqual compares two fix version slices for equality, ignoring order.
+func fixVersionsEqual(a, b []string) bool {
+	return labelsEqual(a, b)
 }

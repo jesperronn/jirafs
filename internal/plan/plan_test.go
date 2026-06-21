@@ -165,14 +165,13 @@ func TestBuildPlan_unchangedRefsAndMetadata(t *testing.T) {
 
 func TestBuildPlan_differingRefsMetadataNoOps(t *testing.T) {
 	// B060b: differing refs and metadata do not produce operations
-	// when summary and description are unchanged.
-	localAssignee := "jdoe"
-	remoteAssignee := "jsmith"
+	// when summary, description, labels, and assignee are unchanged.
+	assignee := "jdoe"
 	local := schema.Issue{
 		Summary:     "Test issue",
 		Description: "Some description",
 		Labels:      []string{"bug"},
-		Assignee:    &localAssignee,
+		Assignee:    &assignee,
 		LinkedIssues: []schema.LinkedIssue{
 			{Key: "PROJ-1", Type: "blocks"},
 		},
@@ -184,8 +183,8 @@ func TestBuildPlan_differingRefsMetadataNoOps(t *testing.T) {
 	remote := schema.Issue{
 		Summary:     "Test issue",
 		Description: "Some description",
-		Labels:      []string{"enhancement"},
-		Assignee:    &remoteAssignee,
+		Labels:      []string{"bug"},
+		Assignee:    &assignee,
 		LinkedIssues: []schema.LinkedIssue{
 			{Key: "PROJ-2", Type: "relates to"},
 		},
@@ -250,6 +249,340 @@ func TestBuildPlan_bothChanged(t *testing.T) {
 	}
 	if !hasDescription {
 		t.Error("missing description operation")
+	}
+
+	if len(conflicts) != 0 {
+		t.Errorf("expected 0 conflicts, got %d: %v", len(conflicts), conflicts)
+	}
+}
+
+func TestBuildPlan_labelsChange(t *testing.T) {
+	// B061b: labels change produces a typed operation.
+	local := schema.Issue{
+		Summary:  "Test issue",
+		Labels:   []string{"bug", "priority"},
+	}
+	remote := schema.Issue{
+		Summary:  "Test issue",
+		Labels:   []string{"bug"},
+	}
+
+	ops, conflicts, err := BuildPlan(local, remote)
+	if err != nil {
+		t.Fatalf("BuildPlan returned error: %v", err)
+	}
+
+	if len(ops) != 1 {
+		t.Fatalf("expected 1 operation, got %d: %v", len(ops), ops)
+	}
+
+	op := ops[0]
+	if op.Field != schema.EditableFieldLabels {
+		t.Errorf("expected field %q, got %q", schema.EditableFieldLabels, op.Field)
+	}
+	if op.Type != schema.OpSet {
+		t.Errorf("expected type %q, got %q", schema.OpSet, op.Type)
+	}
+	// Labels are sorted: "bug,priority"
+	if op.Value != "bug,priority" {
+		t.Errorf("expected value %q, got %q", "bug,priority", op.Value)
+	}
+
+	if len(conflicts) != 0 {
+		t.Errorf("expected 0 conflicts, got %d: %v", len(conflicts), conflicts)
+	}
+}
+
+func TestBuildPlan_labelsUnchanged(t *testing.T) {
+	// B061b: unchanged labels produce no operation.
+	local := schema.Issue{
+		Summary: "Test issue",
+		Labels:  []string{"priority", "bug"},
+	}
+	remote := schema.Issue{
+		Summary: "Test issue",
+		Labels:  []string{"bug", "priority"},
+	}
+
+	ops, _, err := BuildPlan(local, remote)
+	if err != nil {
+		t.Fatalf("BuildPlan returned error: %v", err)
+	}
+
+	if len(ops) != 0 {
+		t.Errorf("expected 0 operations for unchanged labels, got %d: %v", len(ops), ops)
+	}
+}
+
+func TestBuildPlan_assigneeChange(t *testing.T) {
+	// B061b: assignee change produces a typed operation.
+	localAssignee := "jdoe"
+	remoteAssignee := "jsmith"
+	local := schema.Issue{
+		Summary:  "Test issue",
+		Assignee: &localAssignee,
+	}
+	remote := schema.Issue{
+		Summary:  "Test issue",
+		Assignee: &remoteAssignee,
+	}
+
+	ops, conflicts, err := BuildPlan(local, remote)
+	if err != nil {
+		t.Fatalf("BuildPlan returned error: %v", err)
+	}
+
+	if len(ops) != 1 {
+		t.Fatalf("expected 1 operation, got %d: %v", len(ops), ops)
+	}
+
+	op := ops[0]
+	if op.Field != schema.EditableFieldAssignee {
+		t.Errorf("expected field %q, got %q", schema.EditableFieldAssignee, op.Field)
+	}
+	if op.Type != schema.OpSet {
+		t.Errorf("expected type %q, got %q", schema.OpSet, op.Type)
+	}
+	if op.Value != "jdoe" {
+		t.Errorf("expected value %q, got %q", "jdoe", op.Value)
+	}
+
+	if len(conflicts) != 0 {
+		t.Errorf("expected 0 conflicts, got %d: %v", len(conflicts), conflicts)
+	}
+}
+
+func TestBuildPlan_assigneeNilToLocal(t *testing.T) {
+	// B061b: assignee from nil to a value produces a typed operation.
+	localAssignee := "jdoe"
+	local := schema.Issue{
+		Summary:  "Test issue",
+		Assignee: &localAssignee,
+	}
+	remote := schema.Issue{
+		Summary:  "Test issue",
+		Assignee: nil,
+	}
+
+	ops, _, err := BuildPlan(local, remote)
+	if err != nil {
+		t.Fatalf("BuildPlan returned error: %v", err)
+	}
+
+	if len(ops) != 1 {
+		t.Fatalf("expected 1 operation, got %d: %v", len(ops), ops)
+	}
+
+	op := ops[0]
+	if op.Field != schema.EditableFieldAssignee {
+		t.Errorf("expected field %q, got %q", schema.EditableFieldAssignee, op.Field)
+	}
+	if op.Value != "jdoe" {
+		t.Errorf("expected value %q, got %q", "jdoe", op.Value)
+	}
+}
+
+func TestBuildPlan_statusChange(t *testing.T) {
+	// B061b: status change produces a typed operation.
+	local := schema.Issue{
+		Summary: "Test issue",
+		Status:  "In Progress",
+	}
+	remote := schema.Issue{
+		Summary: "Test issue",
+		Status:  "To Do",
+	}
+
+	ops, conflicts, err := BuildPlan(local, remote)
+	if err != nil {
+		t.Fatalf("BuildPlan returned error: %v", err)
+	}
+
+	if len(ops) != 1 {
+		t.Fatalf("expected 1 operation, got %d: %v", len(ops), ops)
+	}
+
+	op := ops[0]
+	if op.Field != schema.EditableFieldStatus {
+		t.Errorf("expected field %q, got %q", schema.EditableFieldStatus, op.Field)
+	}
+	if op.Type != schema.OpSet {
+		t.Errorf("expected type %q, got %q", schema.OpSet, op.Type)
+	}
+	if op.Value != "In Progress" {
+		t.Errorf("expected value %q, got %q", "In Progress", op.Value)
+	}
+
+	if len(conflicts) != 0 {
+		t.Errorf("expected 0 conflicts, got %d: %v", len(conflicts), conflicts)
+	}
+}
+
+func TestBuildPlan_sprintChange(t *testing.T) {
+	// B061b: sprint change produces a typed operation.
+	local := schema.Issue{
+		Summary: "Test issue",
+		Sprint:  "Sprint 42",
+	}
+	remote := schema.Issue{
+		Summary: "Test issue",
+		Sprint:  "Sprint 41",
+	}
+
+	ops, conflicts, err := BuildPlan(local, remote)
+	if err != nil {
+		t.Fatalf("BuildPlan returned error: %v", err)
+	}
+
+	if len(ops) != 1 {
+		t.Fatalf("expected 1 operation, got %d: %v", len(ops), ops)
+	}
+
+	op := ops[0]
+	if op.Field != schema.EditableFieldSprint {
+		t.Errorf("expected field %q, got %q", schema.EditableFieldSprint, op.Field)
+	}
+	if op.Type != schema.OpSet {
+		t.Errorf("expected type %q, got %q", schema.OpSet, op.Type)
+	}
+	if op.Value != "Sprint 42" {
+		t.Errorf("expected value %q, got %q", "Sprint 42", op.Value)
+	}
+
+	if len(conflicts) != 0 {
+		t.Errorf("expected 0 conflicts, got %d: %v", len(conflicts), conflicts)
+	}
+}
+
+func TestBuildPlan_fixVersionsChange(t *testing.T) {
+	// B061b: fix-version change produces a typed operation.
+	local := schema.Issue{
+		Summary:     "Test issue",
+		FixVersions: []string{"1.0", "2.0"},
+	}
+	remote := schema.Issue{
+		Summary:     "Test issue",
+		FixVersions: []string{"1.0"},
+	}
+
+	ops, conflicts, err := BuildPlan(local, remote)
+	if err != nil {
+		t.Fatalf("BuildPlan returned error: %v", err)
+	}
+
+	if len(ops) != 1 {
+		t.Fatalf("expected 1 operation, got %d: %v", len(ops), ops)
+	}
+
+	op := ops[0]
+	if op.Field != schema.EditableFieldFixVersions {
+		t.Errorf("expected field %q, got %q", schema.EditableFieldFixVersions, op.Field)
+	}
+	if op.Type != schema.OpSet {
+		t.Errorf("expected type %q, got %q", schema.OpSet, op.Type)
+	}
+	// Fix versions are sorted: "1.0,2.0"
+	if op.Value != "1.0,2.0" {
+		t.Errorf("expected value %q, got %q", "1.0,2.0", op.Value)
+	}
+
+	if len(conflicts) != 0 {
+		t.Errorf("expected 0 conflicts, got %d: %v", len(conflicts), conflicts)
+	}
+}
+
+func TestBuildPlan_allFieldsChanged(t *testing.T) {
+	// B061b: multiple field changes produce multiple operations.
+	localAssignee := "jdoe"
+	local := schema.Issue{
+		Summary:     "New title",
+		Description: "New desc",
+		Labels:      []string{"bug", "priority"},
+		Assignee:    &localAssignee,
+		Status:      "In Progress",
+		Sprint:      "Sprint 42",
+		FixVersions: []string{"1.0", "2.0"},
+	}
+	remoteAssignee := "jsmith"
+	remote := schema.Issue{
+		Summary:     "Old title",
+		Description: "Old desc",
+		Labels:      []string{"enhancement"},
+		Assignee:    &remoteAssignee,
+		Status:      "To Do",
+		Sprint:      "Sprint 41",
+		FixVersions: []string{"1.0"},
+	}
+
+	ops, conflicts, err := BuildPlan(local, remote)
+	if err != nil {
+		t.Fatalf("BuildPlan returned error: %v", err)
+	}
+
+	// All 7 fields changed.
+	if len(ops) != 7 {
+		t.Fatalf("expected 7 operations, got %d: %v", len(ops), ops)
+	}
+
+	// Verify all field types are present.
+	fieldTypes := make(map[schema.EditableField]bool)
+	for _, op := range ops {
+		fieldTypes[op.Field] = true
+		if op.Type != schema.OpSet {
+			t.Errorf("expected type %q for field %q, got %q", schema.OpSet, op.Field, op.Type)
+		}
+	}
+
+	expectedFields := []schema.EditableField{
+		schema.EditableFieldSummary,
+		schema.EditableFieldDescription,
+		schema.EditableFieldLabels,
+		schema.EditableFieldAssignee,
+		schema.EditableFieldStatus,
+		schema.EditableFieldSprint,
+		schema.EditableFieldFixVersions,
+	}
+	for _, ef := range expectedFields {
+		if !fieldTypes[ef] {
+			t.Errorf("missing operation for field %q", ef)
+		}
+	}
+
+	if len(conflicts) != 0 {
+		t.Errorf("expected 0 conflicts, got %d: %v", len(conflicts), conflicts)
+	}
+}
+
+func TestBuildPlan_allFieldsUnchanged(t *testing.T) {
+	// B061b: all fields unchanged produce empty plan.
+	localAssignee := "jdoe"
+	local := schema.Issue{
+		Summary:     "Test issue",
+		Description: "Some description",
+		Labels:      []string{"bug", "priority"},
+		Assignee:    &localAssignee,
+		Status:      "To Do",
+		Sprint:      "Sprint 41",
+		FixVersions: []string{"1.0"},
+	}
+	remoteAssignee := "jdoe"
+	remote := schema.Issue{
+		Summary:     "Test issue",
+		Description: "Some description",
+		Labels:      []string{"priority", "bug"},
+		Assignee:    &remoteAssignee,
+		Status:      "To Do",
+		Sprint:      "Sprint 41",
+		FixVersions: []string{"1.0"},
+	}
+
+	ops, conflicts, err := BuildPlan(local, remote)
+	if err != nil {
+		t.Fatalf("BuildPlan returned error: %v", err)
+	}
+
+	if len(ops) != 0 {
+		t.Errorf("expected 0 operations, got %d: %v", len(ops), ops)
 	}
 
 	if len(conflicts) != 0 {
