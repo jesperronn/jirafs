@@ -7,8 +7,11 @@ Use separate git worktrees for parallel ralph streams:
 - `P3-worktree`: WS3 Jira and export, dependency-gated until WS1 issue models
   exist.
 
-Run one ralph iteration per worktree. The ralph prompt chooses the first ready
-unchecked task in that stream ledger, commits it, and stops.
+Run each worktree with `ralph run --stop-on-error`. The ralph prompt chooses
+the first ready unchecked task in that stream ledger, commits it, and stops.
+When a stream has no unchecked tasks left, it should report `complete` and exit
+non-zero so the Ralphify loop terminates. When tasks remain but none are ready,
+it should report `blocked` and exit non-zero for the same reason.
 
 Each stream task must produce one commit containing both:
 
