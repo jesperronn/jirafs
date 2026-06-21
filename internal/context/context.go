@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 
 	"github.com/jirafs/jirafs/internal/config"
@@ -283,6 +284,7 @@ func (r *Resolver) InteractiveResolve(cwd string, prompter PromptReader) (*Conte
 		for name := range r.settings.Projects {
 			candidates = append(candidates, name)
 		}
+		sort.Strings(candidates)
 	}
 
 	idx, err := prompter.PromptSelect("No project resolved for the current context.\nSelect a project:", candidates)
