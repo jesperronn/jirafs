@@ -53,11 +53,11 @@ Completed dependency IDs archived in [Ralph Task Archive](ralph-task-archive.md)
 - [ ] B030a | B021c | `internal/codec/**`, `tests/codec/**` | Parse valid synced issue frontmatter into schema model.
 - [ ] B030b | B030a | `internal/codec/**`, `tests/codec/**` | Parse valid draft issue frontmatter into schema model.
 - [ ] B030c | B030b | `internal/codec/**`, `tests/codec/**` | Return structured errors for invalid frontmatter.
-- [ ] B031a | B030a | `internal/codec/**`, `tests/codec/**` | Split issue body into ordered `##` section blocks after frontmatter.
-- [ ] B031b | B031a | `internal/codec/**`, `tests/codec/**` | Populate `Issue.Sections` for `Description` and `Acceptance Criteria`, including empty sections.
-- [ ] B031c | B031b | `internal/codec/**`, `tests/codec/**` | Reject unknown section headings explicitly.
-- [ ] B032a | B031b | `internal/codec/**`, `tests/codec/**` | Render frontmatter with stable field order.
-- [ ] B032b | B032a | `internal/codec/**`, `tests/codec/**` | Render fixed sections with stable section order.
+- [x] B031a | B030a | `internal/codec/**`, `tests/codec/**` | Split issue body into ordered `##` section blocks after frontmatter.
+- [x] B031b | B031a | `internal/codec/**`, `tests/codec/**` | Populate `Issue.Sections` for `Description` and `Acceptance Criteria`, including empty sections.
+- [x] B031c | B031b | `internal/codec/**`, `tests/codec/**` | Reject unknown section headings explicitly.
+- [x] B032a | B031b | `internal/codec/**`, `tests/codec/**` | Render frontmatter with stable field order.
+- [x] B032b | B032a | `internal/codec/**`, `tests/codec/**` | Render fixed sections with stable section order.
 - [ ] B033a | B032b | `tests/codec/**` | Add synced issue round-trip golden fixture.
 - [ ] B033b | B033a | `tests/codec/**` | Add draft issue round-trip golden fixture.
 
