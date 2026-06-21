@@ -20,6 +20,10 @@ import (
 // When the remote has a stale version (remote.RemoteVersion differs from
 // local.RemoteMetadata.RemoteVersion), BuildPlan returns a conflict instead
 // of operations, preventing overwrites of concurrently modified issues.
+//
+// When the remote has a stale content hash (remote.ContentHash differs from
+// local.RemoteMetadata.ContentHash), BuildPlan returns a conflict instead
+// of operations, preventing overwrites of concurrently modified content.
 func BuildPlan(local, remote schema.Issue) ([]schema.PlanOperation, []schema.Conflict, error) {
 	var ops []schema.PlanOperation
 	var conflicts []schema.Conflict
@@ -34,6 +38,20 @@ func BuildPlan(local, remote schema.Issue) ([]schema.PlanOperation, []schema.Con
 				Type:        schema.ConflictBothEdited,
 				LocalValue:  local.RemoteMetadata.RemoteVersion,
 				RemoteValue: remote.RemoteMetadata.RemoteVersion,
+			},
+		}, nil
+	}
+
+	// Check for stale content hash.
+	if local.RemoteMetadata.ContentHash != "" &&
+		remote.RemoteMetadata.ContentHash != "" &&
+		local.RemoteMetadata.ContentHash != remote.RemoteMetadata.ContentHash {
+		return nil, []schema.Conflict{
+			{
+				Field:       schema.EditableFieldSummary,
+				Type:        schema.ConflictBothEdited,
+				LocalValue:  local.RemoteMetadata.ContentHash,
+				RemoteValue: remote.RemoteMetadata.ContentHash,
 			},
 		}, nil
 	}
