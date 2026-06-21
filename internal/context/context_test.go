@@ -27,6 +27,124 @@ func makeSettings(projects map[string]config.Project, state config.State) *confi
 	}
 }
 
+func TestStdinPromptReaderPromptSelect(t *testing.T) {
+	tests := []struct {
+		name      string
+		input     string
+		wantIndex int
+		wantErr   string
+	}{
+		{name: "valid selection", input: "2\n", wantIndex: 1},
+		{name: "cancel lower", input: "q\n", wantIndex: -1},
+		{name: "cancel upper", input: "Q\n", wantIndex: -1},
+		{name: "invalid input", input: "wat\n", wantIndex: -1, wantErr: "invalid input"},
+		{name: "out of range", input: "5\n", wantIndex: -1, wantErr: "out of range"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			reader := &StdinPromptReader{}
+
+			stdin := os.Stdin
+			stdout := os.Stdout
+			inR, inW, err := os.Pipe()
+			if err != nil {
+				t.Fatal(err)
+			}
+			outR, outW, err := os.Pipe()
+			if err != nil {
+				t.Fatal(err)
+			}
+			os.Stdin = inR
+			os.Stdout = outW
+			t.Cleanup(func() {
+				os.Stdin = stdin
+				os.Stdout = stdout
+			})
+
+			if _, err := inW.WriteString(tt.input); err != nil {
+				t.Fatal(err)
+			}
+			_ = inW.Close()
+
+			got, err := reader.PromptSelect("Choose", []string{"a", "b", "c"})
+			_ = outW.Close()
+			_, _ = outR.Read(make([]byte, 512))
+			_ = outR.Close()
+
+			if tt.wantErr == "" {
+				if err != nil {
+					t.Fatalf("PromptSelect() error = %v", err)
+				}
+			} else if err == nil || !strings.Contains(err.Error(), tt.wantErr) {
+				t.Fatalf("PromptSelect() error = %v, want substring %q", err, tt.wantErr)
+			}
+
+			if got != tt.wantIndex {
+				t.Fatalf("PromptSelect() index = %d, want %d", got, tt.wantIndex)
+			}
+		})
+	}
+}
+
+func TestStdinPromptReaderPromptSelectNoInput(t *testing.T) {
+	reader := &StdinPromptReader{}
+
+	stdin := os.Stdin
+	stdout := os.Stdout
+	inR, inW, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	outR, outW, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	os.Stdin = inR
+	os.Stdout = outW
+	t.Cleanup(func() {
+		os.Stdin = stdin
+		os.Stdout = stdout
+	})
+
+	_ = inW.Close()
+	_, err = reader.PromptSelect("Choose", []string{"a"})
+	_ = outW.Close()
+	_, _ = outR.Read(make([]byte, 256))
+	_ = outR.Close()
+
+	if err == nil || !strings.Contains(err.Error(), "no input from stdin") {
+		t.Fatalf("PromptSelect() error = %v, want no-input error", err)
+	}
+}
+
+func TestIsContextError(t *testing.T) {
+	var target *Error
+	if isContextError(nil, &target) {
+		t.Fatal("isContextError(nil) = true, want false")
+	}
+
+	err := fmt.Errorf("wrapped: %w", NewError("code", "message"))
+	if !isContextError(err, &target) {
+		t.Fatal("isContextError(wrapped) = false, want true")
+	}
+	if target == nil || target.Code != "code" {
+		t.Fatalf("target = %#v, want context error", target)
+	}
+}
+
+func TestIsAmbiguous(t *testing.T) {
+	if isAmbiguous(nil) {
+		t.Fatal("isAmbiguous(nil) = true, want false")
+	}
+	if !isAmbiguous(fmt.Errorf("wrapped: %w", NewError(config.ErrAmbiguousMatch, "ambiguous"))) {
+		t.Fatal("isAmbiguous(wrapped ambiguous) = false, want true")
+	}
+	if isAmbiguous(NewError(config.ErrUnknownProject, "unknown")) {
+		t.Fatal("isAmbiguous(non-ambiguous) = true, want false")
+	}
+}
+
 func TestResolveExplicitConfigName(t *testing.T) {
 	projects := map[string]config.Project{
 		"platform": {Key: "PLAT", Instance: "work", MirrorDir: "/mirror/plat"},

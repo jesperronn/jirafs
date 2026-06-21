@@ -35,6 +35,42 @@ func TestMustGolden(t *testing.T) {
 	}
 }
 
+func TestMustGoldenPanicsOnBadRoot(t *testing.T) {
+	defer func() {
+		if recover() == nil {
+			t.Fatal("MustGolden() did not panic for bad root")
+		}
+	}()
+	MustGolden("/nonexistent/path/that/does/not/exist")
+}
+
+func TestNewGoldenRelativePath(t *testing.T) {
+	cwd, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	root := t.TempDir()
+	relative := filepath.Join("goldens", "nested")
+	if err := os.MkdirAll(filepath.Join(root, relative), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chdir(root); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		_ = os.Chdir(cwd)
+	})
+
+	g, err := NewGolden(relative)
+	if err != nil {
+		t.Fatalf("NewGolden() error = %v", err)
+	}
+	if !filepath.IsAbs(g.root) {
+		t.Fatalf("root = %q, want absolute path", g.root)
+	}
+}
+
 func TestGoldenPathUnique(t *testing.T) {
 	dir := t.TempDir()
 	g, err := NewGolden(dir)
