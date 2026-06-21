@@ -88,10 +88,217 @@ func runMainHelper(t *testing.T, args ...string) helperOutput {
 	return helperOutput{stderr: string(output), exitCode: exitErr.ExitCode()}
 }
 
-func TestUseNoProjectFlag(t *testing.T) {
-	output := runMainHelper(t, "use")
-	if !strings.Contains(output.stderr, "--project is required") {
-		t.Fatalf("stderr = %q, want --project required message", output.stderr)
+func TestUseNoArgsNoProjectSet(t *testing.T) {
+	tmpDir := t.TempDir()
+	homeDir := filepath.Join(tmpDir, "home")
+	jirafsDir := filepath.Join(homeDir, settingsDir)
+	if err := os.MkdirAll(jirafsDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	settings := `
+version = 1
+
+[instances.work]
+base_url = "https://jira.example.com"
+auth_type = "atlassian_api_token"
+
+[projects.platform]
+key = "PLAT"
+instance = "work"
+mirror_dir = "` + jirafsDir + `/jira/platform"
+`
+	if err := os.WriteFile(filepath.Join(jirafsDir, settingsFile), []byte(settings), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	output := runMainHelperWithHome(t, homeDir, "use")
+	if output.exitCode != 0 {
+		t.Fatalf("exitCode = %d, want 0, stderr = %q", output.exitCode, output.stderr)
+	}
+	if !strings.Contains(output.stderr, "no current project set") {
+		t.Fatalf("stderr = %q, want 'no current project set'", output.stderr)
+	}
+}
+
+func TestUseNoArgsWithProjectSet(t *testing.T) {
+	tmpDir := t.TempDir()
+	homeDir := filepath.Join(tmpDir, "home")
+	jirafsDir := filepath.Join(homeDir, settingsDir)
+	if err := os.MkdirAll(jirafsDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	settings := `
+version = 1
+
+[instances.work]
+base_url = "https://jira.example.com"
+auth_type = "atlassian_api_token"
+
+[projects.platform]
+key = "PLAT"
+instance = "work"
+mirror_dir = "` + jirafsDir + `/jira/platform"
+
+[state]
+current_project = "platform"
+`
+	if err := os.WriteFile(filepath.Join(jirafsDir, settingsFile), []byte(settings), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	output := runMainHelperWithHome(t, homeDir, "use")
+	if output.exitCode != 0 {
+		t.Fatalf("exitCode = %d, want 0, stderr = %q", output.exitCode, output.stderr)
+	}
+	if !strings.Contains(output.stderr, `current project is "platform"`) {
+		t.Fatalf("stderr = %q, want 'current project is \"platform\"'", output.stderr)
+	}
+}
+
+func TestUsePositionalArg(t *testing.T) {
+	tmpDir := t.TempDir()
+	homeDir := filepath.Join(tmpDir, "home")
+	jirafsDir := filepath.Join(homeDir, settingsDir)
+	if err := os.MkdirAll(jirafsDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	settings := `
+version = 1
+
+[instances.work]
+base_url = "https://jira.example.com"
+auth_type = "atlassian_api_token"
+
+[projects.platform]
+key = "PLAT"
+instance = "work"
+mirror_dir = "` + jirafsDir + `/jira/platform"
+
+[projects.growth]
+key = "GROW"
+instance = "work"
+mirror_dir = "` + jirafsDir + `/jira/growth"
+`
+	if err := os.WriteFile(filepath.Join(jirafsDir, settingsFile), []byte(settings), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	output := runMainHelperWithHome(t, homeDir, "use", "growth")
+	if output.exitCode != 0 {
+		t.Fatalf("exitCode = %d, want 0, stderr = %q", output.exitCode, output.stderr)
+	}
+	if !strings.Contains(output.stderr, `current project set to "growth"`) {
+		t.Fatalf("stderr = %q, want confirmation message", output.stderr)
+	}
+
+	// Verify persistence.
+	data, err := os.ReadFile(filepath.Join(homeDir, settingsDir, settingsFile))
+	if err != nil {
+		t.Fatalf("ReadFile() error = %v", err)
+	}
+	if !strings.Contains(string(data), "current_project") {
+		t.Fatalf("settings = %q, want current_project entry", string(data))
+	}
+	if !strings.Contains(string(data), "growth") {
+		t.Fatalf("settings = %q, want growth project", string(data))
+	}
+}
+
+func TestUsePositionalArgUnknownProject(t *testing.T) {
+	tmpDir := t.TempDir()
+	homeDir := filepath.Join(tmpDir, "home")
+	jirafsDir := filepath.Join(homeDir, settingsDir)
+	if err := os.MkdirAll(jirafsDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	settings := `
+version = 1
+
+[instances.work]
+base_url = "https://jira.example.com"
+auth_type = "atlassian_api_token"
+
+[projects.platform]
+key = "PLAT"
+instance = "work"
+mirror_dir = "` + jirafsDir + `/jira/platform"
+`
+	if err := os.WriteFile(filepath.Join(jirafsDir, settingsFile), []byte(settings), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	output := runMainHelperWithHome(t, homeDir, "use", "UNKNOWN")
+	if !strings.Contains(output.stderr, `project "UNKNOWN" not found`) {
+		t.Fatalf("stderr = %q, want project not found", output.stderr)
+	}
+	if output.exitCode != 1 {
+		t.Fatalf("exitCode = %d, want 1", output.exitCode)
+	}
+}
+
+func TestUseClear(t *testing.T) {
+	tmpDir := t.TempDir()
+	homeDir := filepath.Join(tmpDir, "home")
+	jirafsDir := filepath.Join(homeDir, settingsDir)
+	if err := os.MkdirAll(jirafsDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	settings := `
+version = 1
+
+[instances.work]
+base_url = "https://jira.example.com"
+auth_type = "atlassian_api_token"
+
+[projects.platform]
+key = "PLAT"
+instance = "work"
+mirror_dir = "` + jirafsDir + `/jira/platform"
+
+[state]
+current_project = "platform"
+`
+	if err := os.WriteFile(filepath.Join(jirafsDir, settingsFile), []byte(settings), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	output := runMainHelperWithHome(t, homeDir, "use", "--clear")
+	if output.exitCode != 0 {
+		t.Fatalf("exitCode = %d, want 0, stderr = %q", output.exitCode, output.stderr)
+	}
+	if !strings.Contains(output.stderr, "current project cleared") {
+		t.Fatalf("stderr = %q, want 'current project cleared'", output.stderr)
+	}
+
+	// Verify persistence: current_project should be empty.
+	data, err := os.ReadFile(filepath.Join(homeDir, settingsDir, settingsFile))
+	if err != nil {
+		t.Fatalf("ReadFile() error = %v", err)
+	}
+	if !strings.Contains(string(data), "current_project") {
+		t.Fatalf("settings = %q, want current_project entry", string(data))
+	}
+}
+
+func TestUseClearWithProjectFlag(t *testing.T) {
+	output := runMainHelper(t, "use", "--clear", "--project", "PLAT")
+	if !strings.Contains(output.stderr, "--project and --clear are mutually exclusive") {
+		t.Fatalf("stderr = %q, want mutually exclusive message", output.stderr)
+	}
+	if output.exitCode != 1 {
+		t.Fatalf("exitCode = %d, want 1", output.exitCode)
+	}
+}
+
+func TestUseTooManyPositionalArgs(t *testing.T) {
+	output := runMainHelper(t, "use", "PLAT", "GROW")
+	if !strings.Contains(output.stderr, "too many positional arguments") {
+		t.Fatalf("stderr = %q, want too many positional arguments", output.stderr)
 	}
 	if output.exitCode != 1 {
 		t.Fatalf("exitCode = %d, want 1", output.exitCode)
