@@ -2,8 +2,10 @@ package context
 
 import (
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/jirafs/jirafs/internal/config"
@@ -558,6 +560,365 @@ func errorsAs(err error, target any) bool {
 
 // TestB015bWriteRememberedProject verifies that after a successful explicit
 // selection, SaveCurrentProject persists the project name to the settings file.
+// mockPrompter captures selections for testing interactive resolution.
+type mockPrompter struct {
+	selected int
+	err      error
+}
+
+func (m *mockPrompter) PromptSelect(prompt string, candidates []string) (int, error) {
+	if m.err != nil {
+		return -1, m.err
+	}
+	return m.selected, nil
+}
+
+// TestB016bInteractiveResolveSelectsFromKnownProjects verifies that when
+// normal resolution fails with ErrNoProjectResolved, InteractiveResolve
+// prompts the user and selects from the known project candidates.
+func TestB016bInteractiveResolveSelectsFromKnownProjects(t *testing.T) {
+	tmpDir := t.TempDir()
+	jirafsDir := filepath.Join(tmpDir, ".jirafs")
+	if err := os.MkdirAll(jirafsDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	settingsPath := filepath.Join(jirafsDir, "settings.toml")
+	initialTOML := `version = 1
+
+[instances.work]
+base_url = "https://jira.example.com"
+auth_type = "atlassian_api_token"
+
+[projects.platform]
+key = "PLAT"
+instance = "work"
+mirror_dir = "/mirror/plat"
+
+[projects.growth]
+key = "GROW"
+instance = "work"
+mirror_dir = "/mirror/grow"
+
+[projects.alpha]
+key = "ALPHA"
+instance = "work"
+mirror_dir = "/mirror/alpha"
+`
+	if err := os.WriteFile(settingsPath, []byte(initialTOML), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	oldHome := os.Getenv("HOME")
+	os.Setenv("HOME", tmpDir)
+	defer os.Setenv("HOME", oldHome)
+
+	s, err := config.Load()
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+
+	r := NewResolver(s, "")
+	prompter := &mockPrompter{selected: 1} // select "growth" (index 1)
+
+	ctx, err := r.InteractiveResolve("/tmp/nowhere", prompter)
+	if err != nil {
+		t.Fatalf("InteractiveResolve() error = %v", err)
+	}
+	if ctx.Name != "growth" {
+		t.Errorf("Name = %q, want %q", ctx.Name, "growth")
+	}
+	if ctx.Key != "GROW" {
+		t.Errorf("Key = %q, want %q", ctx.Key, "GROW")
+	}
+	if ctx.MirrorDir != "/mirror/grow" {
+		t.Errorf("MirrorDir = %q, want %q", ctx.MirrorDir, "/mirror/grow")
+	}
+	if ctx.Instance != "work" {
+		t.Errorf("Instance = %q, want %q", ctx.Instance, "work")
+	}
+}
+
+// TestB016bInteractiveResolveFirstSelection verifies selecting the first
+// candidate (index 0).
+func TestB016bInteractiveResolveFirstSelection(t *testing.T) {
+	tmpDir := t.TempDir()
+	jirafsDir := filepath.Join(tmpDir, ".jirafs")
+	if err := os.MkdirAll(jirafsDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	settingsPath := filepath.Join(jirafsDir, "settings.toml")
+	initialTOML := `version = 1
+
+[instances.work]
+base_url = "https://jira.example.com"
+auth_type = "atlassian_api_token"
+
+[projects.platform]
+key = "PLAT"
+instance = "work"
+mirror_dir = "/mirror/plat"
+
+[projects.growth]
+key = "GROW"
+instance = "work"
+mirror_dir = "/mirror/grow"
+`
+	if err := os.WriteFile(settingsPath, []byte(initialTOML), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	oldHome := os.Getenv("HOME")
+	os.Setenv("HOME", tmpDir)
+	defer os.Setenv("HOME", oldHome)
+
+	s, err := config.Load()
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+
+	r := NewResolver(s, "")
+	prompter := &mockPrompter{selected: 0} // select "platform" (index 0)
+
+	ctx, err := r.InteractiveResolve("/tmp/nowhere", prompter)
+	if err != nil {
+		t.Fatalf("InteractiveResolve() error = %v", err)
+	}
+	if ctx.Name != "platform" {
+		t.Errorf("Name = %q, want %q", ctx.Name, "platform")
+	}
+}
+
+// TestB016bInteractiveResolvePromptsOnNoProjectResolved verifies that
+// InteractiveResolve only prompts when the error is ErrNoProjectResolved.
+func TestB016bInteractiveResolvePromptsOnNoProjectResolved(t *testing.T) {
+	projects := map[string]config.Project{
+		"platform": {Key: "PLAT", Instance: "work", MirrorDir: "/mirror/plat"},
+	}
+	s := makeSettings(projects, config.State{})
+
+	r := NewResolver(s, "NONEXISTENT")
+	prompter := &mockPrompter{}
+
+	// Explicit flag resolves to unknown project — should NOT prompt.
+	_, err := r.InteractiveResolve("/tmp/nowhere", prompter)
+	if err == nil {
+		t.Fatal("InteractiveResolve() expected error, got nil")
+	}
+	// Verify the error is the original error, not a prompt failure.
+	if errCode(err) != config.ErrUnknownProject {
+		t.Errorf("error code = %q, want %q", errCode(err), config.ErrUnknownProject)
+	}
+}
+
+// TestB016bInteractiveResolveNoProjectResolvedPrompts verifies that
+// InteractiveResolve prompts when resolution fails with ErrNoProjectResolved.
+func TestB016bInteractiveResolveNoProjectResolvedPrompts(t *testing.T) {
+	tmpDir := t.TempDir()
+	jirafsDir := filepath.Join(tmpDir, ".jirafs")
+	if err := os.MkdirAll(jirafsDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	settingsPath := filepath.Join(jirafsDir, "settings.toml")
+	initialTOML := `version = 1
+
+[instances.work]
+base_url = "https://jira.example.com"
+auth_type = "atlassian_api_token"
+
+[projects.platform]
+key = "PLAT"
+instance = "work"
+mirror_dir = "/mirror/plat"
+
+[projects.growth]
+key = "GROW"
+instance = "work"
+mirror_dir = "/mirror/grow"
+`
+	if err := os.WriteFile(settingsPath, []byte(initialTOML), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	oldHome := os.Getenv("HOME")
+	os.Setenv("HOME", tmpDir)
+	defer os.Setenv("HOME", oldHome)
+
+	s, err := config.Load()
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+
+	r := NewResolver(s, "")
+	// No explicit flag, no cwd match, no state → ErrNoProjectResolved.
+	// Use a large index so the mock always returns the last candidate,
+	// which is deterministic regardless of map iteration order.
+	prompter := &mockPrompter{selected: len(s.Projects) - 1}
+
+	ctx, err := r.InteractiveResolve("/tmp/nowhere", prompter)
+	if err != nil {
+		t.Fatalf("InteractiveResolve() error = %v", err)
+	}
+	// Verify the result is one of the known projects.
+	if ctx.Name != "platform" && ctx.Name != "growth" {
+		t.Errorf("Name = %q, want one of {platform, growth}", ctx.Name)
+	}
+}
+
+// TestB016bInteractiveResolveUserCancels verifies that when the user
+// cancels (returns -1), InteractiveResolve returns an error.
+func TestB016bInteractiveResolveUserCancels(t *testing.T) {
+	projects := map[string]config.Project{
+		"platform": {Key: "PLAT", Instance: "work", MirrorDir: "/mirror/plat"},
+	}
+	s := makeSettings(projects, config.State{})
+
+	r := NewResolver(s, "")
+	prompter := &mockPrompter{selected: -1} // user cancels
+
+	_, err := r.InteractiveResolve("/tmp/nowhere", prompter)
+	if err == nil {
+		t.Fatal("InteractiveResolve() expected error on cancel, got nil")
+	}
+}
+
+// TestB016bInteractiveResolvePrompterError verifies that a prompter error
+// is propagated correctly.
+func TestB016bInteractiveResolvePrompterError(t *testing.T) {
+	projects := map[string]config.Project{
+		"platform": {Key: "PLAT", Instance: "work", MirrorDir: "/mirror/plat"},
+	}
+	s := makeSettings(projects, config.State{})
+
+	r := NewResolver(s, "")
+	prompter := &mockPrompter{err: fmt.Errorf("stdin closed")}
+
+	_, err := r.InteractiveResolve("/tmp/nowhere", prompter)
+	if err == nil {
+		t.Fatal("InteractiveResolve() expected error, got nil")
+	}
+	if !strings.Contains(err.Error(), "stdin closed") {
+		t.Errorf("error = %v, want to contain 'stdin closed'", err)
+	}
+}
+
+// TestB016bInteractiveResolveSuccessfulExplicitDoesNotPrompt verifies
+// that when Resolve succeeds, InteractiveResolve returns immediately
+// without calling the prompter.
+func TestB016bInteractiveResolveSuccessfulExplicitDoesNotPrompt(t *testing.T) {
+	projects := map[string]config.Project{
+		"platform": {Key: "PLAT", Instance: "work", MirrorDir: "/mirror/plat"},
+		"growth":   {Key: "GROW", Instance: "work", MirrorDir: "/mirror/grow"},
+	}
+	s := makeSettings(projects, config.State{})
+
+	r := NewResolver(s, "platform")
+	prompter := &mockPrompter{}
+
+	ctx, err := r.InteractiveResolve("/tmp/nowhere", prompter)
+	if err != nil {
+		t.Fatalf("InteractiveResolve() error = %v", err)
+	}
+	if ctx.Name != "platform" {
+		t.Errorf("Name = %q, want %q", ctx.Name, "platform")
+	}
+}
+
+// TestB016bInteractiveResolveSuccessfulCwdDoesNotPrompt verifies
+// that when Resolve succeeds via cwd match, InteractiveResolve returns
+// immediately without calling the prompter.
+func TestB016bInteractiveResolveSuccessfulCwdDoesNotPrompt(t *testing.T) {
+	tmpDir := t.TempDir()
+	mirrorDir := filepath.Join(tmpDir, "mirror", "plat")
+	if err := os.MkdirAll(mirrorDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	projects := map[string]config.Project{
+		"platform": {Key: "PLAT", Instance: "work", MirrorDir: mirrorDir},
+		"growth":   {Key: "GROW", Instance: "work", MirrorDir: filepath.Join(tmpDir, "mirror", "grow")},
+	}
+	s := makeSettings(projects, config.State{})
+
+	r := NewResolver(s, "")
+	prompter := &mockPrompter{}
+
+	ctx, err := r.InteractiveResolve(mirrorDir, prompter)
+	if err != nil {
+		t.Fatalf("InteractiveResolve() error = %v", err)
+	}
+	if ctx.Name != "platform" {
+		t.Errorf("Name = %q, want %q", ctx.Name, "platform")
+	}
+}
+
+// TestB016bInteractiveResolveRemembersSelection verifies that the selected
+// project is persisted to settings state.
+func TestB016bInteractiveResolveRemembersSelection(t *testing.T) {
+	tmpDir := t.TempDir()
+	jirafsDir := filepath.Join(tmpDir, ".jirafs")
+	if err := os.MkdirAll(jirafsDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	settingsPath := filepath.Join(jirafsDir, "settings.toml")
+	initialTOML := `version = 1
+
+[instances.work]
+base_url = "https://jira.example.com"
+auth_type = "atlassian_api_token"
+
+[projects.platform]
+key = "PLAT"
+instance = "work"
+mirror_dir = "/mirror/plat"
+
+[projects.growth]
+key = "GROW"
+instance = "work"
+mirror_dir = "/mirror/grow"
+`
+	if err := os.WriteFile(settingsPath, []byte(initialTOML), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	oldHome := os.Getenv("HOME")
+	os.Setenv("HOME", tmpDir)
+	defer os.Setenv("HOME", oldHome)
+
+	s, err := config.Load()
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+
+	r := NewResolver(s, "")
+	prompter := &mockPrompter{selected: 0} // select "platform"
+
+	ctx, err := r.InteractiveResolve("/tmp/nowhere", prompter)
+	if err != nil {
+		t.Fatalf("InteractiveResolve() error = %v", err)
+	}
+	if ctx.Name != "platform" {
+		t.Errorf("Name = %q, want %q", ctx.Name, "platform")
+	}
+
+	// Verify state was persisted.
+	data, err := os.ReadFile(settingsPath)
+	if err != nil {
+		t.Fatalf("ReadFile() error = %v", err)
+	}
+
+	var reloaded config.Settings
+	if err := toml.Unmarshal(data, &reloaded); err != nil {
+		t.Fatalf("Unmarshal() error = %v", err)
+	}
+	if reloaded.State.CurrentProject != "platform" {
+		t.Errorf("State.CurrentProject = %q, want %q", reloaded.State.CurrentProject, "platform")
+	}
+}
+
 func TestB015bWriteRememberedProject(t *testing.T) {
 	tmpDir := t.TempDir()
 	jirafsDir := filepath.Join(tmpDir, ".jirafs")

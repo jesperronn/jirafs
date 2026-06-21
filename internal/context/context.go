@@ -1,6 +1,7 @@
 package context
 
 import (
+	"bufio"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -8,6 +9,44 @@ import (
 
 	"github.com/jirafs/jirafs/internal/config"
 )
+
+// PromptReader abstracts interactive prompting for project selection.
+type PromptReader interface {
+	// PromptSelect displays a prompt and returns the user's selection index
+	// (0-based) from the candidates list. It returns -1 if the user
+	// cancels (e.g. Ctrl-C or entering "q").
+	PromptSelect(prompt string, candidates []string) (int, error)
+}
+
+// StdinPromptReader implements PromptReader using os.Stdin and os.Stdout.
+type StdinPromptReader struct{}
+
+// PromptSelect implements PromptReader.
+func (r *StdinPromptReader) PromptSelect(prompt string, candidates []string) (int, error) {
+	fmt.Fprintln(os.Stdout, prompt)
+	for i, c := range candidates {
+		fmt.Fprintf(os.Stdout, "  %d) %s\n", i+1, c)
+	}
+	fmt.Fprint(os.Stdout, "Select project [1-"+fmt.Sprint(len(candidates))+"] (q to quit): ")
+
+	scanner := bufio.NewScanner(os.Stdin)
+	if !scanner.Scan() {
+		return -1, fmt.Errorf("context: no input from stdin")
+	}
+	input := strings.TrimSpace(scanner.Text())
+	if input == "q" || input == "Q" {
+		return -1, nil
+	}
+
+	var idx int
+	if _, err := fmt.Sscanf(input, "%d", &idx); err != nil {
+		return -1, fmt.Errorf("context: invalid input %q", input)
+	}
+	if idx < 1 || idx > len(candidates) {
+		return -1, fmt.Errorf("context: selection out of range [1-%d]", len(candidates))
+	}
+	return idx - 1, nil
+}
 
 // Context holds the resolved project information.
 type Context struct {
@@ -213,6 +252,84 @@ func (r *Resolver) resolveState() (*Context, error) {
 func (r *Resolver) SaveCurrentProject(name string) error {
 	r.settings.State.CurrentProject = name
 	return r.settings.SaveState()
+}
+
+// InteractiveResolve resolves the active project context. If normal
+// resolution fails with ErrNoProjectResolved, it interactively prompts
+// the user to select from the known project candidates.
+func (r *Resolver) InteractiveResolve(cwd string, prompter PromptReader) (*Context, error) {
+	ctx, err := r.Resolve(cwd)
+	if err == nil {
+		return ctx, nil
+	}
+
+	var ce *Error
+	if !isContextError(err, &ce) {
+		return nil, err
+	}
+	if ce.Code != config.ErrNoProjectResolved {
+		return nil, err
+	}
+
+	if prompter == nil {
+		prompter = &StdinPromptReader{}
+	}
+
+	// Build a stable candidate list from the error.
+	candidates := ce.Candidates
+	if len(candidates) == 0 {
+		// Fallback: collect from settings.
+		candidates = make([]string, 0, len(r.settings.Projects))
+		for name := range r.settings.Projects {
+			candidates = append(candidates, name)
+		}
+	}
+
+	idx, err := prompter.PromptSelect("No project resolved for the current context.\nSelect a project:", candidates)
+	if err != nil {
+		return nil, fmt.Errorf("context: interactive prompt failed: %w", err)
+	}
+	if idx == -1 {
+		return nil, fmt.Errorf("context: no project selected")
+	}
+
+	selected := candidates[idx]
+
+	// Try to resolve the selected project.
+	if proj, ok := r.settings.Projects[selected]; ok {
+		if err := r.SaveCurrentProject(selected); err != nil {
+			return nil, fmt.Errorf("context: failed to save selected project %q: %w", selected, err)
+		}
+		return &Context{
+			Name:      selected,
+			Key:       proj.Key,
+			MirrorDir: proj.MirrorDir,
+			Instance:  proj.Instance,
+		}, nil
+	}
+
+	return nil, NewError(config.ErrUnknownProject,
+		fmt.Sprintf("selected project %q not found in settings", selected))
+}
+
+// isContextError unwraps err looking for a *Error and assigns it to target.
+func isContextError(err error, target **Error) bool {
+	if err == nil {
+		return false
+	}
+	for err != nil {
+		if t, ok := err.(*Error); ok {
+			*target = t
+			return true
+		}
+		type unwrapper interface{ Unwrap() error }
+		if u, ok := err.(unwrapper); ok {
+			err = u.Unwrap()
+			continue
+		}
+		break
+	}
+	return false
 }
 
 // isAmbiguous reports whether err is an ErrAmbiguousMatch error.
