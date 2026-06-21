@@ -189,7 +189,7 @@ func TestBuildPlan_differingRefsMetadataNoOps(t *testing.T) {
 			{Key: "PROJ-2", Type: "relates to"},
 		},
 		RemoteMetadata: schema.RemoteMetadata{
-			RemoteVersion: "2",
+			RemoteVersion: "1",
 			ContentHash:   "def456",
 		},
 	}
@@ -488,6 +488,48 @@ func TestBuildPlan_fixVersionsChange(t *testing.T) {
 
 	if len(conflicts) != 0 {
 		t.Errorf("expected 0 conflicts, got %d: %v", len(conflicts), conflicts)
+	}
+}
+
+func TestBuildPlan_staleRemoteVersion(t *testing.T) {
+	// B062a: stale remote version produces conflict, not operations.
+	local := schema.Issue{
+		Summary: "New title",
+		RemoteMetadata: schema.RemoteMetadata{
+			RemoteVersion: "1",
+			ContentHash:   "abc123",
+		},
+	}
+	remote := schema.Issue{
+		Summary: "Old title",
+		RemoteMetadata: schema.RemoteMetadata{
+			RemoteVersion: "2",
+			ContentHash:   "def456",
+		},
+	}
+
+	ops, conflicts, err := BuildPlan(local, remote)
+	if err != nil {
+		t.Fatalf("BuildPlan returned error: %v", err)
+	}
+
+	if len(ops) != 0 {
+		t.Errorf("expected 0 operations for stale remote version, got %d: %v", len(ops), ops)
+	}
+
+	if len(conflicts) != 1 {
+		t.Fatalf("expected 1 conflict, got %d: %v", len(conflicts), conflicts)
+	}
+
+	c := conflicts[0]
+	if c.Type != schema.ConflictRemoteDeleteLocalEdit {
+		t.Errorf("expected conflict type %q, got %q", schema.ConflictRemoteDeleteLocalEdit, c.Type)
+	}
+	if c.LocalValue != "1" {
+		t.Errorf("expected local value %q, got %q", "1", c.LocalValue)
+	}
+	if c.RemoteValue != "2" {
+		t.Errorf("expected remote value %q, got %q", "2", c.RemoteValue)
 	}
 }
 
