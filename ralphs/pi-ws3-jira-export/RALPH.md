@@ -18,7 +18,10 @@ commands:
 Implement one WS3 Jira/export task, then stop.
 
 Pick the first unchecked task whose deps are checked in the stream ledger. If
-no WS3 task is ready, stop and report blocked.
+no unchecked tasks remain, report `complete` and exit non-zero so
+`ralph run --stop-on-error` stops the loop. If unchecked tasks remain but no
+WS3 task is ready, report `blocked` and exit non-zero so
+`ralph run --stop-on-error` stops the loop.
 
 Rules:
 
@@ -28,6 +31,7 @@ Rules:
 - Mark `[x]` only after both gates pass.
 - Commit implementation, tests, and ledger checkbox in one conventional commit.
 - Do not commit blocked or failing work.
+- Do not keep looping after `complete` or `blocked`.
 - Handoff must include final gate results and commit hash.
 - Read only the docs needed for the chosen task.
 
@@ -74,7 +78,7 @@ Commit:
 - <hash and subject, or none if partial/blocked>
 
 Status:
-- <done|partial|blocked>
+- <done|partial|blocked|complete>
 
 Risks:
 - <open issues or none>
