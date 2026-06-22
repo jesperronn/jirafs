@@ -11,6 +11,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/jirafs/jirafs/internal/archive"
 	"github.com/jirafs/jirafs/internal/config"
 	"github.com/jirafs/jirafs/internal/context"
 	"github.com/jirafs/jirafs/internal/jira"
@@ -33,6 +34,7 @@ var (
 	mirrorStdout io.Writer = os.Stdout
 	mirrorStderr io.Writer = os.Stderr
 	mirrorClientFactory     = buildMirrorClient
+	archiveServiceFactory   = buildArchiveService
 )
 
 // RunMirror dispatches the `jirafs mirror` subcommand to the appropriate
@@ -144,13 +146,16 @@ func runMirrorRefresh(args []string, settings *config.Settings, resolver *contex
 // runMirrorArchiveSweep handles `jirafs mirror archive-sweep`.
 // It resolves the project context, loads the mirror, scans all issue files
 // in the project's local directories, and reports eligible issues without
-// mutation.
+// mutation. With --apply, it also calls the archive service interface
+// to move eligible issues.
 func runMirrorArchiveSweep(args []string, settings *config.Settings, resolver *context.Resolver) int {
 	fs := flag.NewFlagSet("mirror archive-sweep", flag.ExitOnError)
 	// --project overrides the auto-detected project.
 	projectFlag := fs.String("project", "", "project key or name to scan")
 	// --cwd overrides the working directory for project resolution.
 	cwdFlag := fs.String("cwd", "", "working directory to use for project resolution")
+	// --apply actually moves eligible issues through the archive service.
+	applyFlag := fs.Bool("apply", false, "actually archive eligible issues")
 	if err := fs.Parse(args); err != nil {
 		fmt.Fprintf(os.Stderr, "jirafs mirror archive-sweep: invalid flags: %v\n", err)
 		return 1
@@ -183,7 +188,7 @@ func runMirrorArchiveSweep(args []string, settings *config.Settings, resolver *c
 
 	// Report results.
 	if len(eligible) == 0 {
-		fmt.Fprintln(mirrorStdout, "jirafs mirror archive-sweep: no eligible issues found")
+		fmt.Fprintln(mirrorStdout, "jirajs mirror archive-sweep: no eligible issues found")
 		return 0
 	}
 
@@ -192,7 +197,71 @@ func runMirrorArchiveSweep(args []string, settings *config.Settings, resolver *c
 		fmt.Fprintf(mirrorStdout, "  %s (resolved: %s)\n", e.Key, e.ResolvedStatus)
 	}
 
+	// With --apply, call the archive service for each eligible issue.
+	if !*applyFlag {
+		return 0
+	}
+
+	// Build the archive service.
+	archiveSvc, err := archiveServiceFactory(settings, ctx, cwd)
+	if err != nil {
+		fmt.Fprintf(mirrorStderr, "jirafs mirror archive-sweep: cannot create archive service: %v\n", err)
+		return 1
+	}
+
+	// Archive each eligible issue.
+	proj, ok := settings.Projects[ctx.Name]
+	if !ok {
+		fmt.Fprintf(mirrorStderr, "jirafs mirror archive-sweep: project %q not found in settings\n", ctx.Name)
+		return 1
+	}
+
+	var successCount int
+	var failCount int
+	var errors []string
+
+	for _, e := range eligible {
+		// Find the issue file path.
+		issuePath, found := findIssuePath(proj.LocalDirs, e.Key)
+		if !found {
+			errMsg := fmt.Sprintf("%s: file not found in local directories", e.Key)
+			errors = append(errors, errMsg)
+			failCount++
+			continue
+		}
+
+		err := archiveSvc.Archive(string(e.Key), ctx.MirrorDir, proj.LocalDirs[0], issuePath)
+		if err != nil {
+			errMsg := fmt.Sprintf("%s: %v", e.Key, err)
+			errors = append(errors, errMsg)
+			failCount++
+		} else {
+			fmt.Fprintf(mirrorStdout, "  archived: %s\n", e.Key)
+			successCount++
+		}
+	}
+
+	if failCount > 0 {
+		fmt.Fprintf(mirrorStderr, "jirafs mirror archive-sweep: %d/%d issues archived successfully\n", successCount, len(eligible))
+		for _, e := range errors {
+			fmt.Fprintf(mirrorStderr, "  error: %s\n", e)
+		}
+		return 1
+	}
+
+	fmt.Fprintf(mirrorStdout, "jirafs mirror archive-sweep: archived %d issue(s)\n", successCount)
 	return 0
+}
+
+// findIssuePath searches local directories for a file matching the given issue key.
+func findIssuePath(localDirs []string, key schema.IssueKey) (string, bool) {
+	for _, dir := range localDirs {
+		path := filepath.Join(dir, string(key)+".md")
+		if _, err := os.Stat(path); err == nil {
+			return path, true
+		}
+	}
+	return "", false
 }
 
 // loadMirrorYAML loads the mirror YAML file from the mirror directory.
@@ -236,6 +305,66 @@ func buildMirrorClient(settings *config.Settings, ctx *context.Context, cwd stri
 	client := jira.NewJiraClient(creds.BaseURL)
 	client.SetCredentials(creds)
 	return client, nil
+}
+
+func buildArchiveService(settings *config.Settings, ctx *context.Context, cwd string) (archive.Service, error) {
+	return &realArchiveService{settings: settings, ctx: ctx, cwd: cwd}, nil
+}
+
+// realArchiveService implements archive.Service by moving issue files to the
+// archive directory.
+type realArchiveService struct {
+	settings *config.Settings
+	ctx      *context.Context
+	cwd      string
+}
+
+func (s *realArchiveService) Archive(eligible string, mirrorDir, localDir, issuePath string) error {
+	// Find the archive directory.
+	proj, ok := s.settings.Projects[s.ctx.Name]
+	if !ok {
+		return fmt.Errorf("project %q not found in settings", s.ctx.Name)
+	}
+
+	var archiveDir string
+	for _, dir := range proj.LocalDirs {
+		candidate := filepath.Join(dir, "_archive")
+		if _, err := os.Stat(candidate); err == nil {
+			archiveDir = candidate
+			break
+		}
+	}
+
+	if archiveDir == "" {
+		// Create the archive directory.
+		var baseDir string
+		for _, dir := range proj.LocalDirs {
+			candidate := filepath.Join(dir, "_archive")
+			if err := os.MkdirAll(candidate, 0o755); err == nil {
+				archiveDir = candidate
+				baseDir = dir
+				break
+			}
+		}
+		if archiveDir == "" {
+			return fmt.Errorf("cannot create archive directory")
+		}
+		_ = baseDir
+	}
+
+	// Move the issue file to the archive directory.
+	dest := filepath.Join(archiveDir, filepath.Base(issuePath))
+	data, err := os.ReadFile(issuePath)
+	if err != nil {
+		return fmt.Errorf("read issue file: %w", err)
+	}
+	if err := os.WriteFile(dest, data, 0o644); err != nil {
+		return fmt.Errorf("write archived file: %w", err)
+	}
+	if err := os.Remove(issuePath); err != nil {
+		return fmt.Errorf("remove original file: %w", err)
+	}
+	return nil
 }
 
 func resolveMirrorContext(settings *config.Settings, project, cwd, subcommand string) (*context.Context, bool) {
@@ -338,6 +467,7 @@ Subcommands:
 Flags:
   --project KEY   project key or name to use
   --cwd DIR       working directory for project resolution
+  --apply         actually archive eligible issues
 
 Run "jirafs mirror <subcommand> --help" for more information about a subcommand.`)
 }

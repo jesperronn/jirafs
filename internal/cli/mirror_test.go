@@ -808,3 +808,392 @@ Summary: Invalid issue
 		t.Errorf("exit = %d, want 0", exit)
 	}
 }
+
+// TestRunMirrorArchiveSweep_Apply_Success verifies that --apply actually
+// moves eligible issues through the archive service.
+func TestRunMirrorArchiveSweep_Apply_Success(t *testing.T) {
+	tmpDir := t.TempDir()
+	homeDir := writeSettings(t, tmpDir)
+	writeMirror(t, tmpDir)
+
+	localDir := filepath.Join(tmpDir, "local")
+	if err := os.MkdirAll(localDir, 0o755); err != nil {
+		t.Fatalf("MkdirAll local: %v", err)
+	}
+
+	// Write two eligible issues.
+	writeIssue(t, localDir, "TEST-1.md", `---
+key: TEST-1
+type: story
+project:
+  type: project
+  value: TEST
+remote_metadata:
+  remote_version: "1"
+  content_hash: "abc"
+  resolved_status: "resolved"
+---
+
+Summary: First issue
+`)
+
+	writeIssue(t, localDir, "TEST-2.md", `---
+key: TEST-2
+type: bug
+project:
+  type: project
+  value: TEST
+remote_metadata:
+  remote_version: "1"
+  content_hash: "def"
+  resolved_status: "resolved"
+---
+
+Summary: Second issue
+`)
+
+	oldHome := os.Getenv("HOME")
+	os.Setenv("HOME", homeDir)
+	defer os.Setenv("HOME", oldHome)
+
+	stdout, stderr := withMirrorTestIO(t)
+
+	exit := RunMirror([]string{"archive-sweep", "--apply", "--project", "test"})
+	if exit != 0 {
+		t.Fatalf("RunMirror([\"archive-sweep\", \"--apply\", \"--project\", \"test\"]) = %d, want 0, stderr = %q", exit, stderr.String())
+	}
+
+	// Verify stdout contains archived messages.
+	if !strings.Contains(stdout.String(), "archived: TEST-1") {
+		t.Fatalf("stdout = %q, want \"archived: TEST-1\"", stdout.String())
+	}
+	if !strings.Contains(stdout.String(), "archived: TEST-2") {
+		t.Fatalf("stdout = %q, want \"archived: TEST-2\"", stdout.String())
+	}
+
+	// Verify files were moved to archive, not deleted.
+	archiveDir := filepath.Join(localDir, "_archive")
+	if _, err := os.Stat(archiveDir); err != nil {
+		t.Fatalf("archive directory should exist: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(archiveDir, "TEST-1.md")); err != nil {
+		t.Fatalf("TEST-1.md should exist in archive: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(archiveDir, "TEST-2.md")); err != nil {
+		t.Fatalf("TEST-2.md should exist in archive: %v", err)
+	}
+
+	// Verify original files no longer exist in local.
+	if _, err := os.Stat(filepath.Join(localDir, "TEST-1.md")); !os.IsNotExist(err) {
+		t.Error("TEST-1.md should be removed from local")
+	}
+	if _, err := os.Stat(filepath.Join(localDir, "TEST-2.md")); !os.IsNotExist(err) {
+		t.Error("TEST-2.md should be removed from local")
+	}
+}
+
+// TestRunMirrorArchiveSweep_Apply_NoEligible verifies that --apply
+// with no eligible issues returns cleanly.
+func TestRunMirrorArchiveSweep_Apply_NoEligible(t *testing.T) {
+	tmpDir := t.TempDir()
+	homeDir := writeSettings(t, tmpDir)
+	writeMirror(t, tmpDir)
+
+	localDir := filepath.Join(tmpDir, "local")
+	if err := os.MkdirAll(localDir, 0o755); err != nil {
+		t.Fatalf("MkdirAll local: %v", err)
+	}
+
+	// Write an open issue (not eligible).
+	writeIssue(t, localDir, "TEST-1.md", `---
+key: TEST-1
+type: story
+project:
+  type: project
+  value: TEST
+remote_metadata:
+  remote_version: "1"
+  content_hash: "abc"
+  resolved_status: "open"
+---
+
+Summary: Open issue
+`)
+
+	oldHome := os.Getenv("HOME")
+	os.Setenv("HOME", homeDir)
+	defer os.Setenv("HOME", oldHome)
+
+	_, stderr := withMirrorTestIO(t)
+
+	exit := RunMirror([]string{"archive-sweep", "--apply", "--project", "test"})
+	if exit != 0 {
+		t.Fatalf("RunMirror([\"archive-sweep\", \"--apply\", \"--project\", \"test\"]) = %d, want 0, stderr = %q", exit, stderr.String())
+	}
+}
+
+// TestRunMirrorArchiveSweep_Apply_ArchiveDirCreated verifies that the
+// archive directory is created automatically when it doesn't exist.
+func TestRunMirrorArchiveSweep_Apply_ArchiveDirCreated(t *testing.T) {
+	tmpDir := t.TempDir()
+	homeDir := writeSettings(t, tmpDir)
+	writeMirror(t, tmpDir)
+
+	localDir := filepath.Join(tmpDir, "local")
+	if err := os.MkdirAll(localDir, 0o755); err != nil {
+		t.Fatalf("MkdirAll local: %v", err)
+	}
+
+	// Write an eligible issue.
+	writeIssue(t, localDir, "TEST-1.md", `---
+key: TEST-1
+type: story
+project:
+  type: project
+  value: TEST
+remote_metadata:
+  remote_version: "1"
+  content_hash: "abc"
+  resolved_status: "resolved"
+---
+
+Summary: First issue
+`)
+
+	oldHome := os.Getenv("HOME")
+	os.Setenv("HOME", homeDir)
+	defer os.Setenv("HOME", oldHome)
+
+	_, _ = withMirrorTestIO(t)
+
+	// No _archive directory exists yet.
+	if _, err := os.Stat(filepath.Join(localDir, "_archive")); !os.IsNotExist(err) {
+		t.Fatal("_archive directory should not exist yet")
+	}
+
+	exit := RunMirror([]string{"archive-sweep", "--apply", "--project", "test"})
+	if exit != 0 {
+		t.Fatal("expected exit 0")
+	}
+
+	// Archive directory should now exist.
+	if _, err := os.Stat(filepath.Join(localDir, "_archive")); err != nil {
+		t.Fatalf("_archive directory should exist after --apply: %v", err)
+	}
+}
+
+// TestRunMirrorArchiveSweep_Apply_MultipleLocalDirs verifies that --apply
+// finds the archive directory in the first local directory.
+func TestRunMirrorArchiveSweep_Apply_MultipleLocalDirs(t *testing.T) {
+	tmpDir := t.TempDir()
+	homeDir := filepath.Join(tmpDir, "home")
+	jirafsDir := filepath.Join(homeDir, ".jirafs")
+	if err := os.MkdirAll(jirafsDir, 0o755); err != nil {
+		t.Fatalf("MkdirAll: %v", err)
+	}
+
+	mirrorDir := filepath.Join(tmpDir, "mirror")
+	if err := os.MkdirAll(mirrorDir, 0o755); err != nil {
+		t.Fatalf("MkdirAll mirror: %v", err)
+	}
+
+	localDir1 := filepath.Join(tmpDir, "local1")
+	localDir2 := filepath.Join(tmpDir, "local2")
+	if err := os.MkdirAll(localDir1, 0o755); err != nil {
+		t.Fatalf("MkdirAll local1: %v", err)
+	}
+	if err := os.MkdirAll(localDir2, 0o755); err != nil {
+		t.Fatalf("MkdirAll local2: %v", err)
+	}
+
+	settingsTOML := `version = 1
+
+[instances.default]
+base_url = "https://example.atlassian.net"
+auth_type = "basic"
+
+[projects.test]
+key = "TEST"
+instance = "default"
+mirror_dir = "` + mirrorDir + `"
+local_dirs = ["` + localDir1 + `", "` + localDir2 + `"]
+`
+	if err := os.WriteFile(filepath.Join(jirafsDir, "settings.toml"), []byte(settingsTOML), 0o644); err != nil {
+		t.Fatalf("WriteFile settings: %v", err)
+	}
+
+	mirrorYAML := `project:
+  type: project
+  value: TEST
+`
+	if err := os.WriteFile(filepath.Join(mirrorDir, "mirror.yml"), []byte(mirrorYAML), 0o644); err != nil {
+		t.Fatalf("WriteFile mirror: %v", err)
+	}
+
+	// Write an eligible issue in localDir1.
+	writeIssue(t, localDir1, "TEST-1.md", `---
+key: TEST-1
+type: story
+project:
+  type: project
+  value: TEST
+remote_metadata:
+  remote_version: "1"
+  content_hash: "abc"
+  resolved_status: "resolved"
+---
+
+Summary: First issue
+`)
+
+	oldHome := os.Getenv("HOME")
+	os.Setenv("HOME", homeDir)
+	defer os.Setenv("HOME", oldHome)
+
+	_, _ = withMirrorTestIO(t)
+
+	exit := RunMirror([]string{"archive-sweep", "--apply", "--project", "test"})
+	if exit != 0 {
+		t.Fatal("expected exit 0")
+	}
+
+	// The file should be archived in localDir1 (first local dir).
+	archiveDir := filepath.Join(localDir1, "_archive")
+	if _, err := os.Stat(archiveDir); err != nil {
+		t.Fatalf("_archive in localDir1 should exist: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(archiveDir, "TEST-1.md")); err != nil {
+		t.Fatalf("TEST-1.md should be in archive: %v", err)
+	}
+}
+
+// TestRunMirrorArchiveSweep_Apply_FailedArchiveError verifies that
+// --apply reports errors when the archive operation fails.
+func TestRunMirrorArchiveSweep_Apply_FailedArchiveError(t *testing.T) {
+	tmpDir := t.TempDir()
+	homeDir := writeSettings(t, tmpDir)
+	writeMirror(t, tmpDir)
+
+	localDir := filepath.Join(tmpDir, "local")
+	if err := os.MkdirAll(localDir, 0o755); err != nil {
+		t.Fatalf("MkdirAll local: %v", err)
+	}
+
+	// Write an eligible issue.
+	writeIssue(t, localDir, "TEST-1.md", `---
+key: TEST-1
+type: story
+project:
+  type: project
+  value: TEST
+remote_metadata:
+  remote_version: "1"
+  content_hash: "abc"
+  resolved_status: "resolved"
+---
+
+Summary: First issue
+`)
+
+	// Create the archive directory and make it unwritable.
+	archiveDir := filepath.Join(localDir, "_archive")
+	if err := os.MkdirAll(archiveDir, 0o755); err != nil {
+		t.Fatalf("MkdirAll archive: %v", err)
+	}
+	// Make the archive directory unwritable so archiving fails.
+	if err := os.Chmod(archiveDir, 0o000); err != nil {
+		t.Fatalf("Chmod archive: %v", err)
+	}
+	defer os.Chmod(archiveDir, 0o755) // Restore for cleanup
+
+	oldHome := os.Getenv("HOME")
+	os.Setenv("HOME", homeDir)
+	defer os.Setenv("HOME", oldHome)
+
+	stdout, stderr := withMirrorTestIO(t)
+
+	exit := RunMirror([]string{"archive-sweep", "--apply", "--project", "test"})
+	// Should return 1 due to archive failure.
+	if exit == 0 {
+		t.Fatalf("expected non-zero exit on archive failure")
+	}
+
+	// Should contain error message.
+	if !strings.Contains(stderr.String(), "error:") {
+		t.Fatalf("stderr = %q, want error messages", stderr.String())
+	}
+
+	// Should report partial success count.
+	if !strings.Contains(stderr.String(), "0/1 issues archived") {
+		t.Fatalf("stderr = %q, want 0/1 count", stderr.String())
+	}
+
+	// Original file should still exist (not partially moved).
+	if _, err := os.Stat(filepath.Join(localDir, "TEST-1.md")); err != nil {
+		t.Fatal("original file should still exist after failed archive")
+	}
+
+	// Check stdout shows eligible but no archived messages.
+	if strings.Contains(stdout.String(), "archived:") {
+		t.Fatalf("stdout = %q, should not contain archived messages", stdout.String())
+	}
+}
+
+// TestFindIssuePath_Success verifies that findIssuePath finds the correct file.
+func TestFindIssuePath_Success(t *testing.T) {
+	tmpDir := t.TempDir()
+	localDir1 := filepath.Join(tmpDir, "local1")
+	localDir2 := filepath.Join(tmpDir, "local2")
+	if err := os.MkdirAll(localDir1, 0o755); err != nil {
+		t.Fatalf("MkdirAll local1: %v", err)
+	}
+	if err := os.MkdirAll(localDir2, 0o755); err != nil {
+		t.Fatalf("MkdirAll local2: %v", err)
+	}
+
+	// Write a file in localDir2.
+	writeIssue(t, localDir2, "PROJ-42.md", `---
+key: PROJ-42
+type: story
+project:
+  type: project
+  value: PROJ
+---
+
+Summary: Test issue
+`)
+
+	localDirs := []string{localDir1, localDir2}
+	path, found := findIssuePath(localDirs, "PROJ-42")
+	if !found {
+		t.Fatal("expected to find PROJ-42")
+	}
+	want := filepath.Join(localDir2, "PROJ-42.md")
+	if path != want {
+		t.Errorf("findIssuePath = %q, want %q", path, want)
+	}
+}
+
+// TestFindIssuePath_NotFound verifies that findIssuePath returns false
+// when the file is not in any local directory.
+func TestFindIssuePath_NotFound(t *testing.T) {
+	tmpDir := t.TempDir()
+	localDir := filepath.Join(tmpDir, "local")
+	if err := os.MkdirAll(localDir, 0o755); err != nil {
+		t.Fatalf("MkdirAll: %v", err)
+	}
+
+	_, found := findIssuePath([]string{localDir}, "PROJ-99")
+	if found {
+		t.Error("expected not found")
+	}
+}
+
+// TestFindIssuePath_EmptyDirs verifies that findIssuePath returns false
+// when given empty local directories.
+func TestFindIssuePath_EmptyDirs(t *testing.T) {
+	_, found := findIssuePath([]string{}, "PROJ-99")
+	if found {
+		t.Error("expected not found with empty dirs")
+	}
+}

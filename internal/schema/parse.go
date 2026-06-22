@@ -67,9 +67,9 @@ func ParseIssue(content string) (Issue, *ParseError) {
 
 	// Parse the identity fields.
 	var rawIdentity struct {
-		Key     string `yaml:"key"`
-		Type    string `yaml:"type"`
-		Project string `yaml:"project"`
+		Key     string      `yaml:"key"`
+		Type    string      `yaml:"type"`
+		Project interface{} `yaml:"project"`
 	}
 	if err := yaml.Unmarshal([]byte(frontmatter), &rawIdentity); err != nil {
 		return Issue{}, &ParseError{
@@ -84,15 +84,25 @@ func ParseIssue(content string) (Issue, *ParseError) {
 		Project: TypedRef{},
 	}
 
-	if rawIdentity.Project != "" {
-		pr, err := ParseTypedRef(rawIdentity.Project)
-		if err != nil {
-			return Issue{}, &ParseError{
-				Kind: ErrKindInvalidProjectRef,
-				Msg:  err.Error(),
+	if rawIdentity.Project != nil {
+		switch p := rawIdentity.Project.(type) {
+		case string:
+			pr, err := ParseTypedRef(p)
+			if err != nil {
+				return Issue{}, &ParseError{
+					Kind: ErrKindInvalidProjectRef,
+					Msg:  err.Error(),
+				}
+			}
+			issue.Identity.Project = pr
+		case map[string]interface{}:
+			// Handle map format: {type: project, value: ABC}
+			typeRaw, _ := p["type"].(string)
+			valueRaw, _ := p["value"].(string)
+			if typeRaw != "" && valueRaw != "" {
+				issue.Identity.Project = TypedRef{Type: RefType(typeRaw), Value: valueRaw}
 			}
 		}
-		issue.Identity.Project = pr
 	}
 
 	// Parse machine-owned fields.
@@ -111,10 +121,13 @@ func ParseIssue(content string) (Issue, *ParseError) {
 
 	// Parse state and remote metadata.
 	var rawState struct {
-		State         string `yaml:"state"`
-		RemoteVersion string `yaml:"remote_version"`
-		ContentHash   string `yaml:"content_hash"`
-		SyncTime      string `yaml:"sync_time"`
+		State          string      `yaml:"state"`
+		RemoteVersion  string      `yaml:"remote_version"`
+		ContentHash    string      `yaml:"content_hash"`
+		SyncTime       string      `yaml:"sync_time"`
+		ResolvedStatus string      `yaml:"resolved_status"`
+		Pinned         bool        `yaml:"pinned"`
+		RemoteMeta     interface{} `yaml:"remote_metadata"`
 	}
 	if err := yaml.Unmarshal([]byte(frontmatter), &rawState); err != nil {
 		return Issue{}, &ParseError{
@@ -122,24 +135,59 @@ func ParseIssue(content string) (Issue, *ParseError) {
 			Msg:  err.Error(),
 		}
 	}
+
+	// Extract remote metadata from either flat fields or nested remote_metadata.
+	var remoteVersion, contentHash, syncTimeStr, resolvedStatus string
+	var pinned bool
+
+	if rawState.RemoteVersion != "" || rawState.ContentHash != "" || rawState.SyncTime != "" || rawState.ResolvedStatus != "" || rawState.Pinned {
+		// Flat format: fields at top level.
+		remoteVersion = rawState.RemoteVersion
+		contentHash = rawState.ContentHash
+		syncTimeStr = rawState.SyncTime
+		resolvedStatus = rawState.ResolvedStatus
+		pinned = rawState.Pinned
+	} else if rawState.RemoteMeta != nil {
+		// Nested format: remote_metadata as a map.
+		if meta, ok := rawState.RemoteMeta.(map[string]interface{}); ok {
+			if v, ok := meta["remote_version"].(string); ok {
+				remoteVersion = v
+			}
+			if v, ok := meta["content_hash"].(string); ok {
+				contentHash = v
+			}
+			if v, ok := meta["sync_time"].(string); ok {
+				syncTimeStr = v
+			}
+			if v, ok := meta["resolved_status"].(string); ok {
+				resolvedStatus = v
+			}
+			if v, ok := meta["pinned"].(bool); ok {
+				pinned = v
+			}
+		}
+	}
+
 	issue.RemoteMetadata.StateFile = rawState.State
-	if rawState.RemoteVersion != "" || rawState.ContentHash != "" || rawState.SyncTime != "" {
+	if remoteVersion != "" || contentHash != "" || syncTimeStr != "" || resolvedStatus != "" || pinned {
 		var syncTime time.Time
 		var parseErr error
-		if rawState.SyncTime != "" {
-			syncTime, parseErr = time.Parse(time.RFC3339, rawState.SyncTime)
+		if syncTimeStr != "" {
+			syncTime, parseErr = time.Parse(time.RFC3339, syncTimeStr)
 			if parseErr != nil {
 				return Issue{}, &ParseError{
 					Kind: ErrKindInvalidSyncTime,
-					Msg:  fmt.Sprintf("invalid sync_time %q: %s", rawState.SyncTime, parseErr.Error()),
+					Msg:  fmt.Sprintf("invalid sync_time %q: %s", syncTimeStr, parseErr.Error()),
 				}
 			}
 		}
 		issue.RemoteMetadata = RemoteMetadata{
-			RemoteVersion: rawState.RemoteVersion,
-			ContentHash:   rawState.ContentHash,
-			SyncTime:      syncTime,
-			StateFile:     rawState.State,
+			RemoteVersion:  remoteVersion,
+			ContentHash:    contentHash,
+			SyncTime:       syncTime,
+			StateFile:      rawState.State,
+			ResolvedStatus: resolvedStatus,
+			Pinned:         pinned,
 		}
 	}
 
