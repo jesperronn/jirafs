@@ -18,7 +18,7 @@ Task format:
 
 Completed dependency IDs archived in [Ralph Task Archive](ralph-task-archive.md):
 `B001`, `B002`, `B003`, `B010`, `B011`, `B012`, `B013`, `B014`, `B020a`,
-`B020b`, `B020c`, `B005a`, `B005e`, `B005f`.
+`B020b`, `B020c`, `B005a`, `B005e`, `B005f`, `B021b`.
 
 ## Foundation
 
@@ -47,8 +47,8 @@ Completed dependency IDs archived in [Ralph Task Archive](ralph-task-archive.md)
 
 ## Schema
 
-- [ ] B021a | B020c | `internal/schema/**`, `tests/schema/**` | Define issue identity and machine-owned frontmatter fields.
-- [ ] B021b | B021a | `internal/schema/**`, `tests/schema/**` | Define editable issue fields and fixed section names.
+- [x] B021a | B020c | `internal/schema/**`, `tests/schema/**` | Define issue identity and machine-owned frontmatter fields.
+- [x] B021b | B021a | `internal/schema/**`, `tests/schema/**` | Define editable issue fields and fixed section names.
 - [ ] B021c | B021b | `internal/schema/**`, `tests/schema/**` | Validate required issue fields and unknown sections.
 - [ ] B022a | B021a | `internal/schema/**`, `tests/schema/**` | Define remote version, content hash, and sync timestamp metadata.
 - [ ] B022b | B022a | `internal/schema/**`, `tests/schema/**` | Validate syncable, unsynced, archived, and draft states.
