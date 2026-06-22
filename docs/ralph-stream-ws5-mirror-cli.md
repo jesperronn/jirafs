@@ -29,7 +29,7 @@ Completed dependency IDs archived in [Ralph Task Archive](ralph-task-archive.md)
 - [x] B080a | B015b,B016a | `jirafs use --project` updates remembered project.
 - [x] B080b | B080a,B016b | `jirafs use` interactive and non-interactive selection behavior matches docs.
 - [x] B081a | B056c,B070b | `jirafs mirror refresh` resolves project context and calls refresh service interface.
-- [ ] B081b | B081a | `jirafs mirror refresh` reports deterministic changed issue keys.
+- [x] B081b | B081a | `jirafs mirror refresh` reports deterministic changed issue keys.
 - [x] B082a | B071a | `jirafs mirror archive-sweep` reports eligible actions without mutation.
 - [ ] B082b | B082a | `jirafs mirror archive-sweep --apply` calls archive service interface.
 - [ ] B083a | B056a | Wire `jirafs export issue` through the real service path.

@@ -188,8 +188,13 @@ scopes:
 	if exit != 0 {
 		t.Fatalf("RunMirror(refresh) = %d, stderr = %q", exit, stderr.String())
 	}
-	if !strings.Contains(stdout.String(), `added 2 issue(s) to scope "my-issues"`) {
+	if !strings.Contains(stdout.String(), `2 changed issue key(s) for scope "my-issues"`) {
 		t.Fatalf("stdout = %q, want refresh summary", stdout.String())
+	}
+	first := strings.Index(stdout.String(), "TEST-1")
+	second := strings.Index(stdout.String(), "TEST-2")
+	if first < 0 || second < 0 || first > second {
+		t.Fatalf("stdout = %q, want deterministic sorted key order", stdout.String())
 	}
 
 	data, err := os.ReadFile(filepath.Join(tmpDir, "mirror", "mirror.yml"))
@@ -300,6 +305,40 @@ scopes:
 	}
 	if strings.Contains(string(data), "scope_members:") {
 		t.Fatalf("mirror.yml = %q, want no persisted scope members on error", string(data))
+	}
+}
+
+func TestRunMirrorRefresh_NoChangedIssueKeys(t *testing.T) {
+	tmpDir := t.TempDir()
+	homeDir := writeSettings(t, tmpDir)
+	writeMirrorWithScopes(t, tmpDir, `
+scopes:
+  - name: my-issues
+    type: jql
+    target: assignee = currentUser()
+scope_members:
+  - key: TEST-1
+    scope: my-issues
+`)
+	oldHome := os.Getenv("HOME")
+	os.Setenv("HOME", homeDir)
+	defer os.Setenv("HOME", oldHome)
+
+	fake := jira.NewFakeTransport()
+	fake.SetIssuesByScope("my-issues", []*schema.Issue{
+		{Identity: schema.IssueIdentity{Key: "TEST-1", Type: "story"}},
+	})
+	withMirrorClientFactory(t, func(*config.Settings, *context.Context, string) (jira.Client, error) {
+		return fake, nil
+	})
+	stdout, stderr := withMirrorTestIO(t)
+
+	exit := RunMirror([]string{"refresh", "--project", "test", "my-issues"})
+	if exit != 0 {
+		t.Fatalf("RunMirror(refresh no changes) = %d, stderr = %q", exit, stderr.String())
+	}
+	if !strings.Contains(stdout.String(), `no changed issue keys for scope "my-issues"`) {
+		t.Fatalf("stdout = %q, want no changed issue keys message", stdout.String())
 	}
 }
 

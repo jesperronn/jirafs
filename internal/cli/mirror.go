@@ -8,6 +8,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 
 	"github.com/jirafs/jirafs/internal/config"
@@ -125,7 +126,18 @@ func runMirrorRefresh(args []string, settings *config.Settings, resolver *contex
 		return 1
 	}
 
-	fmt.Fprintf(mirrorStdout, "jirafs mirror refresh: added %d issue(s) to scope %q for %q\n", len(added), scopeName, ctx.Name)
+	sort.Slice(added, func(i, j int) bool {
+		return added[i] < added[j]
+	})
+	if len(added) == 0 {
+		fmt.Fprintf(mirrorStdout, "jirafs mirror refresh: no changed issue keys for scope %q in %q\n", scopeName, ctx.Name)
+		return 0
+	}
+
+	fmt.Fprintf(mirrorStdout, "jirafs mirror refresh: %d changed issue key(s) for scope %q in %q:\n", len(added), scopeName, ctx.Name)
+	for _, key := range added {
+		fmt.Fprintf(mirrorStdout, "  %s\n", key)
+	}
 	return 0
 }
 
