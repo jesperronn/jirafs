@@ -35,7 +35,7 @@ Completed dependency IDs archived in [Ralph Task Archive](ralph-task-archive.md)
 - [x] B083a | B056a | Wire `jirafs export issue` through the real service path.
 - [x] B083b | B061b | Wire `jirafs plan` through the real service path.
 - [x] B083c | B063b | Wire `jirafs sync` through the real service path.
-- [ ] B083d | B083a,B083b,B083c | Add a disposable real-data smoke runner for export-edit-plan-sync-reexport.
+- [x] B083d | B083a,B083b,B083c | Add a disposable real-data smoke runner for export-edit-plan-sync-reexport.
 
 Integration handoff after each commit:
 
