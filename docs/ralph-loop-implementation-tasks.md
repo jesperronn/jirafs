@@ -29,6 +29,15 @@ Completed dependency IDs archived in [Ralph Task Archive](ralph-task-archive.md)
 - [ ] B004e | B004d | `bin/integrate_stream_commit`, `tests/**` | Bash-test retry/backoff after non-fast-forward push failure.
 - [ ] B004f | B004d | `bin/integrate_stream_commit`, `tests/**` | Bash-test rebase, test, and lint failure paths stop before push.
 
+## Coverage Hardening
+
+- [ ] B005a | B080b | `cmd/jirafs/**`, `tests/**` | Add `main` command tests for `mirror` routing and unknown subcommand/help edge cases to raise binary entrypoint coverage.
+- [ ] B005b | B081b | `internal/cli/**`, `tests/**` | Add focused `mirror` CLI tests for refresh/archive argument errors, project-resolution failures, and persistence edge cases.
+- [ ] B005c | B054a,B055b | `internal/jira/**`, `tests/**` | Add Jira client tests for auth/header construction and search/fetch error branches that still miss coverage.
+- [ ] B005d | B033b | `internal/schema/**`, `tests/**` | Add schema parse/render round-trip tests for zero-value, partial-metadata, and invalid-state edge cases.
+- [ ] B005e | B064b | `internal/sync/**`, `tests/**` | Add sync validation tests for remaining no-op, mismatch, and conflict formatting branches not yet covered.
+- [ ] B005f | B005a,B005b,B005c,B005d,B005e | `docs/**`, `tests/**` | Raise repo-wide `bin/test` coverage back to at least 90.0% and record the package-level additions in the task ledger handoff.
+
 ## Settings And Context
 
 - [x] B015a | B013 | `internal/context/**`, `tests/context/**` | Read remembered current project when no explicit project or cwd match exists.
