@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/jirafs/jirafs/internal/archive"
 	"github.com/jirafs/jirafs/internal/config"
 	"github.com/jirafs/jirafs/internal/context"
 	"github.com/jirafs/jirafs/internal/jira"
@@ -1195,5 +1196,174 @@ func TestFindIssuePath_EmptyDirs(t *testing.T) {
 	_, found := findIssuePath([]string{}, "PROJ-99")
 	if found {
 		t.Error("expected not found with empty dirs")
+	}
+}
+
+func withArchiveServiceFactory(t *testing.T, factory func(*config.Settings, *context.Context, string) (archive.Service, error)) {
+	t.Helper()
+	oldFactory := archiveServiceFactory
+	archiveServiceFactory = factory
+	t.Cleanup(func() {
+		archiveServiceFactory = oldFactory
+	})
+}
+
+// TestRunMirrorRefresh_ProjectFlagNotInSettings verifies that passing
+// --project with a project name that does not exist in settings
+// returns an error.
+func TestRunMirrorRefresh_ProjectFlagNotInSettings(t *testing.T) {
+	tmpDir := t.TempDir()
+	homeDir := writeSettings(t, tmpDir)
+	writeMirrorWithScopes(t, tmpDir, `
+scopes:
+  - name: my-issues
+    type: jql
+    target: assignee = currentUser()
+`)
+	oldHome := os.Getenv("HOME")
+	os.Setenv("HOME", homeDir)
+	defer os.Setenv("HOME", oldHome)
+
+	_, stderr := withMirrorTestIO(t)
+
+	// --project references a project that does not exist in settings.
+	exit := RunMirror([]string{"refresh", "--project", "nonexistent", "my-issues"})
+	if exit != 1 {
+		t.Fatalf("RunMirror(refresh --project nonexistent) = %d, want 1", exit)
+	}
+	if !strings.Contains(stderr.String(), "nonexistent") {
+		t.Fatalf("stderr = %q, want 'nonexistent' in error", stderr.String())
+	}
+}
+
+// TestRunMirrorRefresh_CwdNotMatching verifies that passing --cwd
+// with a directory that does not match any project's mirror_dir
+// returns an error.
+func TestRunMirrorRefresh_CwdNotMatching(t *testing.T) {
+	tmpDir := t.TempDir()
+	homeDir := writeSettings(t, tmpDir)
+	writeMirrorWithScopes(t, tmpDir, `
+scopes:
+  - name: my-issues
+    type: jql
+    target: assignee = currentUser()
+`)
+	oldHome := os.Getenv("HOME")
+	os.Setenv("HOME", homeDir)
+	defer os.Setenv("HOME", oldHome)
+
+	_, stderr := withMirrorTestIO(t)
+
+	// --cwd points to a directory that does not match the project's mirror_dir.
+	exit := RunMirror([]string{"refresh", "--cwd", filepath.Join(tmpDir, "outside"), "my-issues"})
+	if exit != 1 {
+		t.Fatalf("RunMirror(refresh --cwd outside) = %d, want 1", exit)
+	}
+	if !strings.Contains(stderr.String(), "no project resolved") {
+		t.Fatalf("stderr = %q, want no project resolved", stderr.String())
+	}
+}
+
+// TestRunMirrorArchiveSweep_ProjectFlagNotInSettings verifies that
+// passing --project with a project name that does not exist in
+// settings returns an error.
+func TestRunMirrorArchiveSweep_ProjectFlagNotInSettings(t *testing.T) {
+	tmpDir := t.TempDir()
+	homeDir := writeSettings(t, tmpDir)
+	writeMirror(t, tmpDir)
+
+	localDir := filepath.Join(tmpDir, "local")
+	if err := os.MkdirAll(localDir, 0o755); err != nil {
+		t.Fatalf("MkdirAll local: %v", err)
+	}
+
+	oldHome := os.Getenv("HOME")
+	os.Setenv("HOME", homeDir)
+	defer os.Setenv("HOME", oldHome)
+
+	_, stderr := withMirrorTestIO(t)
+
+	// --project references a project that does not exist in settings.
+	exit := RunMirror([]string{"archive-sweep", "--project", "nonexistent"})
+	if exit != 1 {
+		t.Fatalf("RunMirror([\"archive-sweep\", \"--project\", \"nonexistent\"]) = %d, want 1", exit)
+	}
+	if !strings.Contains(stderr.String(), "project \"nonexistent\" not found") {
+		t.Fatalf("stderr = %q, want project not found", stderr.String())
+	}
+}
+
+// TestRunMirrorArchiveSweep_Apply_ServiceCreationFailure verifies that
+// --apply returns an error when the archive service cannot be created.
+func TestRunMirrorArchiveSweep_Apply_ServiceCreationFailure(t *testing.T) {
+	tmpDir := t.TempDir()
+	homeDir := writeSettings(t, tmpDir)
+	writeMirror(t, tmpDir)
+
+	localDir := filepath.Join(tmpDir, "local")
+	if err := os.MkdirAll(localDir, 0o755); err != nil {
+		t.Fatalf("MkdirAll local: %v", err)
+	}
+
+	writeIssue(t, localDir, "TEST-1.md", `---
+key: TEST-1
+type: story
+project:
+  type: project
+  value: TEST
+remote_metadata:
+  remote_version: "1"
+  content_hash: "abc"
+  resolved_status: "resolved"
+---
+
+Summary: First issue
+`)
+
+	oldHome := os.Getenv("HOME")
+	os.Setenv("HOME", homeDir)
+	defer os.Setenv("HOME", oldHome)
+
+	withArchiveServiceFactory(t, func(*config.Settings, *context.Context, string) (archive.Service, error) {
+		return nil, os.ErrPermission
+	})
+
+	_, stderr := withMirrorTestIO(t)
+
+	exit := RunMirror([]string{"archive-sweep", "--apply", "--project", "test"})
+	if exit != 1 {
+		t.Fatalf("RunMirror([\"archive-sweep\", \"--apply\", \"--project\", \"test\"]) = %d, want 1", exit)
+	}
+	if !strings.Contains(stderr.String(), "cannot create archive service") {
+		t.Fatalf("stderr = %q, want archive service creation error", stderr.String())
+	}
+}
+
+// TestRunMirrorArchiveSweep_CwdNotMatching verifies that passing --cwd
+// with a directory that does not match any project's mirror_dir
+// returns an error.
+func TestRunMirrorArchiveSweep_CwdNotMatching(t *testing.T) {
+	tmpDir := t.TempDir()
+	homeDir := writeSettings(t, tmpDir)
+	writeMirror(t, tmpDir)
+
+	localDir := filepath.Join(tmpDir, "local")
+	if err := os.MkdirAll(localDir, 0o755); err != nil {
+		t.Fatalf("MkdirAll local: %v", err)
+	}
+
+	oldHome := os.Getenv("HOME")
+	os.Setenv("HOME", homeDir)
+	defer os.Setenv("HOME", oldHome)
+
+	_, stderr := withMirrorTestIO(t)
+
+	// --cwd points to a directory that does not match the project's mirror_dir.
+	exit := RunMirror([]string{"archive-sweep", "--cwd", filepath.Join(tmpDir, "outside")})
+	if exit != 1 {
+		t.Fatalf("RunMirror([\"archive-sweep\", \"--cwd\", outside]) = %d, want 1", exit)
+	}
+	if !strings.Contains(stderr.String(), "no project resolved") {
+		t.Fatalf("stderr = %q, want no project resolved", stderr.String())
 	}
 }
