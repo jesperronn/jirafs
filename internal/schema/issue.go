@@ -103,6 +103,16 @@ type LinkedIssue struct {
 	Type string `yaml:"type"`
 }
 
+// IsZero reports whether l has no linked issue set.
+func (l LinkedIssue) IsZero() bool {
+	return l.Key == "" && l.Type == ""
+}
+
+// Equals reports whether l and o refer to the same linked issue.
+func (l LinkedIssue) Equals(o LinkedIssue) bool {
+	return l.Key == o.Key && l.Type == o.Type
+}
+
 // Issue represents a parsed issue file with identity, machine-owned fields,
 // remote metadata, and section content.
 type Issue struct {
