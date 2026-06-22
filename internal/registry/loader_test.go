@@ -1,10 +1,40 @@
 package registry
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"testing"
 )
+
+// nilUnwrapperError is an error that implements Unwrap() but returns nil.
+// Used to test the nil-unwrapping branch in IsRegistryError.
+type nilUnwrapperError struct {
+	msg string
+}
+
+func (e *nilUnwrapperError) Error() string {
+	return e.msg
+}
+
+func (e *nilUnwrapperError) Unwrap() error {
+	return nil
+}
+
+// multiLevelWrapperError wraps another error, enabling multi-level unwrapping.
+// Used to test the `continue` branch in IsRegistryError and IsResolveError.
+type multiLevelWrapperError struct {
+	msg   string
+	inner error
+}
+
+func (e *multiLevelWrapperError) Error() string {
+	return e.msg
+}
+
+func (e *multiLevelWrapperError) Unwrap() error {
+	return e.inner
+}
 
 func TestLoadUsersFile_notFound(t *testing.T) {
 	_, err := LoadUsersFile("/nonexistent/path/users.yaml")
@@ -678,5 +708,117 @@ func TestIsRegistryError(t *testing.T) {
 				t.Errorf("IsRegistryError(%v, %q) = %v, want %v", tt.err, tt.code, got, tt.want)
 			}
 		})
+	}
+}
+
+func TestIsRegistryError_nilUnwrapper(t *testing.T) {
+	nilUnwrapper := &nilUnwrapperError{msg: "wrapped but nil"}
+	if IsRegistryError(nilUnwrapper, "some_code") {
+		t.Error("expected false for nil-unwrapping error")
+	}
+}
+
+func TestIsRegistryError_multiLevelUnwrap(t *testing.T) {
+	// An error that wraps another error, enabling the `continue` branch
+	// in the for loop of IsRegistryError.
+	innerErr := errors.New("inner error")
+	wrapped := &multiLevelWrapperError{msg: "outer", inner: innerErr}
+	if IsRegistryError(wrapped, "some_code") {
+		t.Error("expected false for multi-level wrapped error")
+	}
+}
+
+func TestLoadUsersFile_permissionDenied(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, UsersFile)
+	content := `entries:
+  "user:alice":
+    account_id: "712020:xyz"
+`
+	if err := os.WriteFile(path, []byte(content), 0o000); err != nil {
+		t.Fatal(err)
+	}
+	_, err := LoadUsersFile(path)
+	if err == nil {
+		t.Fatal("expected error for permission denied")
+	}
+	if !IsRegistryError(err, "file_read") {
+		t.Errorf("expected file_read error, got: %v", err)
+	}
+}
+
+func TestLoadProjectsFile_permissionDenied(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, ProjectsFile)
+	content := `entries:
+  "project:abc":
+    key: "ABC"
+`
+	if err := os.WriteFile(path, []byte(content), 0o000); err != nil {
+		t.Fatal(err)
+	}
+	_, err := LoadProjectsFile(path)
+	if err == nil {
+		t.Fatal("expected error for permission denied")
+	}
+	if !IsRegistryError(err, "file_read") {
+		t.Errorf("expected file_read error, got: %v", err)
+	}
+}
+
+func TestLoadStatusesFile_permissionDenied(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, StatusesFile)
+	content := `entries:
+  "status:todo":
+    name: "To Do"
+`
+	if err := os.WriteFile(path, []byte(content), 0o000); err != nil {
+		t.Fatal(err)
+	}
+	_, err := LoadStatusesFile(path)
+	if err == nil {
+		t.Fatal("expected error for permission denied")
+	}
+	if !IsRegistryError(err, "file_read") {
+		t.Errorf("expected file_read error, got: %v", err)
+	}
+}
+
+func TestLoadSprintsFile_permissionDenied(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, SprintsFile)
+	content := `entries:
+  "sprint:99":
+    id: 99
+`
+	if err := os.WriteFile(path, []byte(content), 0o000); err != nil {
+		t.Fatal(err)
+	}
+	_, err := LoadSprintsFile(path)
+	if err == nil {
+		t.Fatal("expected error for permission denied")
+	}
+	if !IsRegistryError(err, "file_read") {
+		t.Errorf("expected file_read error, got: %v", err)
+	}
+}
+
+func TestLoadFixVersionsFile_permissionDenied(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, FixVersionsFile)
+	content := `entries:
+  "fix-version:2.0":
+    name: "2.0"
+`
+	if err := os.WriteFile(path, []byte(content), 0o000); err != nil {
+		t.Fatal(err)
+	}
+	_, err := LoadFixVersionsFile(path)
+	if err == nil {
+		t.Fatal("expected error for permission denied")
+	}
+	if !IsRegistryError(err, "file_read") {
+		t.Errorf("expected file_read error, got: %v", err)
 	}
 }

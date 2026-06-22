@@ -35,3 +35,17 @@ func TestUser_IsZero_partial(t *testing.T) {
 		t.Error("partial User should not be IsZero")
 	}
 }
+
+func TestUser_IsZero_partial_active(t *testing.T) {
+	partial := User{Active: true}
+	if partial.IsZero() {
+		t.Error("partial User with Active set (true) should not be IsZero")
+	}
+
+	// Active=false is the zero value for bool, so a User with only
+	// Active=false is still considered zero.
+	zeroActive := User{Active: false}
+	if !zeroActive.IsZero() {
+		t.Error("User with only Active=false should be IsZero (false is bool's zero value)")
+	}
+}

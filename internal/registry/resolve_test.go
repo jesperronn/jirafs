@@ -715,3 +715,20 @@ func TestIsResolveError(t *testing.T) {
 		})
 	}
 }
+
+func TestIsResolveError_nilUnwrapper(t *testing.T) {
+	nilUnwrapper := &nilUnwrapperError{msg: "wrapped but nil"}
+	if IsResolveError(nilUnwrapper, "some_code") {
+		t.Error("expected false for nil-unwrapping error")
+	}
+}
+
+func TestIsResolveError_multiLevelUnwrap(t *testing.T) {
+	// An error that wraps another error, enabling the `continue` branch
+	// in the for loop of IsResolveError.
+	innerErr := errors.New("inner error")
+	wrapped := &multiLevelWrapperError{msg: "outer", inner: innerErr}
+	if IsResolveError(wrapped, "some_code") {
+		t.Error("expected false for multi-level wrapped error")
+	}
+}

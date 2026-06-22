@@ -10,5 +10,5 @@ type User struct {
 
 // IsZero reports whether u has no user data set.
 func (u User) IsZero() bool {
-	return u.AccountID == "" && u.DisplayName == "" && u.Email == ""
+	return u.AccountID == "" && u.DisplayName == "" && u.Email == "" && !u.Active
 }
