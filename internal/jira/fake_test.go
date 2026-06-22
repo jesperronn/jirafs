@@ -294,3 +294,65 @@ func TestFakeTransportCurrentUserWithError(t *testing.T) {
 		t.Errorf("expected %v, got %v", wantErr, err)
 	}
 }
+
+func TestFakeTransportUpdateIssue(t *testing.T) {
+	fake := NewFakeTransport()
+	issue := &schema.Issue{
+		Identity: schema.IssueIdentity{
+			Key:     "PROJ-42",
+			Type:    "story",
+			Project: schema.TypedRef{Type: schema.RefProject, Value: "PROJ"},
+		},
+		Summary: "Original summary",
+	}
+	fake.SetIssue("PROJ-42", issue)
+
+	updated, err := fake.UpdateIssue(context.Background(), "PROJ-42", &schema.Issue{
+		Identity: schema.IssueIdentity{
+			Key:     "PROJ-42",
+			Type:    "story",
+			Project: schema.TypedRef{Type: schema.RefProject, Value: "PROJ"},
+		},
+		Summary: "Updated summary",
+	})
+	if err != nil {
+		t.Fatalf("UpdateIssue: %v", err)
+	}
+	if updated == nil {
+		t.Fatal("expected non-nil updated issue")
+	}
+	if updated.Summary != "Updated summary" {
+		t.Errorf("Summary = %q, want %q", updated.Summary, "Updated summary")
+	}
+	if string(updated.Identity.Key) != "PROJ-42" {
+		t.Errorf("Key = %q, want %q", updated.Identity.Key, "PROJ-42")
+	}
+}
+
+func TestFakeTransportUpdateIssueNilIssue(t *testing.T) {
+	fake := NewFakeTransport()
+	fake.SetIssue("PROJ-42", &schema.Issue{
+		Identity: schema.IssueIdentity{Key: "PROJ-42"},
+	})
+
+	_, err := fake.UpdateIssue(context.Background(), "PROJ-42", nil)
+	if err == nil {
+		t.Fatal("expected error for nil issue")
+	}
+}
+
+func TestFakeTransportUpdateIssueWithError(t *testing.T) {
+	fake := NewFakeTransport()
+	fake.SetIssue("PROJ-42", &schema.Issue{
+		Identity: schema.IssueIdentity{Key: "PROJ-42"},
+	})
+	wantErr := errors.New("update failed")
+	fake.SetErr("update", wantErr)
+
+	_, err := fake.UpdateIssue(context.Background(), "PROJ-42", &schema.Issue{
+		Identity: schema.IssueIdentity{Key: "PROJ-42"},
+	})
+	if err != wantErr {
+		t.Errorf("expected %v, got %v", wantErr, err)
+	}
+}

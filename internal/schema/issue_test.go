@@ -117,3 +117,81 @@ func TestAllFixedSections(t *testing.T) {
 		}
 	}
 }
+
+func TestIssueToFieldsMap_empty(t *testing.T) {
+	issue := Issue{}
+	fields := issue.ToFieldsMap()
+	if len(fields) != 0 {
+		t.Errorf("expected empty fields map, got %d entries", len(fields))
+	}
+}
+
+func TestIssueToFieldsMap_summaryOnly(t *testing.T) {
+	issue := Issue{
+		Identity: IssueIdentity{Key: "PROJ-42"},
+		Summary:  "Test summary",
+	}
+	fields := issue.ToFieldsMap()
+	if fields["summary"] != "Test summary" {
+		t.Errorf("summary = %v, want %q", fields["summary"], "Test summary")
+	}
+}
+
+func TestIssueToFieldsMap_allFields(t *testing.T) {
+	assignee := "jdoe"
+	issue := Issue{
+		Identity:    IssueIdentity{Key: "PROJ-42"},
+		Summary:     "Test summary",
+		Description: "Test description",
+		Labels:      []string{"bug", "priority"},
+		Assignee:    &assignee,
+		Status:      "In Progress",
+		Sprint:      "Sprint 42",
+		FixVersions: []string{"1.0", "2.0"},
+		LinkedIssues: []LinkedIssue{
+			{Key: "PROJ-1", Type: "blocks"},
+		},
+	}
+	fields := issue.ToFieldsMap()
+
+	if fields["summary"] != "Test summary" {
+		t.Errorf("summary = %v, want %q", fields["summary"], "Test summary")
+	}
+	if fields["description"] != "Test description" {
+		t.Errorf("description = %v, want %q", fields["description"], "Test description")
+	}
+	labels, ok := fields["labels"].([]string)
+	if !ok || len(labels) != 2 {
+		t.Errorf("labels = %v, want 2 labels", fields["labels"])
+	}
+	assigneeField, ok := fields["assignee"].(map[string]string)
+	if !ok || assigneeField["name"] != "jdoe" {
+		t.Errorf("assignee = %v, want map with name=jdoe", fields["assignee"])
+	}
+	status, ok := fields["status"].(map[string]string)
+	if !ok || status["name"] != "In Progress" {
+		t.Errorf("status = %v, want map with name=In Progress", fields["status"])
+	}
+	sprint := fields["customfield_sprint"]
+	if sprint != "Sprint 42" {
+		t.Errorf("sprint = %v, want Sprint 42", sprint)
+	}
+	fv, ok := fields["fixVersions"].([]map[string]string)
+	if !ok || len(fv) != 2 {
+		t.Errorf("fixVersions = %v, want 2 versions", fields["fixVersions"])
+	}
+	links, ok := fields["issuelinks"].([]map[string]interface{})
+	if !ok || len(links) != 1 {
+		t.Errorf("issuelinks = %v, want 1 link", fields["issuelinks"])
+	}
+}
+
+func TestIssueToFieldsMap_zeroValuesOmitted(t *testing.T) {
+	issue := Issue{
+		Identity: IssueIdentity{Key: "PROJ-42"},
+	}
+	fields := issue.ToFieldsMap()
+	if len(fields) != 0 {
+		t.Errorf("expected empty fields map for zero-value issue, got %d entries", len(fields))
+	}
+}

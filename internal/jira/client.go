@@ -73,6 +73,11 @@ type Client interface {
 
 	// FetchFixVersions returns all fix versions for the given project key.
 	FetchFixVersions(ctx context.Context, projectKey string) ([]FixVersionEntry, error)
+
+	// UpdateIssue updates a single issue by its key, returning the updated
+	// issue from Jira. It is used by the sync command to push changes back
+	// to Jira after validating and applying a plan.
+	UpdateIssue(ctx context.Context, key string, issue *schema.Issue) (*schema.Issue, error)
 }
 
 // jiraErrorDetails captures the structured error response from Jira.
@@ -451,6 +456,91 @@ func (c *JiraClient) FetchSprints(ctx context.Context, projectKey string) ([]Spr
 	}
 
 	return sr.Values, nil
+}
+
+// UpdateIssue updates a single issue by its key via the Jira REST API.
+// It POSTs the editable fields (summary, description, labels, assignee,
+// status, sprint, fix_versions) to /rest/api/3/issue/{key} and returns
+// the updated issue from Jira.
+func (c *JiraClient) UpdateIssue(ctx context.Context, key string, issue *schema.Issue) (*schema.Issue, error) {
+	if key == "" {
+		return nil, NewNotFoundError("empty key")
+	}
+
+	url := fmt.Sprintf("%s/rest/api/3/issue/%s", c.baseURL, key)
+
+	// Build the fields object from the issue.
+	fields := issue.ToFieldsMap()
+
+	payload := map[string]interface{}{
+		"fields": fields,
+	}
+
+	pbody, err := json.Marshal(payload)
+	if err != nil {
+		return nil, NewUnknownErr("cannot marshal update request: " + err.Error())
+	}
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(pbody))
+	if err != nil {
+		return nil, NewTransportError("cannot create update request: " + err.Error())
+	}
+
+	req.Header.Set("Content-Type", "application/json")
+
+	req, err = BuildAuthenticatedRequest(req, c.credential)
+	if err != nil {
+		return nil, NewUnknownErr("cannot authenticate update request: " + err.Error())
+	}
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return nil, NewTransportError("update request failed: " + err.Error())
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode == http.StatusNotFound {
+		return nil, NewNotFoundError(key)
+	}
+
+	if resp.StatusCode >= 400 && resp.StatusCode < 500 {
+		if resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden {
+			return nil, NewAuthError("HTTP " + fmt.Sprintf("%d", resp.StatusCode))
+		}
+		return nil, mapHTTPErr(resp)
+	}
+
+	if resp.StatusCode >= 500 {
+		return nil, mapHTTPErr(resp)
+	}
+
+	var jr jiraIssueResponse
+	if err := json.NewDecoder(resp.Body).Decode(&jr); err != nil {
+		return nil, NewUnknownErr("cannot parse update response JSON: " + err.Error())
+	}
+
+	updated := &schema.Issue{
+		Identity: schema.IssueIdentity{
+			Key:  schema.IssueKey(jr.Key),
+			Type: schema.IssueType(""),
+		},
+	}
+
+	if jr.Fields != nil {
+		if issuetype, ok := jr.Fields["issuetype"]; ok {
+			if mt, ok := issuetype.(map[string]interface{}); ok {
+				if name, ok := mt["name"]; ok {
+					if s, ok := name.(string); ok {
+						updated.Identity.Type = schema.IssueType(s)
+					}
+				}
+			}
+		}
+		export.NormalizeIssue(updated, jr.Fields)
+		export.NormalizeLinkedIssues(updated, jr.Fields)
+	}
+
+	return updated, nil
 }
 
 // FetchFixVersions calls the Jira /rest/api/3/project/{projectKey}/versions

@@ -126,3 +126,50 @@ type Issue struct {
 func (i Issue) IsZero() bool {
 	return i.Identity.IsZero() && i.MachineOwned.IsZero()
 }
+
+// ToFieldsMap builds a Jira API fields map from the issue's editable fields.
+// The map contains only non-zero fields, matching what the Jira REST API
+// expects for an update (PATCH) request.
+func (i Issue) ToFieldsMap() map[string]interface{} {
+	fields := make(map[string]interface{})
+
+	if i.Summary != "" {
+		fields["summary"] = i.Summary
+	}
+	if i.Description != "" {
+		fields["description"] = i.Description
+	}
+	if len(i.Labels) > 0 {
+		fields["labels"] = i.Labels
+	}
+	if i.Assignee != nil {
+		fields["assignee"] = map[string]string{"name": *i.Assignee}
+	}
+	if i.Status != "" {
+		fields["status"] = map[string]string{"name": i.Status}
+	}
+	if i.Sprint != "" {
+		// Sprint uses a custom field; the ID varies by instance.
+		// We store the name and let the API resolve it.
+		fields["customfield_sprint"] = i.Sprint
+	}
+	if len(i.FixVersions) > 0 {
+		versions := make([]map[string]string, len(i.FixVersions))
+		for idx, v := range i.FixVersions {
+			versions[idx] = map[string]string{"name": v}
+		}
+		fields["fixVersions"] = versions
+	}
+	if len(i.LinkedIssues) > 0 {
+		links := make([]map[string]interface{}, len(i.LinkedIssues))
+		for idx, li := range i.LinkedIssues {
+			links[idx] = map[string]interface{}{
+				"issueKey": string(li.Key),
+				"type":     map[string]string{"name": li.Type},
+			}
+		}
+		fields["issuelinks"] = links
+	}
+
+	return fields
+}

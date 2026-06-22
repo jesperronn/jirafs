@@ -53,16 +53,6 @@ func TestShortHelpFlag(t *testing.T) {
 	}
 }
 
-func TestKnownCommandNotImplemented(t *testing.T) {
-	output := runMainHelper(t, "sync")
-	if !strings.Contains(output.stderr, "jirafs sync: not yet implemented") {
-		t.Fatalf("stderr = %q, want not-implemented message", output.stderr)
-	}
-	if output.exitCode != 1 {
-		t.Fatalf("exitCode = %d, want 1", output.exitCode)
-	}
-}
-
 func TestUnknownCommand(t *testing.T) {
 	output := runMainHelper(t, "wat")
 	if !strings.Contains(output.stderr, `jirafs: unknown command: "wat"`) {
@@ -70,6 +60,16 @@ func TestUnknownCommand(t *testing.T) {
 	}
 	if !strings.Contains(output.stderr, "Usage:") {
 		t.Fatalf("stderr = %q, want help text", output.stderr)
+	}
+	if output.exitCode != 1 {
+		t.Fatalf("exitCode = %d, want 1", output.exitCode)
+	}
+}
+
+func TestSyncCommand(t *testing.T) {
+	output := runMainHelper(t, "sync")
+	if !strings.Contains(output.stderr, "jirafs sync: missing issue key") {
+		t.Fatalf("stderr = %q, want missing issue key message", output.stderr)
 	}
 	if output.exitCode != 1 {
 		t.Fatalf("exitCode = %d, want 1", output.exitCode)

@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/jirafs/jirafs/internal/config"
+	"github.com/jirafs/jirafs/internal/schema"
 )
 
 func contains(s, substr string) bool {
@@ -1303,5 +1304,106 @@ func TestFetchFixVersionsTransportError(t *testing.T) {
 	_, err := client.FetchFixVersions(ctx, "PROJ")
 	if err == nil {
 		t.Fatal("expected error for connection refused")
+	}
+}
+
+func TestUpdateIssueTransportError(t *testing.T) {
+	client := NewJiraClient("http://localhost:1")
+	ctx, cancel := context.WithTimeout(context.Background(), 100*1000000)
+	defer cancel()
+	_, err := client.UpdateIssue(ctx, "PROJ-42", &schema.Issue{
+		Identity: schema.IssueIdentity{Key: "PROJ-42"},
+	})
+	if err == nil {
+		t.Fatal("expected error for connection refused")
+	}
+}
+
+func TestUpdateIssueEmptyKey(t *testing.T) {
+	client := NewJiraClient("http://localhost:1")
+	ctx, cancel := context.WithTimeout(context.Background(), 100*1000000)
+	defer cancel()
+	_, err := client.UpdateIssue(ctx, "", &schema.Issue{})
+	if err == nil {
+		t.Fatal("expected error for empty key")
+	}
+}
+
+func TestUpdateIssueSuccess(t *testing.T) {
+	payload := map[string]interface{}{
+		"id":   "10001",
+		"key":  "PROJ-42",
+		"fields": map[string]interface{}{
+			"summary":   "Updated summary",
+			"description": "Updated description",
+			"issuetype": map[string]interface{}{"name": "Story"},
+		},
+	}
+	body, err := json.Marshal(payload)
+	if err != nil {
+		t.Fatalf("marshal payload: %v", err)
+	}
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			t.Errorf("expected POST, got %s", r.Method)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.Write(body)
+	}))
+	defer server.Close()
+
+	client := NewJiraClient(server.URL)
+	client.SetCredentials(config.ResolvedInstanceCredentials{
+		AuthType: "basic",
+		Credential: config.ResolvedCredential{
+			Fields: map[string]string{
+				"username": "user@example.com",
+				"password": "secret",
+			},
+		},
+	})
+
+	issue := &schema.Issue{
+		Identity: schema.IssueIdentity{Key: "PROJ-42"},
+		Summary:  "Updated summary",
+	}
+	updated, err := client.UpdateIssue(context.Background(), "PROJ-42", issue)
+	if err != nil {
+		t.Fatalf("UpdateIssue: %v", err)
+	}
+	if updated == nil {
+		t.Fatal("expected non-nil updated issue")
+	}
+	if string(updated.Identity.Key) != "PROJ-42" {
+		t.Errorf("Key = %q, want %q", updated.Identity.Key, "PROJ-42")
+	}
+	if updated.Summary != "Updated summary" {
+		t.Errorf("Summary = %q, want %q", updated.Summary, "Updated summary")
+	}
+}
+
+func TestUpdateIssueNotFound(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	defer server.Close()
+
+	client := NewJiraClient(server.URL)
+	client.SetCredentials(config.ResolvedInstanceCredentials{
+		AuthType: "basic",
+		Credential: config.ResolvedCredential{
+			Fields: map[string]string{
+				"username": "user@example.com",
+				"password": "secret",
+			},
+		},
+	})
+
+	_, err := client.UpdateIssue(context.Background(), "PROJ-99", &schema.Issue{
+		Identity: schema.IssueIdentity{Key: "PROJ-99"},
+	})
+	if err == nil {
+		t.Fatal("expected not found error")
 	}
 }

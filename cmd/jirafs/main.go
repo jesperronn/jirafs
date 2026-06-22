@@ -18,9 +18,11 @@ func main() {
 	switch os.Args[1] {
 	case "help":
 		printHelp()
-	case "init", "sync", "new", "registry", "board", "archive":
+	case "init", "new", "registry", "board", "archive":
 		fmt.Fprintf(os.Stderr, "jirafs %s: not yet implemented\n", os.Args[1])
 		os.Exit(1)
+	case "sync":
+		os.Exit(cli.RunSync(os.Args[2:]))
 	case "use":
 		os.Exit(runUse(os.Args[2:]))
 	case "mirror":
@@ -131,7 +133,7 @@ Commands:
   init       initialize a new jirafs project in the current directory
   export     export Jira issues into local Markdown files
   plan       show a sync plan without applying changes
-  sync       apply a sync plan and push changes to Jira
+  sync       apply a sync plan and push changes to Jira (real service path)
   new        create a new issue from a template
   registry   manage local registry files for typed references
   board      show a local kanban-style board view

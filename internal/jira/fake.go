@@ -47,7 +47,7 @@ func (f *FakeTransport) SetIssuesByScope(scope string, issues []*schema.Issue) {
 }
 
 // SetErr configures the transport to return an error on the next call
-// to "fetch" or "search". Pass an empty string to clear.
+// to "fetch", "search", "user", or "update". Pass an empty string to clear.
 func (f *FakeTransport) SetErr(on string, err error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
@@ -180,6 +180,23 @@ func (f *FakeTransport) FetchFixVersions(_ context.Context, projectKey string) (
 		return nil, NewNotFoundError("fix-versions:" + projectKey)
 	}
 	return versions, nil
+}
+
+// UpdateIssue updates a registered issue by its key. For the fake transport,
+// this replaces the issue in the map and returns the updated copy.
+func (f *FakeTransport) UpdateIssue(_ context.Context, key string, issue *schema.Issue) (*schema.Issue, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.errOn == "update" {
+		return nil, f.err
+	}
+	if issue == nil {
+		return nil, NewNotFoundError(key)
+	}
+	// Deep copy the issue to avoid mutations.
+	updated := *issue
+	f.issues[key] = &updated
+	return &updated, nil
 }
 
 // generateScopeIssues returns deterministic issues for known scopes.
