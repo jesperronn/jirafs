@@ -80,8 +80,7 @@ Acceptance:
 - <what is now true>
 
 Validation:
-- bin/test: <pass/fail>
-- bin/lint: <pass/fail>
+- gates (`bin/test && bin/lint`): <pass/fail>
 - bin/integrate_stream_commit: <pass/fail>
 - other: <targeted tests/manual checks>
 
