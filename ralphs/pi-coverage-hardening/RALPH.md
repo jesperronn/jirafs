@@ -8,10 +8,10 @@ commands:
     run: cat docs/ralph-loop-implementation-tasks.md
   - name: recent_commits
     run: git log --oneline -3
-  - name: tests
-    run: bin/test
-  - name: lint
-    run: bin/lint
+  - name: gates
+    run: bin/test && bin/lint
+  - name: integrate
+    run: bin/integrate_stream_commit
 ---
 # jirafs Pi Coverage Hardening Loop
 
@@ -29,6 +29,8 @@ Rules:
 - Final gates: `bin/test` and `bin/lint`.
 - Mark `[x]` only after both gates pass.
 - Commit successful work after gates pass. Use conventional commit wording.
+- After each successful commit, run `bin/integrate_stream_commit`.
+- Treat the helper retry loop as part of the required success path.
 - Do not commit blocked or failing work.
 - Handoff must include final gate results and commit hash.
 - Local model context is small: read only the docs and code needed for the
@@ -59,13 +61,9 @@ Project:
 
 {{ commands.recent_commits }}
 
-## Current Test Output
+## Current Gate Output
 
-{{ commands.tests }}
-
-## Current Lint Output
-
-{{ commands.lint }}
+{{ commands.gates }}
 
 ## Required Handoff
 
@@ -84,6 +82,7 @@ Acceptance:
 Validation:
 - bin/test: <pass/fail>
 - bin/lint: <pass/fail>
+- bin/integrate_stream_commit: <pass/fail>
 - other: <targeted tests/manual checks>
 
 Files changed:
