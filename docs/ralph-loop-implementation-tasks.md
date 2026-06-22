@@ -18,14 +18,14 @@ Task format:
 
 Completed dependency IDs archived in [Ralph Task Archive](ralph-task-archive.md):
 `B001`, `B002`, `B003`, `B010`, `B011`, `B012`, `B013`, `B014`, `B020a`,
-`B020b`, `B020c`, `B004b`, `B005a`, `B005e`, `B005f`, `B021b`, `B022b`, `B023a`,
+`B020b`, `B020c`, `B004b`, `B004c`, `B005a`, `B005e`, `B005f`, `B021b`, `B022b`, `B023a`,
 `B018a`, `B018b`, `B018c`, `B018d`.
 
 ## Foundation
 
 - [x] B004a | B001 | `bin/**`, `tests/**`, `tools/**` | Add bash test runner and one passing shell-test fixture wired into `bin/test`.
 - [x] B004b | B004a | `bin/test`, `tests/**` | Bash-test `bin/test` argument handling: default behavior and invalid args.
-- [ ] B004c | B004a | `bin/lint`, `tests/**` | Bash-test `bin/lint` argument handling: default behavior and invalid args.
+- [x] B004c | B004a | `bin/lint`, `tests/**` | Bash-test `bin/lint` argument handling: default behavior and invalid args.
 - [ ] B004d | B004a | `bin/integrate_stream_commit`, `tests/**` | Bash-test clean-worktree guard and default `main` target behavior.
 - [ ] B004e | B004d | `bin/integrate_stream_commit`, `tests/**` | Bash-test retry/backoff after non-fast-forward push failure.
 - [ ] B004f | B004d | `bin/integrate_stream_commit`, `tests/**` | Bash-test rebase, test, and lint failure paths stop before push.
