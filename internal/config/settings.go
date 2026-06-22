@@ -264,6 +264,143 @@ func (s *Settings) SaveState() error {
 	return nil
 }
 
+// SetupProject records one instance and one project in the settings file.
+// It creates the settings file if it does not exist, or merges into an
+// existing file. The instance is keyed by instanceName, the project by
+// projectName. The caller provides baseURL, authType, mirrorDir, and
+// an optional set of credential ref strings.
+//
+// If the instance already exists, base_url and auth_type are overwritten
+// and credential_refs are appended (duplicates are not deduplicated).
+// If the project already exists, key, instance, and mirror_dir are
+// overwritten. LocalDirs are not touched.
+//
+// After mutation the settings are validated and paths are expanded.
+// A validation failure leaves the file unchanged.
+func (s *Settings) SetupProject(
+	instanceName string,
+	projectName string,
+	baseURL string,
+	authType string,
+	mirrorDir string,
+	credentialRefs []string,
+) error {
+	// Load existing settings, or start fresh.
+	existing, err := s.loadOrCreate()
+	if err != nil {
+		return err
+	}
+
+	// Save a snapshot for rollback on validation failure.
+	snapshot := *existing
+
+	// Ensure version is set.
+	if existing.Version == 0 {
+		existing.Version = 1
+	}
+
+	// Initialize maps if nil.
+	if existing.Instances == nil {
+		existing.Instances = make(map[string]Instance)
+	}
+	if existing.Projects == nil {
+		existing.Projects = make(map[string]Project)
+	}
+
+	// Upsert the instance.
+	inst, ok := existing.Instances[instanceName]
+	if !ok {
+		inst = Instance{}
+	}
+	inst.BaseURL = baseURL
+	inst.AuthType = authType
+	inst.CredentialRefs = append(inst.CredentialRefs, credentialRefs...)
+	existing.Instances[instanceName] = inst
+
+	// Upsert the project.
+	proj, ok := existing.Projects[projectName]
+	if !ok {
+		proj = Project{}
+	}
+	proj.Key = projectName
+	proj.Instance = instanceName
+	proj.MirrorDir = mirrorDir
+	existing.Projects[projectName] = proj
+
+	// Validate before persisting.
+	if err := existing.validate(); err != nil {
+		// Rollback: do not write the file.
+		_ = snapshot
+		return err
+	}
+
+	// Expand paths.
+	if err := existing.expandPaths(); err != nil {
+		return err
+	}
+
+	// Write the full settings file (not just state).
+	path, err := settingsPath()
+	if err != nil {
+		return NewSettingError(ErrMissingField, "home directory is not set", "home", "")
+	}
+
+	// Marshal using SettingsTOML which has proper TOML tags for
+	// Instances and Projects.
+	toM := SettingsTOML{
+		Version:   existing.Version,
+		Instances: existing.Instances,
+		Projects:  existing.Projects,
+		State:     existing.State,
+	}
+
+	data, err := toml.Marshal(toM)
+	if err != nil {
+		return NewSettingError(ErrMissingField, "cannot marshal settings: "+err.Error(), "state", "")
+	}
+
+	if err := os.WriteFile(path, data, 0o644); err != nil {
+		return NewSettingError(ErrMissingField, "cannot write settings file: "+err.Error(), "path", path)
+	}
+
+	return nil
+}
+
+// loadOrCreate reads the settings file, or returns a zero-value Settings
+// when the file does not exist (no error). This is the internal variant
+// that skips validation and path expansion — callers must do that themselves.
+func (s *Settings) loadOrCreate() (*Settings, error) {
+	path, err := settingsPath()
+	if err != nil {
+		return nil, NewSettingError(ErrMissingField, "home directory is not set", "home", "")
+	}
+
+	data, err := os.ReadFile(path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			// No file yet: return a zero-value Settings.
+			return &Settings{
+				Version:   1,
+				Instances: make(map[string]Instance),
+				Projects:  make(map[string]Project),
+			}, nil
+		}
+		return nil, NewSettingError(ErrMissingField, "cannot read settings file: "+err.Error(), "path", path)
+	}
+
+	var raw SettingsTOML
+	if err := toml.Unmarshal(data, &raw); err != nil {
+		return nil, NewSettingError(ErrMissingField, "invalid TOML: "+err.Error(), "file", path)
+	}
+
+	return &Settings{
+		Version:   raw.Version,
+		Instances: raw.Instances,
+		Projects:  raw.Projects,
+		State:     raw.State,
+	}, nil
+}
+
 // expandPath expands ~ and $VAR references in a single path string.
 func expandPath(p string) (string, error) {
 	if p == "" {

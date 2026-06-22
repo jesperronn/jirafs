@@ -592,6 +592,199 @@ func TestUseInvalidFlag(t *testing.T) {
 	}
 }
 
+func TestSetupHelp(t *testing.T) {
+	output := runMainHelper(t, "setup", "--help")
+	if output.exitCode != 0 {
+		t.Fatalf("exitCode = %d, want 0", output.exitCode)
+	}
+	if !strings.Contains(output.stderr, "Usage of setup") {
+		t.Fatalf("stderr = %q, want usage text", output.stderr)
+	}
+}
+
+func TestSetupMissingFlags(t *testing.T) {
+	output := runMainHelper(t, "setup")
+	if output.exitCode != 1 {
+		t.Fatalf("exitCode = %d, want 1", output.exitCode)
+	}
+	if !strings.Contains(output.stderr, "--project is required") {
+		t.Fatalf("stderr = %q, want --project required", output.stderr)
+	}
+}
+
+func TestSetupMissingKey(t *testing.T) {
+	output := runMainHelper(t, "setup", "--project", "p")
+	if output.exitCode != 1 {
+		t.Fatalf("exitCode = %d, want 1", output.exitCode)
+	}
+	if !strings.Contains(output.stderr, "--key is required") {
+		t.Fatalf("stderr = %q, want --key required", output.stderr)
+	}
+}
+
+func TestSetupMissingInstance(t *testing.T) {
+	output := runMainHelper(t, "setup", "--project", "p", "--key", "K")
+	if output.exitCode != 1 {
+		t.Fatalf("exitCode = %d, want 1", output.exitCode)
+	}
+	if !strings.Contains(output.stderr, "--instance is required") {
+		t.Fatalf("stderr = %q, want --instance required", output.stderr)
+	}
+}
+
+func TestSetupMissingBaseURL(t *testing.T) {
+	output := runMainHelper(t, "setup", "--project", "p", "--key", "K", "--instance", "i")
+	if output.exitCode != 1 {
+		t.Fatalf("exitCode = %d, want 1", output.exitCode)
+	}
+	if !strings.Contains(output.stderr, "--base-url is required") {
+		t.Fatalf("stderr = %q, want --base-url required", output.stderr)
+	}
+}
+
+func TestSetupMissingAuthType(t *testing.T) {
+	output := runMainHelper(t, "setup", "--project", "p", "--key", "K", "--instance", "i", "--base-url", "https://jira.example.com")
+	if output.exitCode != 1 {
+		t.Fatalf("exitCode = %d, want 1", output.exitCode)
+	}
+	if !strings.Contains(output.stderr, "--auth-type is required") {
+		t.Fatalf("stderr = %q, want --auth-type required", output.stderr)
+	}
+}
+
+func TestSetupMissingMirrorDir(t *testing.T) {
+	output := runMainHelper(t, "setup", "--project", "p", "--key", "K", "--instance", "i", "--base-url", "https://j.example.com", "--auth-type", "basic")
+	if output.exitCode != 1 {
+		t.Fatalf("exitCode = %d, want 1", output.exitCode)
+	}
+	if !strings.Contains(output.stderr, "--mirror-dir is required") {
+		t.Fatalf("stderr = %q, want --mirror-dir required", output.stderr)
+	}
+}
+
+func TestSetupInvalidBaseURL(t *testing.T) {
+	tmpDir := t.TempDir()
+	output := runMainHelper(t, "setup", "--project", "p", "--key", "K", "--instance", "i", "--base-url", "not-a-url", "--auth-type", "basic", "--mirror-dir", filepath.Join(tmpDir, "mirror"))
+	if output.exitCode != 1 {
+		t.Fatalf("exitCode = %d, want 1", output.exitCode)
+	}
+	if !strings.Contains(output.stderr, "--base-url must start with http:// or https://") {
+		t.Fatalf("stderr = %q, want invalid URL message", output.stderr)
+	}
+}
+
+func TestSetupCreatesSettingsFile(t *testing.T) {
+	tmpDir := t.TempDir()
+	homeDir := filepath.Join(tmpDir, "home")
+	jirafsDir := filepath.Join(homeDir, settingsDir)
+	if err := os.MkdirAll(jirafsDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	output := runMainHelperWithHome(t, homeDir, "setup",
+		"--project", "platform",
+		"--key", "PLAT",
+		"--instance", "work",
+		"--base-url", "https://jira.example.com",
+		"--auth-type", "atlassian_api_token",
+		"--mirror-dir", filepath.Join(tmpDir, "mirror"),
+		"--credential-ref", "env://JIRAFS_API_TOKEN",
+	)
+	if output.exitCode != 0 {
+		t.Fatalf("exitCode = %d, want 0, stderr = %q", output.exitCode, output.stderr)
+	}
+	if !strings.Contains(output.stderr, "setup complete") {
+		t.Fatalf("stderr = %q, want 'setup complete'", output.stderr)
+	}
+
+	// Verify the settings file was written.
+	data, err := os.ReadFile(filepath.Join(jirafsDir, settingsFile))
+	if err != nil {
+		t.Fatalf("ReadFile() error = %v", err)
+	}
+	text := string(data)
+	if !strings.Contains(text, "jira.example.com") {
+		t.Errorf("settings = %q, want base_url", text)
+	}
+	if !strings.Contains(text, "atlassian_api_token") {
+		t.Errorf("settings = %q, want auth_type", text)
+	}
+}
+
+func TestSetupUpdatesExistingSettings(t *testing.T) {
+	tmpDir := t.TempDir()
+	homeDir := filepath.Join(tmpDir, "home")
+	jirafsDir := filepath.Join(homeDir, settingsDir)
+	if err := os.MkdirAll(jirafsDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	// Write an existing settings file.
+	existing := `
+version = 1
+
+[instances.old]
+base_url = "https://old.example.com"
+auth_type = "basic"
+
+[projects.legacy]
+key = "LEG"
+instance = "old"
+mirror_dir = "` + filepath.Join(tmpDir, "legacy-mirror") + `"
+`
+	if err := os.WriteFile(filepath.Join(jirafsDir, settingsFile), []byte(existing), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	// Run setup to add a new project.
+	output := runMainHelperWithHome(t, homeDir, "setup",
+		"--project", "newproj",
+		"--key", "NP",
+		"--instance", "newinst",
+		"--base-url", "https://new.example.com",
+		"--auth-type", "atlassian_api_token",
+		"--mirror-dir", filepath.Join(tmpDir, "new-mirror"),
+	)
+	if output.exitCode != 0 {
+		t.Fatalf("exitCode = %d, want 0, stderr = %q", output.exitCode, output.stderr)
+	}
+
+	// Verify both projects exist in the file.
+	data, err := os.ReadFile(filepath.Join(jirafsDir, settingsFile))
+	if err != nil {
+		t.Fatalf("ReadFile() error = %v", err)
+	}
+	text := string(data)
+	if !strings.Contains(text, "legacy") {
+		t.Errorf("settings = %q, want legacy project preserved", text)
+	}
+	if !strings.Contains(text, "newproj") {
+		t.Errorf("settings = %q, want newproj project", text)
+	}
+}
+
+func TestSetupFailsOnMissingFile(t *testing.T) {
+	tmpDir := t.TempDir()
+	homeDir := filepath.Join(tmpDir, "home")
+	jirafsDir := filepath.Join(homeDir, settingsDir)
+	if err := os.MkdirAll(jirafsDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	// No settings file exists — setup should create one.
+	output := runMainHelperWithHome(t, homeDir, "setup",
+		"--project", "p",
+		"--key", "K",
+		"--instance", "i",
+		"--base-url", "https://j.example.com",
+		"--auth-type", "basic",
+		"--mirror-dir", filepath.Join(tmpDir, "mirror"),
+	)
+	if output.exitCode != 0 {
+		t.Fatalf("exitCode = %d, want 0, stderr = %q", output.exitCode, output.stderr)
+	}
+}
+
 func runMainHelperWithHome(t *testing.T, home string, args ...string) helperOutput {
 	t.Helper()
 

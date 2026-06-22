@@ -4,6 +4,7 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"strings"
 
 	"github.com/jirafs/jirafs/internal/cli"
 	"github.com/jirafs/jirafs/internal/config"
@@ -21,6 +22,8 @@ func main() {
 	case "init", "new", "registry", "board", "archive":
 		fmt.Fprintf(os.Stderr, "jirafs %s: not yet implemented\n", os.Args[1])
 		os.Exit(1)
+	case "setup":
+		os.Exit(runSetup(os.Args[2:]))
 	case "sync":
 		os.Exit(cli.RunSync(os.Args[2:]))
 	case "use":
@@ -125,6 +128,96 @@ func runUse(args []string) int {
 	return 0
 }
 
+// runSetup handles the `jirafs setup` command. It records one named
+// instance and one named project into ~/.jirafs/settings.toml, creating
+// the file if it does not exist. The caller provides:
+//
+//  - --project <name>: the settings key for the project entry
+//  - --key <KEY>: the Jira project key (e.g. "PLAT")
+//  - --instance <name>: the settings key for the instance entry
+//  - --base-url <URL>: the Jira base URL
+//  - --auth-type <type>: the auth type (basic, atlassian_api_token, oauth1)
+//  - --credential-ref <ref>: one credential reference (can be repeated)
+//
+// Example:
+//
+//	jirafs setup --project platform --key PLAT --instance work \\
+//	  --base-url https://jira.example.com --auth-type atlassian_api_token \\
+//	  --credential-ref env://JIRAFS_API_TOKEN
+func runSetup(args []string) int {
+	fs := flag.NewFlagSet("setup", flag.ExitOnError)
+	projectName := fs.String("project", "", "settings key for the project entry")
+	projectKey := fs.String("key", "", "Jira project key (e.g. PLAT)")
+	instanceName := fs.String("instance", "", "settings key for the instance entry")
+	baseURL := fs.String("base-url", "", "Jira base URL (https://...)")
+	authType := fs.String("auth-type", "", "auth type: basic, atlassian_api_token, or oauth1")
+	mirrorDir := fs.String("mirror-dir", "", "local mirror directory path")
+	var credentialRefs []string
+	fs.Func("credential-ref", "credential reference (env://... or file://...); may be repeated", func(v string) error {
+		credentialRefs = append(credentialRefs, v)
+		return nil
+	})
+	if err := fs.Parse(args); err != nil {
+		fmt.Fprintf(os.Stderr, "jirafs setup: invalid flags: %v\n", err)
+		return 1
+	}
+
+	// Validate required flags.
+	if *projectName == "" {
+		fmt.Fprintln(os.Stderr, "jirafs setup: --project is required")
+		return 1
+	}
+	if *projectKey == "" {
+		fmt.Fprintln(os.Stderr, "jirafs setup: --key is required")
+		return 1
+	}
+	if *instanceName == "" {
+		fmt.Fprintln(os.Stderr, "jirafs setup: --instance is required")
+		return 1
+	}
+	if *baseURL == "" {
+		fmt.Fprintln(os.Stderr, "jirafs setup: --base-url is required")
+		return 1
+	}
+	if *authType == "" {
+		fmt.Fprintln(os.Stderr, "jirafs setup: --auth-type is required")
+		return 1
+	}
+	if *mirrorDir == "" {
+		fmt.Fprintln(os.Stderr, "jirafs setup: --mirror-dir is required")
+		return 1
+	}
+	if *baseURL != "" && (!strings.HasPrefix(*baseURL, "http://") && !strings.HasPrefix(*baseURL, "https://")) {
+		fmt.Fprintf(os.Stderr, "jirafs setup: --base-url must start with http:// or https://\n")
+		return 1
+	}
+
+	// Load existing settings (or create fresh).
+	s, err := config.Load()
+	if err != nil {
+		// If the file doesn't exist, proceed with a fresh settings.
+		if !config.IsSettingError(err, config.ErrMissingField) {
+			fmt.Fprintf(os.Stderr, "jirafs setup: cannot load settings: %v\n", err)
+			return 1
+		}
+		// Missing file is OK — we'll create it.
+		s = &config.Settings{
+			Version:   1,
+			Instances: make(map[string]config.Instance),
+			Projects:  make(map[string]config.Project),
+		}
+	}
+
+	// Call SetupProject to record the instance and project.
+	if err := s.SetupProject(*instanceName, *projectName, *baseURL, *authType, *mirrorDir, credentialRefs); err != nil {
+		fmt.Fprintf(os.Stderr, "jirafs setup: %v\n", err)
+		return 1
+	}
+
+	fmt.Printf("jirafs: setup complete — instance %q, project %q (key %q)\n", *instanceName, *projectName, *projectKey)
+	return 0
+}
+
 func printHelp() {
 	fmt.Fprintln(os.Stderr, `Usage:
   jirafs <command> [arguments]
@@ -133,6 +226,7 @@ Commands:
   init       initialize a new jirafs project in the current directory
   export     export Jira issues into local Markdown files
   plan       show a sync plan without applying changes
+  setup      record Jira instance and project settings
   sync       apply a sync plan and push changes to Jira (real service path)
   new        create a new issue from a template
   registry   manage local registry files for typed references

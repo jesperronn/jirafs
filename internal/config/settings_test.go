@@ -1085,3 +1085,299 @@ local_dirs = [
 		t.Errorf("expected error code %q, got %v", ErrDuplicateLocalDir, err)
 	}
 }
+
+// TestSetupProjectCreatesNewFile verifies that SetupProject creates a
+// settings file from scratch when none exists.
+func TestSetupProjectCreatesNewFile(t *testing.T) {
+	tmpDir := t.TempDir()
+	homeDir := filepath.Join(tmpDir, "home")
+	jirafsDir := filepath.Join(homeDir, settingsDir)
+	if err := os.MkdirAll(jirafsDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("HOME", homeDir)
+
+	s := &Settings{
+		Version:   1,
+		Instances: make(map[string]Instance),
+		Projects:  make(map[string]Project),
+	}
+
+	err := s.SetupProject("work", "platform", "https://jira.example.com", "atlassian_api_token", filepath.Join(tmpDir, "mirror"), []string{"env://API_TOKEN"})
+	if err != nil {
+		t.Fatalf("SetupProject() error = %v", err)
+	}
+
+	// Verify the file was written.
+	data, err := os.ReadFile(filepath.Join(jirafsDir, settingsFile))
+	if err != nil {
+		t.Fatalf("ReadFile() error = %v", err)
+	}
+	text := string(data)
+	if !strings.Contains(text, "jira.example.com") {
+		t.Errorf("settings = %q, want base_url entry", text)
+	}
+	if !strings.Contains(text, "atlassian_api_token") {
+		t.Errorf("settings = %q, want auth_type entry", text)
+	}
+	if !strings.Contains(text, "project") {
+		t.Errorf("settings = %q, want project section", text)
+	}
+}
+
+// TestSetupProjectUpdatesExistingInstance verifies that when an instance
+// already exists, its base_url and auth_type are overwritten and
+// credential_refs are appended.
+func TestSetupProjectUpdatesExistingInstance(t *testing.T) {
+	tmpDir := t.TempDir()
+	homeDir := filepath.Join(tmpDir, "home")
+	jirafsDir := filepath.Join(homeDir, settingsDir)
+	if err := os.MkdirAll(jirafsDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("HOME", homeDir)
+
+	// Write an existing settings file with one instance.
+	existing := `
+version = 1
+
+[instances.work]
+base_url = "https://old.example.com"
+auth_type = "basic"
+credential_refs = [
+  "env://OLD_TOKEN",
+]
+
+[projects.legacy]
+key = "LEG"
+instance = "work"
+mirror_dir = "` + filepath.Join(tmpDir, "legacy-mirror") + `"
+`
+	if err := os.WriteFile(filepath.Join(jirafsDir, settingsFile), []byte(existing), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	s, err := Load()
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+
+	// Now setup a new project on the same instance.
+	err = s.SetupProject("work", "newproj", "https://new.example.com", "atlassian_api_token", filepath.Join(tmpDir, "new-mirror"), []string{"env://NEW_TOKEN"})
+	if err != nil {
+		t.Fatalf("SetupProject() error = %v", err)
+	}
+
+	// Reload and verify.
+	s2, err := Load()
+	if err != nil {
+		t.Fatalf("Reload Load() error = %v", err)
+	}
+
+	// Instance should be updated.
+	inst := s2.Instances["work"]
+	if inst.BaseURL != "https://new.example.com" {
+		t.Errorf("Instance.work.base_url = %q, want %q", inst.BaseURL, "https://new.example.com")
+	}
+	if inst.AuthType != "atlassian_api_token" {
+		t.Errorf("Instance.work.auth_type = %q, want %q", inst.AuthType, "atlassian_api_token")
+	}
+	// Credential refs should be appended (2 total: 1 old + 1 new).
+	if len(inst.CredentialRefs) != 2 {
+		t.Errorf("CredentialRefs count = %d, want 2", len(inst.CredentialRefs))
+	}
+
+	// Both projects should exist.
+	if _, ok := s2.Projects["legacy"]; !ok {
+		t.Error("missing project 'legacy'")
+	}
+	if _, ok := s2.Projects["newproj"]; !ok {
+		t.Error("missing project 'newproj'")
+	}
+}
+
+// TestSetupProjectUpdatesExistingProject verifies that when a project
+// already exists, its fields are overwritten.
+func TestSetupProjectUpdatesExistingProject(t *testing.T) {
+	tmpDir := t.TempDir()
+	homeDir := filepath.Join(tmpDir, "home")
+	jirafsDir := filepath.Join(homeDir, settingsDir)
+	if err := os.MkdirAll(jirafsDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("HOME", homeDir)
+
+	existing := `
+version = 1
+
+[instances.work]
+base_url = "https://old.example.com"
+auth_type = "basic"
+
+[projects.platform]
+key = "PLAT"
+instance = "work"
+mirror_dir = "` + filepath.Join(tmpDir, "old-mirror") + `"
+`
+	if err := os.WriteFile(filepath.Join(jirafsDir, settingsFile), []byte(existing), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	s, err := Load()
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+
+	err = s.SetupProject("work", "platform", "https://new.example.com", "atlassian_api_token", filepath.Join(tmpDir, "new-mirror"), nil)
+	if err != nil {
+		t.Fatalf("SetupProject() error = %v", err)
+	}
+
+	s2, err := Load()
+	if err != nil {
+		t.Fatalf("Reload Load() error = %v", err)
+	}
+
+	proj := s2.Projects["platform"]
+	if proj.MirrorDir != filepath.Join(tmpDir, "new-mirror") {
+		t.Errorf("Project.platform.mirror_dir = %q, want %q", proj.MirrorDir, filepath.Join(tmpDir, "new-mirror"))
+	}
+	if proj.Instance != "work" {
+		t.Errorf("Project.platform.instance = %q, want %q", proj.Instance, "work")
+	}
+}
+
+// TestSetupProjectFailsOnInvalidURL verifies that SetupProject returns
+// an error when the provided base_url is not a valid absolute URL.
+func TestSetupProjectFailsOnInvalidURL(t *testing.T) {
+	tmpDir := t.TempDir()
+	homeDir := filepath.Join(tmpDir, "home")
+	jirafsDir := filepath.Join(homeDir, settingsDir)
+	if err := os.MkdirAll(jirafsDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("HOME", homeDir)
+
+	s := &Settings{
+		Version:   1,
+		Instances: make(map[string]Instance),
+		Projects:  make(map[string]Project),
+	}
+
+	err := s.SetupProject("work", "platform", "not-a-url", "basic", filepath.Join(tmpDir, "mirror"), nil)
+	if err == nil {
+		t.Fatal("SetupProject() expected error for invalid URL, got nil")
+	}
+	if !IsSettingError(err, ErrInvalidURL) {
+		t.Errorf("expected error code %q, got %v", ErrInvalidURL, err)
+	}
+}
+
+// TestSetupProjectCreatesInstanceFirst verifies that SetupProject
+// creates the instance before validating the project reference,
+// so a project can reference an instance that doesn't yet exist.
+func TestSetupProjectCreatesInstanceFirst(t *testing.T) {
+	tmpDir := t.TempDir()
+	homeDir := filepath.Join(tmpDir, "home")
+	jirafsDir := filepath.Join(homeDir, settingsDir)
+	if err := os.MkdirAll(jirafsDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("HOME", homeDir)
+
+	s := &Settings{
+		Version:   1,
+		Instances: make(map[string]Instance),
+		Projects:  make(map[string]Project),
+	}
+
+	// SetupProject creates the instance first, then validates.
+	// So referencing a non-existent instance name is fine —
+	// the instance gets created as part of the same operation.
+	err := s.SetupProject("newinst", "platform", "https://jira.example.com", "basic", filepath.Join(tmpDir, "mirror"), nil)
+	if err != nil {
+		t.Fatalf("SetupProject() error = %v", err)
+	}
+
+	// Verify the instance was created.
+	data, err := os.ReadFile(filepath.Join(jirafsDir, settingsFile))
+	if err != nil {
+		t.Fatalf("ReadFile() error = %v", err)
+	}
+	text := string(data)
+	if !strings.Contains(text, "newinst") {
+		t.Errorf("settings = %q, want instance 'newinst'", text)
+	}
+}
+
+// TestSetupProjectFailsOnDuplicateMirrorDir verifies that SetupProject
+// returns an error when the new mirror_dir duplicates an existing one.
+func TestSetupProjectFailsOnDuplicateMirrorDir(t *testing.T) {
+	tmpDir := t.TempDir()
+	homeDir := filepath.Join(tmpDir, "home")
+	jirafsDir := filepath.Join(homeDir, settingsDir)
+	if err := os.MkdirAll(jirafsDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("HOME", homeDir)
+
+	mirrorDir := filepath.Join(tmpDir, "shared-mirror")
+	existing := `
+version = 1
+
+[instances.work]
+base_url = "https://jira.example.com"
+auth_type = "basic"
+
+[projects.platform]
+key = "PLAT"
+instance = "work"
+mirror_dir = "` + mirrorDir + `"
+`
+	if err := os.WriteFile(filepath.Join(jirafsDir, settingsFile), []byte(existing), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	s, err := Load()
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+
+	// Try to create a second project with the same mirror_dir.
+	err = s.SetupProject("work", "other", "https://other.example.com", "basic", mirrorDir, nil)
+	if err == nil {
+		t.Fatal("SetupProject() expected error for duplicate mirror_dir, got nil")
+	}
+	if !IsSettingError(err, ErrDuplicateMirrorDir) {
+		t.Errorf("expected error code %q, got %v", ErrDuplicateMirrorDir, err)
+	}
+}
+
+// TestSetupProjectNoFileCreatesMinimalSettings verifies that calling
+// SetupProject with no existing settings file creates a minimal valid
+// settings document with version 1.
+func TestSetupProjectNoFileCreatesMinimalSettings(t *testing.T) {
+	tmpDir := t.TempDir()
+	homeDir := filepath.Join(tmpDir, "home")
+	jirafsDir := filepath.Join(homeDir, settingsDir)
+	if err := os.MkdirAll(jirafsDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("HOME", homeDir)
+
+	s := &Settings{}
+
+	err := s.SetupProject("inst", "proj", "https://jira.example.com", "basic", filepath.Join(tmpDir, "mirror"), nil)
+	if err != nil {
+		t.Fatalf("SetupProject() error = %v", err)
+	}
+
+	data, err := os.ReadFile(filepath.Join(jirafsDir, settingsFile))
+	if err != nil {
+		t.Fatalf("ReadFile() error = %v", err)
+	}
+	text := string(data)
+	if !strings.Contains(text, "version = 1") {
+		t.Errorf("settings = %q, want version = 1", text)
+	}
+}
