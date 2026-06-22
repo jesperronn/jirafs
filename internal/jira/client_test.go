@@ -1407,3 +1407,217 @@ func TestUpdateIssueNotFound(t *testing.T) {
 		t.Fatal("expected not found error")
 	}
 }
+
+func TestBuildAuthenticatedRequestOAuth1(t *testing.T) {
+	creds := config.ResolvedInstanceCredentials{
+		AuthType: AuthTypeOAuth1,
+	}
+
+	req, _ := http.NewRequest(http.MethodGet, "https://jira.example.com/rest/api/3/issue/PROJ-1", nil)
+	_, err := BuildAuthenticatedRequest(req, creds)
+	if err == nil {
+		t.Fatal("expected error for oauth1 auth type")
+	}
+	if !contains(err.Error(), "oauth1") {
+		t.Errorf("error should mention oauth1, got %q", err.Error())
+	}
+	if !contains(err.Error(), "not yet implemented") {
+		t.Errorf("error should mention not yet implemented, got %q", err.Error())
+	}
+}
+
+func TestSearchIssuesNoCredentials(t *testing.T) {
+	payload := map[string]interface{}{
+		"total":    1,
+		"maxResults": 50,
+		"issues": []map[string]interface{}{
+			{
+				"id":   "10001",
+				"key":  "PROJ-10",
+				"fields": map[string]interface{}{
+					"issuetype": map[string]interface{}{
+						"name": "Story",
+					},
+					"summary": "Issue without credentials",
+				},
+			},
+		},
+	}
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(payload)
+	}))
+	defer server.Close()
+
+	client := NewJiraClient(server.URL)
+	// Intentionally NOT calling SetCredentials.
+
+	issues, err := client.SearchIssues(context.Background(), "my-issues")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(issues) != 1 {
+		t.Fatalf("expected 1 issue, got %d", len(issues))
+	}
+	if string(issues[0].Identity.Key) != "PROJ-10" {
+		t.Errorf("issue 0 key = %q, want %q", issues[0].Identity.Key, "PROJ-10")
+	}
+}
+
+func TestSearchIssuesForbidden(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusForbidden)
+		w.Write([]byte(`{"errorMessages":"Access denied"}`))
+	}))
+	defer server.Close()
+
+	client := NewJiraClient(server.URL)
+	client.SetCredentials(config.ResolvedInstanceCredentials{
+		AuthType: "basic",
+		Credential: config.ResolvedCredential{
+			Fields: map[string]string{
+				"username": "user@example.com",
+				"password": "secret",
+			},
+		},
+	})
+
+	_, err := client.SearchIssues(context.Background(), "my-issues")
+	if !IsClientError(err, ErrAuth) {
+		t.Errorf("expected auth error for 403, got %v", err)
+	}
+}
+
+func TestSearchIssuesNoCredentialsAuthError(t *testing.T) {
+	payload := map[string]interface{}{
+		"total":    0,
+		"maxResults": 50,
+		"issues":   []map[string]interface{}{},
+	}
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(payload)
+	}))
+	defer server.Close()
+
+	client := NewJiraClient(server.URL)
+	// Set credentials with missing required fields so
+	// BuildAuthenticatedRequest returns an error.
+	client.SetCredentials(config.ResolvedInstanceCredentials{
+		AuthType: "basic",
+		Credential: config.ResolvedCredential{
+			Fields: map[string]string{},
+		},
+	})
+
+	_, err := client.SearchIssues(context.Background(), "my-issues")
+	if !IsClientError(err, ErrUnknown) {
+		t.Errorf("expected unknown error for auth construction failure, got %v", err)
+	}
+}
+
+func TestUpdateIssueForbidden(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusForbidden)
+		w.Write([]byte(`{"errorMessages":"Permission denied"}`))
+	}))
+	defer server.Close()
+
+	client := NewJiraClient(server.URL)
+	client.SetCredentials(config.ResolvedInstanceCredentials{
+		AuthType: "basic",
+		Credential: config.ResolvedCredential{
+			Fields: map[string]string{
+				"username": "user@example.com",
+				"password": "secret",
+			},
+		},
+	})
+
+	_, err := client.UpdateIssue(context.Background(), "PROJ-42", &schema.Issue{
+		Identity: schema.IssueIdentity{Key: "PROJ-42"},
+	})
+	if !IsClientError(err, ErrAuth) {
+		t.Errorf("expected auth error for 403, got %v", err)
+	}
+}
+
+func TestUpdateIssueUnauthorized(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusUnauthorized)
+		w.Write([]byte(`{"errorMessages":"Unauthorized"}`))
+	}))
+	defer server.Close()
+
+	client := NewJiraClient(server.URL)
+	client.SetCredentials(config.ResolvedInstanceCredentials{
+		AuthType: "basic",
+		Credential: config.ResolvedCredential{
+			Fields: map[string]string{
+				"username": "user@example.com",
+				"password": "secret",
+			},
+		},
+	})
+
+	_, err := client.UpdateIssue(context.Background(), "PROJ-42", &schema.Issue{
+		Identity: schema.IssueIdentity{Key: "PROJ-42"},
+	})
+	if !IsClientError(err, ErrAuth) {
+		t.Errorf("expected auth error for 401, got %v", err)
+	}
+}
+
+func TestUpdateIssueInvalidJSON(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.Write([]byte(`not valid json`))
+	}))
+	defer server.Close()
+
+	client := NewJiraClient(server.URL)
+	client.SetCredentials(config.ResolvedInstanceCredentials{
+		AuthType: "basic",
+		Credential: config.ResolvedCredential{
+			Fields: map[string]string{
+				"username": "user@example.com",
+				"password": "secret",
+			},
+		},
+	})
+
+	_, err := client.UpdateIssue(context.Background(), "PROJ-42", &schema.Issue{
+		Identity: schema.IssueIdentity{Key: "PROJ-42"},
+	})
+	if !IsClientError(err, ErrUnknown) {
+		t.Errorf("expected unknown error for invalid JSON, got %v", err)
+	}
+}
+
+func TestUpdateIssueEmptyBody(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		// no body
+	}))
+	defer server.Close()
+
+	client := NewJiraClient(server.URL)
+	client.SetCredentials(config.ResolvedInstanceCredentials{
+		AuthType: "basic",
+		Credential: config.ResolvedCredential{
+			Fields: map[string]string{
+				"username": "user@example.com",
+				"password": "secret",
+			},
+		},
+	})
+
+	_, err := client.UpdateIssue(context.Background(), "PROJ-42", &schema.Issue{
+		Identity: schema.IssueIdentity{Key: "PROJ-42"},
+	})
+	if !IsClientError(err, ErrUnknown) {
+		t.Errorf("expected unknown error for empty body, got %v", err)
+	}
+}
