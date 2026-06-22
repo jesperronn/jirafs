@@ -61,7 +61,7 @@ Completed dependency IDs archived in [Ralph Task Archive](ralph-task-archive.md)
 - [x] B022b | B022a | `internal/schema/**`, `tests/schema/**` | Validate syncable, unsynced, archived, and draft states.
 - [x] B023a | B020c | `internal/registry/**`, `tests/registry/**` | Define user and project registry models.
 - [x] B023b | B023a | `internal/registry/**`, `tests/registry/**` | Define status, sprint, and fix-version registry models.
-- [ ] B024a | B021b | `internal/schema/**`, `tests/schema/**` | Define typed plan operation model for one editable field.
+- [x] B024a | B021b | `internal/schema/**`, `tests/schema/**` | Define typed plan operation model for one editable field.
 - [ ] B024b | B024a | `internal/schema/**`, `tests/schema/**` | Define conflict model without Jira transport dependencies.
 
 ## Codec
