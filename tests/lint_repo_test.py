@@ -163,6 +163,27 @@ class LintRepoRunTest(unittest.TestCase):
             with patch.object(lint_repo, "__file__", str(repo_root / "tools/lint_repo.py")):
                 self.assertEqual(lint_repo.main(), 1)
 
+    def test_main_prints_errors_to_stderr(self) -> None:
+        """Verify that main() prints lint errors to stderr when repo is dirty."""
+        with TemporaryDirectory() as tmp:
+            repo_root = Path(tmp)
+            build_repo(repo_root)
+            (repo_root / ".github/workflows/ci.yml").write_text(
+                "steps:\n  - run: python -m unittest\n",
+                encoding="utf-8",
+            )
+
+            # Patch sys.stderr to capture output.
+            import io
+
+            captured = io.StringIO()
+            with patch.object(lint_repo, "__file__", str(repo_root / "tools/lint_repo.py")):
+                with patch("sys.stderr", captured):
+                    lint_repo.main()
+
+            stderr_text = captured.getvalue()
+            self.assertIn("must run bin/lint and bin/test", stderr_text)
+
 
 if __name__ == "__main__":
     unittest.main()

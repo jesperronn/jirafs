@@ -424,6 +424,48 @@ ssl = true
 	}
 }
 
+func TestResolveFileCredentialTildeExpansion(t *testing.T) {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		t.Fatalf("UserHomeDir: %v", err)
+	}
+
+	// Create the credential file under the actual home directory
+	// so the tilde expansion resolves correctly.
+	credsDir := filepath.Join(home, ".jirafs-test-tilde")
+	if err := os.MkdirAll(credsDir, 0o755); err != nil {
+		t.Fatalf("setup: mkdir: %v", err)
+	}
+	credsFile := filepath.Join(credsDir, "creds.toml")
+	tomlContent := `api_token = "tilde-test-token"
+`
+	if err := os.WriteFile(credsFile, []byte(tomlContent), 0o644); err != nil {
+		t.Fatalf("setup: write temp file: %v", err)
+	}
+	t.Cleanup(func() {
+		_ = os.RemoveAll(credsDir)
+	})
+
+	// Construct a tilde-prefixed path that resolves to the home dir file.
+	// This exercises the tilde-expansion branch of ResolveFileCredential.
+	tildeTarget := "~/.jirafs-test-tilde/creds.toml"
+	ref := CredentialRef{Scheme: "file", Target: tildeTarget}
+
+	got, err := ResolveFileCredential(ref)
+	if err != nil {
+		t.Fatalf("ResolveFileCredential(%+v) unexpected error = %v", ref, err)
+	}
+	if got.Scheme != "file" {
+		t.Errorf("Scheme = %q, want %q", got.Scheme, "file")
+	}
+	if got.Target != tildeTarget {
+		t.Errorf("Target = %q, want %q", got.Target, tildeTarget)
+	}
+	if got.Fields["api_token"] != "tilde-test-token" {
+		t.Errorf("Fields[api_token] = %q, want %q", got.Fields["api_token"], "tilde-test-token")
+	}
+}
+
 func TestMergeCredentials(t *testing.T) {
 	tests := []struct {
 		name     string

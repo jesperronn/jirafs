@@ -582,6 +582,16 @@ func TestUseMalformedSettings(t *testing.T) {
 	}
 }
 
+func TestUseInvalidFlag(t *testing.T) {
+	output := runMainHelper(t, "use", "--bogus-flag")
+	if !strings.Contains(output.stderr, "flag provided but not defined") {
+		t.Fatalf("stderr = %q, want 'flag provided but not defined'", output.stderr)
+	}
+	if output.exitCode != 2 {
+		t.Fatalf("exitCode = %d, want 2 (flag.ExitOnError exits 2)", output.exitCode)
+	}
+}
+
 func runMainHelperWithHome(t *testing.T, home string, args ...string) helperOutput {
 	t.Helper()
 
