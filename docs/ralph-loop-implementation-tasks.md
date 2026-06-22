@@ -120,7 +120,7 @@ Completed dependency IDs archived in [Ralph Task Archive](ralph-task-archive.md)
 - [x] B081b | B081a,B053b | `internal/cli/**`, `tests/cli/**` | `jirafs mirror refresh` reports deterministic changed issue keys.
 - [x] B082a | B071a | `internal/cli/**`, `tests/cli/**` | `jirafs mirror archive-sweep` reports eligible actions without mutation.
 - [x] B082b | B082a | `internal/cli/**`, `tests/cli/**` | `jirafs mirror archive-sweep --apply` calls archive service interface.
-- [ ] B090a | B064a,B071a | `internal/archive/**`, `tests/archive/**` | Archive movement preserves issue snapshot files.
+- [x] B090a | B064a,B071a | `internal/archive/**`, `tests/archive/**` | Archive movement preserves issue snapshot files.
 - [ ] B090b | B090a,B071b | `internal/archive/**`, `tests/archive/**` | Archive movement preserves live membership rules.
 - [ ] B091a | B052a,B070b | `internal/board/**`, `tests/board/**` | Board groups mirror issues by status.
 - [ ] B091b | B091a,B052b | `internal/board/**`, `tests/board/**` | Board groups mirror issues by assignee and epic.

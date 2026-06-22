@@ -1,6 +1,14 @@
-// Package archive provides the archive service interface for moving
-// archive-eligible issues to the archive directory.
+// Package archive provides the archive service interface and filesystem-backed
+// movement for archive-eligible issue snapshots.
 package archive
+
+import (
+	"fmt"
+	"os"
+	"path/filepath"
+
+	"github.com/jirafs/jirafs/internal/schema"
+)
 
 // Service defines the interface for archive operations. Implementations
 // handle the actual file movement and metadata updates.
@@ -19,4 +27,41 @@ type ServiceFunc func(eligible string, mirrorDir, localDir, issuePath string) er
 // Archive implements Service.
 func (f ServiceFunc) Archive(eligible string, mirrorDir, localDir, issuePath string) error {
 	return f(eligible, mirrorDir, localDir, issuePath)
+}
+
+// FileService archives issue snapshots into a dedicated archive directory.
+type FileService struct {
+	ArchiveDir string
+}
+
+// Archive rewrites the issue into archived state, writes it into the archive
+// directory, and removes the live copy only after the snapshot write succeeds.
+func (s FileService) Archive(eligible string, mirrorDir, localDir, issuePath string) error {
+	if s.ArchiveDir == "" {
+		return fmt.Errorf("archive directory is empty")
+	}
+	if err := os.MkdirAll(s.ArchiveDir, 0o755); err != nil {
+		return fmt.Errorf("create archive directory: %w", err)
+	}
+
+	data, err := os.ReadFile(issuePath)
+	if err != nil {
+		return fmt.Errorf("read issue file: %w", err)
+	}
+
+	issue, parseErr := schema.ParseIssue(string(data))
+	if parseErr != nil {
+		return fmt.Errorf("parse issue file: %w", parseErr)
+	}
+
+	issue.RemoteMetadata.StateFile = string(schema.StateArchived)
+	snapshot := schema.RenderIssue(issue)
+	dest := filepath.Join(s.ArchiveDir, filepath.Base(issuePath))
+	if err := os.WriteFile(dest, []byte(snapshot), 0o644); err != nil {
+		return fmt.Errorf("write archived file: %w", err)
+	}
+	if err := os.Remove(issuePath); err != nil {
+		return fmt.Errorf("remove original file: %w", err)
+	}
+	return nil
 }

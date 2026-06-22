@@ -308,22 +308,10 @@ func buildMirrorClient(settings *config.Settings, ctx *context.Context, cwd stri
 }
 
 func buildArchiveService(settings *config.Settings, ctx *context.Context, cwd string) (archive.Service, error) {
-	return &realArchiveService{settings: settings, ctx: ctx, cwd: cwd}, nil
-}
-
-// realArchiveService implements archive.Service by moving issue files to the
-// archive directory.
-type realArchiveService struct {
-	settings *config.Settings
-	ctx      *context.Context
-	cwd      string
-}
-
-func (s *realArchiveService) Archive(eligible string, mirrorDir, localDir, issuePath string) error {
 	// Find the archive directory.
-	proj, ok := s.settings.Projects[s.ctx.Name]
+	proj, ok := settings.Projects[ctx.Name]
 	if !ok {
-		return fmt.Errorf("project %q not found in settings", s.ctx.Name)
+		return nil, fmt.Errorf("project %q not found in settings", ctx.Name)
 	}
 
 	var archiveDir string
@@ -337,34 +325,18 @@ func (s *realArchiveService) Archive(eligible string, mirrorDir, localDir, issue
 
 	if archiveDir == "" {
 		// Create the archive directory.
-		var baseDir string
 		for _, dir := range proj.LocalDirs {
 			candidate := filepath.Join(dir, "_archive")
 			if err := os.MkdirAll(candidate, 0o755); err == nil {
 				archiveDir = candidate
-				baseDir = dir
 				break
 			}
 		}
 		if archiveDir == "" {
-			return fmt.Errorf("cannot create archive directory")
+			return nil, fmt.Errorf("cannot create archive directory")
 		}
-		_ = baseDir
 	}
-
-	// Move the issue file to the archive directory.
-	dest := filepath.Join(archiveDir, filepath.Base(issuePath))
-	data, err := os.ReadFile(issuePath)
-	if err != nil {
-		return fmt.Errorf("read issue file: %w", err)
-	}
-	if err := os.WriteFile(dest, data, 0o644); err != nil {
-		return fmt.Errorf("write archived file: %w", err)
-	}
-	if err := os.Remove(issuePath); err != nil {
-		return fmt.Errorf("remove original file: %w", err)
-	}
-	return nil
+	return archive.FileService{ArchiveDir: archiveDir}, nil
 }
 
 func resolveMirrorContext(settings *config.Settings, project, cwd, subcommand string) (*context.Context, bool) {

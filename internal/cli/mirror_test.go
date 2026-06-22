@@ -884,6 +884,13 @@ Summary: Second issue
 	if _, err := os.Stat(filepath.Join(archiveDir, "TEST-2.md")); err != nil {
 		t.Fatalf("TEST-2.md should exist in archive: %v", err)
 	}
+	archivedData, err := os.ReadFile(filepath.Join(archiveDir, "TEST-1.md"))
+	if err != nil {
+		t.Fatalf("ReadFile archived TEST-1.md: %v", err)
+	}
+	if !strings.Contains(string(archivedData), "state: 'archived'") {
+		t.Fatalf("archived TEST-1.md = %q, want archived state", string(archivedData))
+	}
 
 	// Verify original files no longer exist in local.
 	if _, err := os.Stat(filepath.Join(localDir, "TEST-1.md")); !os.IsNotExist(err) {
