@@ -22,7 +22,7 @@ Completed dependency IDs archived in [Ralph Task Archive](ralph-task-archive.md)
 
 ## Foundation
 
-- [ ] B004a | B001 | `bin/**`, `tests/**`, `tools/**` | Add bash test runner and one passing shell-test fixture wired into `bin/test`.
+- [x] B004a | B001 | `bin/**`, `tests/**`, `tools/**` | Add bash test runner and one passing shell-test fixture wired into `bin/test`.
 - [ ] B004b | B004a | `bin/test`, `tests/**` | Bash-test `bin/test` argument handling: default behavior and invalid args.
 - [ ] B004c | B004a | `bin/lint`, `tests/**` | Bash-test `bin/lint` argument handling: default behavior and invalid args.
 - [ ] B004d | B004a | `bin/integrate_stream_commit`, `tests/**` | Bash-test clean-worktree guard and default `main` target behavior.
