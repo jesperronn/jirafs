@@ -170,3 +170,56 @@ Body.
 		t.Fatalf("live issue should still exist after failed archive: %v", statErr)
 	}
 }
+
+func TestFileService_Archive_ReturnsErrorWhenArchiveDirIsEmpty(t *testing.T) {
+	svc := FileService{ArchiveDir: ""}
+	err := svc.Archive("PROJ-1", "/mirror", "/local", "/local/PROJ-1.md")
+	if err == nil {
+		t.Fatal("expected error for empty archive directory")
+	}
+	if !strings.Contains(err.Error(), "archive directory is empty") {
+		t.Fatalf("error = %q, want 'archive directory is empty'", err.Error())
+	}
+}
+
+func TestFileService_Archive_ReturnsErrorWhenIssueFileMissing(t *testing.T) {
+	tmpDir := t.TempDir()
+	archiveDir := filepath.Join(tmpDir, "archive")
+
+	svc := FileService{ArchiveDir: archiveDir}
+	err := svc.Archive("PROJ-1", filepath.Join(tmpDir, "mirror"), tmpDir, "/nonexistent/PROJ-1.md")
+	if err == nil {
+		t.Fatal("expected error for missing issue file")
+	}
+	if !strings.Contains(err.Error(), "read issue file") {
+		t.Fatalf("error = %q, want 'read issue file'", err.Error())
+	}
+}
+
+func TestFileService_Archive_ReturnsErrorForInvalidIssueFile(t *testing.T) {
+	tmpDir := t.TempDir()
+	localDir := filepath.Join(tmpDir, "live")
+	if err := os.MkdirAll(localDir, 0o755); err != nil {
+		t.Fatalf("MkdirAll local: %v", err)
+	}
+
+	issuePath := filepath.Join(localDir, "PROJ-999.md")
+	invalid := `---
+this is not valid frontmatter
+---
+## Description
+Body.
+`
+	if err := os.WriteFile(issuePath, []byte(invalid), 0o644); err != nil {
+		t.Fatalf("WriteFile issue: %v", err)
+	}
+
+	svc := FileService{ArchiveDir: filepath.Join(localDir, "_archive")}
+	err := svc.Archive("PROJ-999", filepath.Join(tmpDir, "mirror"), localDir, issuePath)
+	if err == nil {
+		t.Fatal("expected error for invalid issue file")
+	}
+	if !strings.Contains(err.Error(), "parse issue file") {
+		t.Fatalf("error = %q, want 'parse issue file'", err.Error())
+	}
+}
