@@ -54,8 +54,8 @@ func TestShortHelpFlag(t *testing.T) {
 }
 
 func TestKnownCommandNotImplemented(t *testing.T) {
-	output := runMainHelper(t, "export")
-	if !strings.Contains(output.stderr, "jirafs export: not yet implemented") {
+	output := runMainHelper(t, "plan")
+	if !strings.Contains(output.stderr, "jirafs plan: not yet implemented") {
 		t.Fatalf("stderr = %q, want not-implemented message", output.stderr)
 	}
 	if output.exitCode != 1 {
