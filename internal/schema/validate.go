@@ -72,5 +72,80 @@ func (i Issue) Validate() []ValidationError {
 		}
 		errs = append(errs, ValidateSections(sectionNames)...)
 	}
+	errs = append(errs, i.RemoteMetadata.Validate()...)
 	return errs
+}
+
+// Validate checks that remote metadata is consistent with its derived state.
+// A synced issue must have RemoteVersion, ContentHash, and SyncTime set.
+// A draft issue must have StateFile set to "draft".
+// An archived issue must have StateFile set to "archived".
+// An unsynced issue is valid when IsZero() returns true.
+func (r RemoteMetadata) Validate() []ValidationError {
+	switch r.State() {
+	case StateSynced:
+		return r.validateSynced()
+	case StateDraft:
+		return r.validateDraft()
+	case StateArchived:
+		return r.validateArchived()
+	default:
+		return r.validateUnsynced()
+	}
+}
+
+func (r RemoteMetadata) validateSynced() []ValidationError {
+	var errs []ValidationError
+	if r.RemoteVersion == "" {
+		errs = append(errs, ValidationError{
+			Field: "remote_version",
+			Msg:   "synced state requires remote_version",
+		})
+	}
+	if r.ContentHash == "" {
+		errs = append(errs, ValidationError{
+			Field: "content_hash",
+			Msg:   "synced state requires content_hash",
+		})
+	}
+	if r.SyncTime.IsZero() {
+		errs = append(errs, ValidationError{
+			Field: "sync_time",
+			Msg:   "synced state requires sync_time",
+		})
+	}
+	return errs
+}
+
+func (r RemoteMetadata) validateDraft() []ValidationError {
+	if r.StateFile != "draft" {
+		return []ValidationError{{
+			Field: "state",
+			Msg:   "draft state requires state: draft",
+		}}
+	}
+	return nil
+}
+
+func (r RemoteMetadata) validateArchived() []ValidationError {
+	if r.StateFile != "archived" {
+		return []ValidationError{{
+			Field: "state",
+			Msg:   "archived state requires state: archived",
+		}}
+	}
+	return nil
+}
+
+func (r RemoteMetadata) validateUnsynced() []ValidationError {
+	// Unsynced state is valid when IsZero() returns true (no remote metadata).
+	// Partial metadata without a state file is also unsynced but represents
+	// a partial sync that should be caught separately.
+	if !r.IsZero() {
+		return []ValidationError{{
+			Field: "remote_metadata",
+			Msg:   "unsynced state with partial metadata is inconsistent",
+		}}
+	}
+	return nil
 }

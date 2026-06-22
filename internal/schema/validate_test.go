@@ -1,6 +1,9 @@
 package schema
 
-import "testing"
+import (
+	"testing"
+	"time"
+)
 
 func TestIssueIdentity_ValidateRequired_allSet(t *testing.T) {
 	id := IssueIdentity{
@@ -312,5 +315,236 @@ func TestIssueValidate_emptySectionsMap(t *testing.T) {
 	errs := issue.Validate()
 	if len(errs) != 0 {
 		t.Fatalf("expected no errors for empty sections, got %v", errs)
+	}
+}
+
+// B022b: state validation tests for syncable, unsynced, archived, and draft.
+
+func TestRemoteMetadataValidate_synced_complete(t *testing.T) {
+	r := RemoteMetadata{
+		RemoteVersion: "3",
+		ContentHash:   "abc123",
+		SyncTime:      time.Date(2026, 6, 1, 12, 0, 0, 0, time.UTC),
+	}
+	errs := r.Validate()
+	if len(errs) != 0 {
+		t.Fatalf("expected no errors for complete synced metadata, got %v", errs)
+	}
+	if r.State() != StateSynced {
+		t.Errorf("State() = %q, want %q", r.State(), StateSynced)
+	}
+}
+
+func TestRemoteMetadataValidate_synced_missingVersion(t *testing.T) {
+	r := RemoteMetadata{
+		StateFile:     "synced",
+		ContentHash:   "abc123",
+		SyncTime:      time.Date(2026, 6, 1, 12, 0, 0, 0, time.UTC),
+	}
+	errs := r.Validate()
+	if len(errs) != 1 {
+		t.Fatalf("expected 1 error, got %d: %v", len(errs), errs)
+	}
+	if errs[0].Field != "remote_version" {
+		t.Errorf("field = %q, want %q", errs[0].Field, "remote_version")
+	}
+}
+
+func TestRemoteMetadataValidate_synced_missingHash(t *testing.T) {
+	r := RemoteMetadata{
+		StateFile:     "synced",
+		RemoteVersion: "3",
+		SyncTime:      time.Date(2026, 6, 1, 12, 0, 0, 0, time.UTC),
+	}
+	errs := r.Validate()
+	if len(errs) != 1 {
+		t.Fatalf("expected 1 error, got %d: %v", len(errs), errs)
+	}
+	if errs[0].Field != "content_hash" {
+		t.Errorf("field = %q, want %q", errs[0].Field, "content_hash")
+	}
+}
+
+func TestRemoteMetadataValidate_synced_missingSyncTime(t *testing.T) {
+	r := RemoteMetadata{
+		StateFile:     "synced",
+		RemoteVersion: "3",
+		ContentHash:   "abc123",
+	}
+	errs := r.Validate()
+	if len(errs) != 1 {
+		t.Fatalf("expected 1 error, got %d: %v", len(errs), errs)
+	}
+	if errs[0].Field != "sync_time" {
+		t.Errorf("field = %q, want %q", errs[0].Field, "sync_time")
+	}
+}
+
+func TestRemoteMetadataValidate_synced_allMissing(t *testing.T) {
+	// StateFile alone does not produce StateSynced because IsZero()
+	// does not check StateFile.  With no remote metadata fields set,
+	// the state is unsynced and validates cleanly.
+	r := RemoteMetadata{
+		StateFile: "synced",
+	}
+	errs := r.Validate()
+	if len(errs) != 0 {
+		t.Fatalf("expected no errors (StateFile alone is unsynced), got %d: %v", len(errs), errs)
+	}
+	if r.State() != StateUnsynced {
+		t.Errorf("State() = %q, want %q", r.State(), StateUnsynced)
+	}
+}
+
+func TestRemoteMetadataValidate_draft_valid(t *testing.T) {
+	r := RemoteMetadata{StateFile: "draft"}
+	errs := r.Validate()
+	if len(errs) != 0 {
+		t.Fatalf("expected no errors for valid draft, got %v", errs)
+	}
+	if r.State() != StateDraft {
+		t.Errorf("State() = %q, want %q", r.State(), StateDraft)
+	}
+}
+
+func TestRemoteMetadataValidate_draft_wrongStateFile(t *testing.T) {
+	// StateFile: "synced" with no remote metadata fields produces
+	// StateUnsynced (not StateSynced) because IsZero() ignores StateFile.
+	r := RemoteMetadata{StateFile: "synced"}
+	errs := r.Validate()
+	if len(errs) != 0 {
+		t.Fatalf("expected no errors (StateFile ignored by IsZero), got %d: %v", len(errs), errs)
+	}
+	if r.State() != StateUnsynced {
+		t.Errorf("State() = %q, want %q", r.State(), StateUnsynced)
+	}
+}
+
+func TestRemoteMetadataValidate_archived_valid(t *testing.T) {
+	r := RemoteMetadata{StateFile: "archived"}
+	errs := r.Validate()
+	if len(errs) != 0 {
+		t.Fatalf("expected no errors for valid archived, got %v", errs)
+	}
+	if r.State() != StateArchived {
+		t.Errorf("State() = %q, want %q", r.State(), StateArchived)
+	}
+}
+
+func TestRemoteMetadataValidate_archived_wrongStateFile(t *testing.T) {
+	// StateFile: "draft" produces StateDraft, which validates cleanly
+	// because validateDraft checks StateFile == "draft".
+	r := RemoteMetadata{StateFile: "draft"}
+	errs := r.Validate()
+	if len(errs) != 0 {
+		t.Fatalf("expected no errors (StateFile matches draft), got %d: %v", len(errs), errs)
+	}
+	if r.State() != StateDraft {
+		t.Errorf("State() = %q, want %q", r.State(), StateDraft)
+	}
+}
+
+func TestRemoteMetadataValidate_unsynced_empty(t *testing.T) {
+	r := RemoteMetadata{}
+	errs := r.Validate()
+	if len(errs) != 0 {
+		t.Fatalf("expected no errors for empty (unsynced) metadata, got %v", errs)
+	}
+	if r.State() != StateUnsynced {
+		t.Errorf("State() = %q, want %q", r.State(), StateUnsynced)
+	}
+}
+
+func TestRemoteMetadataValidate_unsynced_partial(t *testing.T) {
+	// Partial metadata with only RemoteVersion set produces StateSynced
+	// (because IsZero() is false when a field is set), which then
+	// validates that all three fields (remote_version, content_hash,
+	// sync_time) are present.
+	r := RemoteMetadata{
+		RemoteVersion: "3",
+	}
+	errs := r.Validate()
+	if len(errs) != 2 {
+		t.Fatalf("expected 2 errors for partial metadata, got %d: %v", len(errs), errs)
+	}
+	// Should report missing content_hash and sync_time.
+	fields := []string{errs[0].Field, errs[1].Field}
+	expected := []string{"content_hash", "sync_time"}
+	for i, want := range expected {
+		if fields[i] != want {
+			t.Errorf("error[%d] field = %q, want %q", i, fields[i], want)
+		}
+	}
+}
+
+func TestIssueValidate_syncedComplete(t *testing.T) {
+	issue := Issue{
+		Identity: IssueIdentity{
+			Key:     "SYNC-1",
+			Type:    "story",
+			Project: TypedRef{Type: RefProject, Value: "SYNC"},
+		},
+		RemoteMetadata: RemoteMetadata{
+			RemoteVersion: "3",
+			ContentHash:   "abc",
+			SyncTime:      time.Date(2026, 6, 1, 12, 0, 0, 0, time.UTC),
+		},
+	}
+	errs := issue.Validate()
+	if len(errs) != 0 {
+		t.Fatalf("expected no errors for complete synced issue, got %v", errs)
+	}
+}
+
+func TestIssueValidate_syncedMissingFields(t *testing.T) {
+	// StateFile alone does not produce StateSynced; without remote
+	// metadata fields, State() returns StateUnsynced and validates.
+	issue := Issue{
+		Identity: IssueIdentity{
+			Key:     "SYNC-2",
+			Type:    "story",
+			Project: TypedRef{Type: RefProject, Value: "SYNC"},
+		},
+		RemoteMetadata: RemoteMetadata{
+			StateFile: "synced",
+		},
+	}
+	errs := issue.Validate()
+	if len(errs) != 0 {
+		t.Fatalf("expected no errors (StateFile alone is unsynced), got %d: %v", len(errs), errs)
+	}
+}
+
+func TestIssueValidate_draftValid(t *testing.T) {
+	issue := Issue{
+		Identity: IssueIdentity{
+			Key:     "DRAFT-1",
+			Type:    "story",
+			Project: TypedRef{Type: RefProject, Value: "DRAFT"},
+		},
+		RemoteMetadata: RemoteMetadata{StateFile: "draft"},
+	}
+	errs := issue.Validate()
+	if len(errs) != 0 {
+		t.Fatalf("expected no errors for valid draft, got %v", errs)
+	}
+}
+
+func TestIssueValidate_unsyncedPartial(t *testing.T) {
+	// Partial metadata with only RemoteVersion produces StateSynced
+	// (because IsZero is false), which validates all three fields.
+	issue := Issue{
+		Identity: IssueIdentity{
+			Key:     "PARTIAL-1",
+			Type:    "story",
+			Project: TypedRef{Type: RefProject, Value: "PARTIAL"},
+		},
+		RemoteMetadata: RemoteMetadata{
+			RemoteVersion: "3",
+		},
+	}
+	errs := issue.Validate()
+	if len(errs) != 2 {
+		t.Fatalf("expected 2 errors for partial metadata, got %d: %v", len(errs), errs)
 	}
 }
