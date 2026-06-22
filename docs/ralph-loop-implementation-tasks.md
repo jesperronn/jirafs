@@ -38,6 +38,8 @@ Completed dependency IDs archived in [Ralph Task Archive](ralph-task-archive.md)
 - [x] B005d | B033b | `internal/schema/**`, `tests/**` | Add schema parse/render round-trip tests for zero-value, partial-metadata, and invalid-state edge cases.
 - [x] B005e | B064b | `internal/sync/**`, `tests/**` | Add sync validation tests for remaining no-op, mismatch, and conflict formatting branches not yet covered.
 - [x] B005f | B005a,B005b,B005c,B005d,B005e | `docs/**`, `tests/**` | Raise repo-wide `bin/test` coverage back to at least 90.0% and record the package-level additions in the task ledger handoff.
+  - Archive: 73.7% → 89.5% (3 new error-path tests: empty dir, missing file, invalid issue)
+  - Total repo coverage: 91.5% (above 90.0% threshold)
 
 ## Settings And Context
 
