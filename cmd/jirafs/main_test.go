@@ -989,6 +989,154 @@ func TestSetupStoresInvalidCredentialRef(t *testing.T) {
 	}
 }
 
+// TestB018dSetupSetCurrentFlag verifies that when --set-current is
+// passed to the setup command, the resulting settings file contains
+// the project name as the remembered current_project.
+func TestB018dSetupSetCurrentFlag(t *testing.T) {
+	tmpDir := t.TempDir()
+	homeDir := filepath.Join(tmpDir, "home")
+	jirafsDir := filepath.Join(homeDir, settingsDir)
+	if err := os.MkdirAll(jirafsDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	output := runMainHelperWithHome(t, homeDir, "setup",
+		"--project", "platform",
+		"--key", "PLAT",
+		"--instance", "work",
+		"--base-url", "https://jira.example.com",
+		"--auth-type", "atlassian_api_token",
+		"--mirror-dir", filepath.Join(tmpDir, "mirror"),
+		"--set-current",
+	)
+	if output.exitCode != 0 {
+		t.Fatalf("exitCode = %d, want 0, stderr = %q", output.exitCode, output.stderr)
+	}
+
+	// Verify the settings file contains the current_project field.
+	data, err := os.ReadFile(filepath.Join(jirafsDir, settingsFile))
+	if err != nil {
+		t.Fatalf("ReadFile() error = %v", err)
+	}
+	text := string(data)
+	if !strings.Contains(text, "current_project = 'platform'") {
+		t.Errorf("settings = %q, want current_project = 'platform'", text)
+	}
+}
+
+// TestB018dSetupSetCurrentOnExistingSettings verifies that --set-current
+// updates the current_project in an existing settings file without
+// losing other projects.
+func TestB018dSetupSetCurrentOnExistingSettings(t *testing.T) {
+	tmpDir := t.TempDir()
+	homeDir := filepath.Join(tmpDir, "home")
+	jirafsDir := filepath.Join(homeDir, settingsDir)
+	if err := os.MkdirAll(jirafsDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	// Write an existing settings file with a different current_project.
+	existing := `
+version = 1
+
+[instances.work]
+base_url = "https://jira.example.com"
+auth_type = "atlassian_api_token"
+
+[projects.legacy]
+key = "LEG"
+instance = "work"
+mirror_dir = "` + filepath.Join(tmpDir, "legacy-mirror") + `"
+
+[state]
+current_project = "legacy"
+`
+	if err := os.WriteFile(filepath.Join(jirafsDir, settingsFile), []byte(existing), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	// Create the legacy mirror directory so validation passes.
+	if err := os.MkdirAll(filepath.Join(tmpDir, "legacy-mirror"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	// Run setup with --set-current to add a new project and set it as current.
+	output := runMainHelperWithHome(t, homeDir, "setup",
+		"--project", "newproj",
+		"--key", "NP",
+		"--instance", "work",
+		"--base-url", "https://new.example.com",
+		"--auth-type", "atlassian_api_token",
+		"--mirror-dir", filepath.Join(tmpDir, "new-mirror"),
+		"--set-current",
+	)
+	if output.exitCode != 0 {
+		t.Fatalf("exitCode = %d, want 0, stderr = %q", output.exitCode, output.stderr)
+	}
+
+	// Verify the settings file has the new project AND updated current_project.
+	data, err := os.ReadFile(filepath.Join(jirafsDir, settingsFile))
+	if err != nil {
+		t.Fatalf("ReadFile() error = %v", err)
+	}
+	text := string(data)
+	if !strings.Contains(text, "legacy") {
+		t.Errorf("settings = %q, want legacy project preserved", text)
+	}
+	if !strings.Contains(text, "newproj") {
+		t.Errorf("settings = %q, want newproj project", text)
+	}
+	if !strings.Contains(text, "current_project = 'newproj'") {
+		t.Errorf("settings = %q, want current_project = 'newproj'", text)
+	}
+}
+
+// TestB018dSetupWithoutSetCurrentPreservesNoState verifies that without
+// --set-current, the setup command does NOT write a current_project.
+func TestB018dSetupWithoutSetCurrentPreservesNoState(t *testing.T) {
+	tmpDir := t.TempDir()
+	homeDir := filepath.Join(tmpDir, "home")
+	jirafsDir := filepath.Join(homeDir, settingsDir)
+	if err := os.MkdirAll(jirafsDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	// Write an existing settings file with no current_project.
+	existing := `
+version = 1
+
+[instances.work]
+base_url = "https://jira.example.com"
+auth_type = "atlassian_api_token"
+`
+	if err := os.WriteFile(filepath.Join(jirafsDir, settingsFile), []byte(existing), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	// Run setup WITHOUT --set-current.
+	output := runMainHelperWithHome(t, homeDir, "setup",
+		"--project", "platform",
+		"--key", "PLAT",
+		"--instance", "work",
+		"--base-url", "https://jira.example.com",
+		"--auth-type", "atlassian_api_token",
+		"--mirror-dir", filepath.Join(tmpDir, "mirror"),
+	)
+	if output.exitCode != 0 {
+		t.Fatalf("exitCode = %d, want 0, stderr = %q", output.exitCode, output.stderr)
+	}
+
+	// Verify the settings file does NOT have a non-empty current_project.
+	data, err := os.ReadFile(filepath.Join(jirafsDir, settingsFile))
+	if err != nil {
+		t.Fatalf("ReadFile() error = %v", err)
+	}
+	text := string(data)
+	if strings.Contains(text, "current_project = '" ) && !strings.Contains(text, "current_project = ''") {
+		t.Errorf("settings = %q, should not have a non-empty current_project when --set-current is omitted", text)
+	}
+}
+
 func TestSetupFailsOnUncreatableMirrorDirectory(t *testing.T) {
 	tmpDir := t.TempDir()
 	homeDir := filepath.Join(tmpDir, "home")

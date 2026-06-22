@@ -246,13 +246,33 @@ func (s *Settings) expandPaths() error {
 }
 
 // SaveState writes the current State back to the settings file.
+// It preserves existing instances and projects by loading the file first,
+// updating only the state, and writing the full file.
 func (s *Settings) SaveState() error {
 	path, err := settingsPath()
 	if err != nil {
 		return NewSettingError(ErrMissingField, "home directory is not set", "home", "")
 	}
 
-	data, err := toml.Marshal(s)
+	// Load existing settings to preserve instances and projects.
+	existing, err := s.loadOrCreate()
+	if err != nil {
+		return err
+	}
+
+	// Update only the state.
+	existing.State = s.State
+
+	// Write the full settings file using SettingsTOML which has proper TOML
+	// tags for Instances and Projects.
+	toM := SettingsTOML{
+		Version:   existing.Version,
+		Instances: existing.Instances,
+		Projects:  existing.Projects,
+		State:     existing.State,
+	}
+
+	data, err := toml.Marshal(toM)
 	if err != nil {
 		return NewSettingError(ErrMissingField, "cannot marshal settings: "+err.Error(), "state", "")
 	}

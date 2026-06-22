@@ -138,12 +138,17 @@ func runUse(args []string) int {
 //  - --base-url <URL>: the Jira base URL
 //  - --auth-type <type>: the auth type (basic, atlassian_api_token, oauth1)
 //  - --credential-ref <ref>: one credential reference (can be repeated)
+//  - --set-current: also set the remembered current project (B018d)
 //
 // Example:
 //
 //	jirafs setup --project platform --key PLAT --instance work \\
 //	  --base-url https://jira.example.com --auth-type atlassian_api_token \\
 //	  --credential-ref env://JIRAFS_API_TOKEN
+//
+// With --set-current, the setup command also records the project as the
+// remembered current project so the first export/refresh flow works
+// without extra flags.
 func runSetup(args []string) int {
 	fs := flag.NewFlagSet("setup", flag.ExitOnError)
 	projectName := fs.String("project", "", "settings key for the project entry")
@@ -152,6 +157,7 @@ func runSetup(args []string) int {
 	baseURL := fs.String("base-url", "", "Jira base URL (https://...)")
 	authType := fs.String("auth-type", "", "auth type: basic, atlassian_api_token, or oauth1")
 	mirrorDir := fs.String("mirror-dir", "", "local mirror directory path")
+	setCurrent := fs.Bool("set-current", false, "also set the remembered current project (B018d)")
 	var credentialRefs []string
 	fs.Func("credential-ref", "credential reference (env://... or file://...); may be repeated", func(v string) error {
 		credentialRefs = append(credentialRefs, v)
@@ -220,6 +226,15 @@ func runSetup(args []string) int {
 	if err := s.SetupProject(*instanceName, *projectName, *baseURL, *authType, *mirrorDir, credentialRefs); err != nil {
 		fmt.Fprintf(os.Stderr, "jirafs setup: %v\n", err)
 		return 1
+	}
+
+	// Optionally set the remembered current project (B018d).
+	if *setCurrent {
+		s.State.CurrentProject = *projectName
+		if err := s.SaveState(); err != nil {
+			fmt.Fprintf(os.Stderr, "jirafs setup: cannot save state: %v\n", err)
+			return 1
+		}
 	}
 
 	fmt.Printf("jirafs: setup complete — instance %q, project %q (key %q)\n", *instanceName, *projectName, *projectKey)

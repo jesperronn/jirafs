@@ -19,7 +19,7 @@ Task format:
 Completed dependency IDs archived in [Ralph Task Archive](ralph-task-archive.md):
 `B001`, `B002`, `B003`, `B010`, `B011`, `B012`, `B013`, `B014`, `B020a`,
 `B020b`, `B020c`, `B004b`, `B005a`, `B005e`, `B005f`, `B021b`, `B022b`, `B023a`,
-`B018a`, `B018b`.
+`B018a`, `B018b`, `B018c`, `B018d`.
 
 ## Foundation
 
@@ -48,7 +48,7 @@ Completed dependency IDs archived in [Ralph Task Archive](ralph-task-archive.md)
 - [x] B018a | B017h | `cmd/jirafs/**`, `internal/config/**`, `tests/**` | Add a setup helper that records Jira base URL, mirror directory, and auth source for one named project.
 - [x] B018b | B018a | `cmd/jirafs/**`, `internal/config/**`, `internal/context/**`, `tests/**` | Setup helper creates or validates the target mirror directory and writes a working settings file skeleton.
 - [x] B018c | B018b | `cmd/jirafs/**`, `internal/config/**`, `tests/**` | Setup helper supports API token configuration through `env://` or `file://` credential refs with clear operator guidance.
-- [ ] B018d | B018c,B080a | `cmd/jirafs/**`, `internal/context/**`, `tests/**` | Setup helper can set the remembered current project so the first export/refresh flow works without extra flags.
+- [x] B018d | B018c,B080a | `cmd/jirafs/**`, `internal/context/**`, `tests/**` | Setup helper can set the remembered current project so the first export/refresh flow works without extra flags.
 
 ## Schema
 
