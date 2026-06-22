@@ -785,6 +785,118 @@ func TestSetupFailsOnMissingFile(t *testing.T) {
 	}
 }
 
+func TestSetupCreatesMirrorDirectory(t *testing.T) {
+	tmpDir := t.TempDir()
+	homeDir := filepath.Join(tmpDir, "home")
+	jirafsDir := filepath.Join(homeDir, settingsDir)
+	if err := os.MkdirAll(jirafsDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	mirrorDir := filepath.Join(tmpDir, "mirror", "subdir", "nested")
+
+	// The mirror directory does NOT exist yet.
+	output := runMainHelperWithHome(t, homeDir, "setup",
+		"--project", "platform",
+		"--key", "PLAT",
+		"--instance", "work",
+		"--base-url", "https://jira.example.com",
+		"--auth-type", "atlassian_api_token",
+		"--mirror-dir", mirrorDir,
+	)
+	if output.exitCode != 0 {
+		t.Fatalf("exitCode = %d, want 0, stderr = %q", output.exitCode, output.stderr)
+	}
+
+	// Verify the mirror directory was created.
+	if _, err := os.Stat(mirrorDir); os.IsNotExist(err) {
+		t.Fatalf("mirror directory %q was not created", mirrorDir)
+	}
+
+	// Verify it's a directory (not a file).
+	info, err := os.Stat(mirrorDir)
+	if err != nil {
+		t.Fatalf("Stat(mirrorDir) error = %v", err)
+	}
+	if !info.IsDir() {
+		t.Fatalf("mirror path is not a directory")
+	}
+}
+
+func TestSetupPreservesExistingMirrorDirectory(t *testing.T) {
+	tmpDir := t.TempDir()
+	homeDir := filepath.Join(tmpDir, "home")
+	jirafsDir := filepath.Join(homeDir, settingsDir)
+	if err := os.MkdirAll(jirafsDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	// Create the mirror directory beforehand with some content.
+	mirrorDir := filepath.Join(tmpDir, "mirror")
+	if err := os.MkdirAll(mirrorDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	// Write a file inside the mirror dir to prove it was pre-existing.
+	if err := os.WriteFile(filepath.Join(mirrorDir, "README.md"), []byte("existing"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	output := runMainHelperWithHome(t, homeDir, "setup",
+		"--project", "platform",
+		"--key", "PLAT",
+		"--instance", "work",
+		"--base-url", "https://jira.example.com",
+		"--auth-type", "atlassian_api_token",
+		"--mirror-dir", mirrorDir,
+	)
+	if output.exitCode != 0 {
+		t.Fatalf("exitCode = %d, want 0, stderr = %q", output.exitCode, output.stderr)
+	}
+
+	// Verify the pre-existing file is still there.
+	if _, err := os.Stat(filepath.Join(mirrorDir, "README.md")); os.IsNotExist(err) {
+		t.Fatal("pre-existing file in mirror directory was lost")
+	}
+}
+
+func TestSetupFailsOnUncreatableMirrorDirectory(t *testing.T) {
+	tmpDir := t.TempDir()
+	homeDir := filepath.Join(tmpDir, "home")
+	jirafsDir := filepath.Join(homeDir, settingsDir)
+	if err := os.MkdirAll(jirafsDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	// Create a file where a parent component of the mirror directory should be.
+	// When runSetup tries to create the mirror directory, MkdirAll will fail
+	// because "nested" is a file, not a directory.
+	conflictParent := filepath.Join(tmpDir, "mirror")
+	if err := os.MkdirAll(conflictParent, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	conflictFile := filepath.Join(conflictParent, "nested")
+	if err := os.WriteFile(conflictFile, []byte("file"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	// The mirror dir is a subpath of the file — MkdirAll will fail.
+	conflictPath := filepath.Join(conflictFile, "child")
+
+	output := runMainHelperWithHome(t, homeDir, "setup",
+		"--project", "platform",
+		"--key", "PLAT",
+		"--instance", "work",
+		"--base-url", "https://jira.example.com",
+		"--auth-type", "atlassian_api_token",
+		"--mirror-dir", conflictPath,
+	)
+	if output.exitCode != 1 {
+		t.Fatalf("exitCode = %d, want 1", output.exitCode)
+	}
+	if !strings.Contains(output.stderr, "cannot create mirror directory") {
+		t.Fatalf("stderr = %q, want 'cannot create mirror directory'", output.stderr)
+	}
+}
+
 func runMainHelperWithHome(t *testing.T, home string, args ...string) helperOutput {
 	t.Helper()
 

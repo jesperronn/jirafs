@@ -192,6 +192,14 @@ func runSetup(args []string) int {
 		return 1
 	}
 
+	// Create or validate the mirror directory before persisting settings.
+	if _, err := os.Stat(*mirrorDir); os.IsNotExist(err) || isNotADirectory(err) {
+		if err := os.MkdirAll(*mirrorDir, 0o755); err != nil {
+			fmt.Fprintf(os.Stderr, "jirafs setup: cannot create mirror directory %q: %v\n", *mirrorDir, err)
+			return 1
+		}
+	}
+
 	// Load existing settings (or create fresh).
 	s, err := config.Load()
 	if err != nil {
@@ -216,6 +224,16 @@ func runSetup(args []string) int {
 
 	fmt.Printf("jirafs: setup complete — instance %q, project %q (key %q)\n", *instanceName, *projectName, *projectKey)
 	return 0
+}
+
+// isNotADirectory reports whether err is a "not a directory" error.
+// This happens when os.Stat encounters a path where a parent component
+// is a file (e.g. "file/child" where "file" is a regular file).
+func isNotADirectory(err error) bool {
+	if err == nil {
+		return false
+	}
+	return strings.Contains(err.Error(), "not a directory")
 }
 
 func printHelp() {
