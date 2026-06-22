@@ -54,7 +54,7 @@ Completed dependency IDs archived in [Ralph Task Archive](ralph-task-archive.md)
 - [x] B021a | B020c | `internal/schema/**`, `tests/schema/**` | Define issue identity and machine-owned frontmatter fields.
 - [x] B021b | B021a | `internal/schema/**`, `tests/schema/**` | Define editable issue fields and fixed section names.
 - [x] B021c | B021b | `internal/schema/**`, `tests/schema/**` | Validate required issue fields and unknown sections.
-- [ ] B022a | B021a | `internal/schema/**`, `tests/schema/**` | Define remote version, content hash, and sync timestamp metadata.
+- [x] B022a | B021a | `internal/schema/**`, `tests/schema/**` | Define remote version, content hash, and sync timestamp metadata.
 - [ ] B022b | B022a | `internal/schema/**`, `tests/schema/**` | Validate syncable, unsynced, archived, and draft states.
 - [ ] B023a | B020c | `internal/schema/**`, `tests/schema/**` | Define user and project registry models.
 - [ ] B023b | B023a | `internal/schema/**`, `tests/schema/**` | Define status, sprint, and fix-version registry models.
