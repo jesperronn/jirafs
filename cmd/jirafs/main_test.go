@@ -859,6 +859,136 @@ func TestSetupPreservesExistingMirrorDirectory(t *testing.T) {
 	}
 }
 
+// TestSetupWithFileCredentialRef verifies that the setup command
+// accepts file:// credential refs and writes them into the settings file.
+func TestSetupWithFileCredentialRef(t *testing.T) {
+	tmpDir := t.TempDir()
+	homeDir := filepath.Join(tmpDir, "home")
+	jirafsDir := filepath.Join(homeDir, settingsDir)
+	if err := os.MkdirAll(jirafsDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	// Create a TOML credential file to reference.
+	credsFile := filepath.Join(tmpDir, "creds.toml")
+	credsContent := `api_token = "file-token-value"
+`
+	if err := os.WriteFile(credsFile, []byte(credsContent), 0o644); err != nil {
+		t.Fatalf("setup: write creds file: %v", err)
+	}
+
+	output := runMainHelperWithHome(t, homeDir, "setup",
+		"--project", "platform",
+		"--key", "PLAT",
+		"--instance", "work",
+		"--base-url", "https://jira.example.com",
+		"--auth-type", "atlassian_api_token",
+		"--mirror-dir", filepath.Join(tmpDir, "mirror"),
+		"--credential-ref", "file://"+credsFile,
+	)
+	if output.exitCode != 0 {
+		t.Fatalf("exitCode = %d, want 0, stderr = %q", output.exitCode, output.stderr)
+	}
+	if !strings.Contains(output.stderr, "setup complete") {
+		t.Fatalf("stderr = %q, want 'setup complete'", output.stderr)
+	}
+
+	// Verify the settings file contains the file:// credential ref.
+	data, err := os.ReadFile(filepath.Join(jirafsDir, settingsFile))
+	if err != nil {
+		t.Fatalf("ReadFile() error = %v", err)
+	}
+	text := string(data)
+	if !strings.Contains(text, credsFile) {
+		t.Errorf("settings = %q, want credential_refs entry with %q", text, credsFile)
+	}
+	if !strings.Contains(text, "atlassian_api_token") {
+		t.Errorf("settings = %q, want auth_type entry", text)
+	}
+}
+
+// TestSetupWithMultipleCredentialRefs verifies that the setup command
+// accepts multiple --credential-ref flags and appends all of them.
+func TestSetupWithMultipleCredentialRefs(t *testing.T) {
+	tmpDir := t.TempDir()
+	homeDir := filepath.Join(tmpDir, "home")
+	jirafsDir := filepath.Join(homeDir, settingsDir)
+	if err := os.MkdirAll(jirafsDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	// Create a TOML credential file.
+	credsFile := filepath.Join(tmpDir, "creds.toml")
+	credsContent := `api_token = "file-token"
+`
+	if err := os.WriteFile(credsFile, []byte(credsContent), 0o644); err != nil {
+		t.Fatalf("setup: write creds file: %v", err)
+	}
+
+	output := runMainHelperWithHome(t, homeDir, "setup",
+		"--project", "platform",
+		"--key", "PLAT",
+		"--instance", "work",
+		"--base-url", "https://jira.example.com",
+		"--auth-type", "atlassian_api_token",
+		"--mirror-dir", filepath.Join(tmpDir, "mirror"),
+		"--credential-ref", "env://API_TOKEN",
+		"--credential-ref", "file://"+credsFile,
+	)
+	if output.exitCode != 0 {
+		t.Fatalf("exitCode = %d, want 0, stderr = %q", output.exitCode, output.stderr)
+	}
+
+	// Verify the settings file contains both credential refs.
+	data, err := os.ReadFile(filepath.Join(jirafsDir, settingsFile))
+	if err != nil {
+		t.Fatalf("ReadFile() error = %v", err)
+	}
+	text := string(data)
+	if !strings.Contains(text, "API_TOKEN") {
+		t.Errorf("settings = %q, want env:// credential ref", text)
+	}
+	if !strings.Contains(text, credsFile) {
+		t.Errorf("settings = %q, want file:// credential ref", text)
+	}
+}
+
+// TestSetupStoresInvalidCredentialRef verifies that the setup command
+// stores invalid credential refs in the settings file without rejecting
+// them at CLI time — validation happens at resolve time via
+// ResolveInstanceCredentials.
+func TestSetupStoresInvalidCredentialRef(t *testing.T) {
+	tmpDir := t.TempDir()
+	homeDir := filepath.Join(tmpDir, "home")
+	jirafsDir := filepath.Join(homeDir, settingsDir)
+	if err := os.MkdirAll(jirafsDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	output := runMainHelperWithHome(t, homeDir, "setup",
+		"--project", "platform",
+		"--key", "PLAT",
+		"--instance", "work",
+		"--base-url", "https://jira.example.com",
+		"--auth-type", "atlassian_api_token",
+		"--mirror-dir", filepath.Join(tmpDir, "mirror"),
+		"--credential-ref", "vault://secret/jira",
+	)
+	if output.exitCode != 0 {
+		t.Fatalf("exitCode = %d, want 0, stderr = %q", output.exitCode, output.stderr)
+	}
+
+	// Verify the invalid ref was stored in the settings file.
+	data, err := os.ReadFile(filepath.Join(jirafsDir, settingsFile))
+	if err != nil {
+		t.Fatalf("ReadFile() error = %v", err)
+	}
+	text := string(data)
+	if !strings.Contains(text, "vault://secret/jira") {
+		t.Errorf("settings = %q, want credential_refs entry with vault:// ref", text)
+	}
+}
+
 func TestSetupFailsOnUncreatableMirrorDirectory(t *testing.T) {
 	tmpDir := t.TempDir()
 	homeDir := filepath.Join(tmpDir, "home")
