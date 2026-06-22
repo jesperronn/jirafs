@@ -18,7 +18,7 @@ func main() {
 	switch os.Args[1] {
 	case "help":
 		printHelp()
-	case "init", "plan", "sync", "new", "registry", "board", "archive":
+	case "init", "sync", "new", "registry", "board", "archive":
 		fmt.Fprintf(os.Stderr, "jirafs %s: not yet implemented\n", os.Args[1])
 		os.Exit(1)
 	case "use":
@@ -27,6 +27,8 @@ func main() {
 		os.Exit(cli.RunMirror(os.Args[2:]))
 	case "export":
 		os.Exit(cli.RunExport(os.Args[2:]))
+	case "plan":
+		os.Exit(cli.RunPlan(os.Args[2:]))
 	case "--help", "-h":
 		printHelp()
 	default:
