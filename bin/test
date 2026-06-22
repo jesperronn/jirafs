@@ -2,6 +2,44 @@
 
 set -euo pipefail
 
+# Usage: bin/test [--help] [--package PKG]
+#   --help          Print usage and exit.
+#   --package PKG   Run only tests matching the Go package PKG.
+
+usage() {
+    cat >&2 <<EOF
+Usage: $(basename "$0") [OPTIONS]
+
+Options:
+  --help          Show this help message and exit.
+  --package PKG   Run only tests matching the Go package PKG.
+EOF
+    exit 0
+}
+
+# Parse arguments.
+PACKAGE=""
+while [ $# -gt 0 ]; do
+    case "$1" in
+        --help|-h)
+            usage
+            ;;
+        --package)
+            shift
+            if [ $# -eq 0 ] || [[ "$1" == -* ]]; then
+                echo "error: --package requires a PKG argument" >&2
+                exit 1
+            fi
+            PACKAGE="$1"
+            ;;
+        *)
+            echo "error: unknown argument: $1" >&2
+            exit 1
+            ;;
+    esac
+    shift
+done
+
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "${REPO_ROOT}"
 
@@ -10,5 +48,11 @@ export PYTHONPATH="${REPO_ROOT}"
 # Run shell-test fixtures.
 bash tests/run_shell_tests.sh
 
+# Build the Go test invocation.
+GO_TEST_ARGS=(./...)
+if [ -n "${PACKAGE}" ]; then
+    GO_TEST_ARGS=("${PACKAGE}")
+fi
+
 # Run repository tests with combined Go and Python coverage gate.
-python3 tools/coverage_gate.py 90
+python3 tools/coverage_gate.py 90 "${GO_TEST_ARGS[@]}"

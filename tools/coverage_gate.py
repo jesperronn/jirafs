@@ -115,7 +115,10 @@ def parse_go_cover_output(output: str) -> tuple[int, int]:
     return covered, total
 
 
-def run_go_tests_with_coverage(repo_root: Path) -> tuple[int, int, str]:
+def run_go_tests_with_coverage(
+    repo_root: Path,
+    packages: list[str] | None = None,
+) -> tuple[int, int, str]:
     """Run Go tests with a cover profile and return covered/total statements."""
     with tempfile.NamedTemporaryFile(
         prefix="jirafs-go-cover-", suffix=".out", delete=False
@@ -123,8 +126,13 @@ def run_go_tests_with_coverage(repo_root: Path) -> tuple[int, int, str]:
         coverprofile = Path(tmp.name)
 
     try:
+        go_args = ["go", "test", f"-coverprofile={coverprofile}"]
+        if packages:
+            go_args.extend(packages)
+        else:
+            go_args.append("./...")
         subprocess.run(
-            ["go", "test", f"-coverprofile={coverprofile}", "./..."],
+            go_args,
             cwd=repo_root,
             check=True,
         )
@@ -146,8 +154,15 @@ def main(argv: list[str] | None = None) -> int:
     args = argv or sys.argv[1:]
     minimum = float(args[0]) if args else 90.0
     repo_root = Path(__file__).resolve().parent.parent
+    extra_packages: list[str] = []
+    i = 1
+    while i < len(args):
+        extra_packages.append(args[i])
+        i += 1
 
-    go_hit, go_total, go_row = run_go_tests_with_coverage(repo_root)
+    go_hit, go_total, go_row = run_go_tests_with_coverage(
+        repo_root, extra_packages or None
+    )
     result, tracer = run_suite_with_trace(repo_root)
     if not result.wasSuccessful():
         return 1
