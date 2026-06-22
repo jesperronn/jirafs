@@ -7,5 +7,8 @@ cd "${REPO_ROOT}"
 
 export PYTHONPATH="${REPO_ROOT}"
 
+# Run shell-test fixtures.
+bash tests/run_shell_tests.sh
+
 # Run repository tests with combined Go and Python coverage gate.
 python3 tools/coverage_gate.py 90
