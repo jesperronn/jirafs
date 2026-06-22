@@ -2,6 +2,33 @@
 
 set -euo pipefail
 
+# Usage: bin/lint [--help]
+#   --help    Print usage and exit.
+
+usage() {
+    cat >&2 <<EOF
+Usage: $(basename "$0") [OPTIONS]
+
+Options:
+  --help    Show this help message and exit.
+EOF
+    exit 0
+}
+
+# Parse arguments.
+while [ $# -gt 0 ]; do
+    case "$1" in
+        --help|-h)
+            usage
+            ;;
+        *)
+            echo "error: unknown argument: $1" >&2
+            exit 1
+            ;;
+    esac
+    shift
+done
+
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "${REPO_ROOT}"
 
