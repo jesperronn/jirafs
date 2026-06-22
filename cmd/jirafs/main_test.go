@@ -33,6 +33,16 @@ func TestHelpCommand(t *testing.T) {
 	}
 }
 
+func TestMirrorHelpCommand(t *testing.T) {
+	output := runMainHelper(t, "mirror", "help")
+	if !strings.Contains(output.stderr, "refresh one named live mirror scope") {
+		t.Fatalf("stderr = %q, want mirror help text", output.stderr)
+	}
+	if output.exitCode != 0 {
+		t.Fatalf("exitCode = %d, want 0", output.exitCode)
+	}
+}
+
 func TestShortHelpFlag(t *testing.T) {
 	output := runMainHelper(t, "-h")
 	if !strings.Contains(output.stderr, "Run \"jirafs <command> --help\"") {

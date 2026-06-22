@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/jirafs/jirafs/internal/cli"
 	"github.com/jirafs/jirafs/internal/config"
 )
 
@@ -22,6 +23,8 @@ func main() {
 		os.Exit(1)
 	case "use":
 		os.Exit(runUse(os.Args[2:]))
+	case "mirror":
+		os.Exit(cli.RunMirror(os.Args[2:]))
 	case "--help", "-h":
 		printHelp()
 	default:
@@ -129,6 +132,7 @@ Commands:
   registry   manage local registry files for typed references
   board      show a local kanban-style board view
   archive    manage archived issue files
+  mirror     manage live mirror scopes and archive candidates
   use        update remembered project context
   help       show this help message
 

@@ -1,9 +1,16 @@
 package cli
 
 import (
+	"bytes"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
+
+	"github.com/jirafs/jirafs/internal/config"
+	"github.com/jirafs/jirafs/internal/context"
+	"github.com/jirafs/jirafs/internal/jira"
+	"github.com/jirafs/jirafs/internal/schema"
 )
 
 // TestRunMirror_NoSubcommand verifies that calling RunMirror with no
@@ -32,6 +39,30 @@ func TestRunMirror_Help(t *testing.T) {
 	if exit != 0 {
 		t.Errorf("RunMirror([\"help\"]) = %d, want 0", exit)
 	}
+}
+
+func withMirrorTestIO(t *testing.T) (*bytes.Buffer, *bytes.Buffer) {
+	t.Helper()
+	stdout := &bytes.Buffer{}
+	stderr := &bytes.Buffer{}
+	oldStdout := mirrorStdout
+	oldStderr := mirrorStderr
+	mirrorStdout = stdout
+	mirrorStderr = stderr
+	t.Cleanup(func() {
+		mirrorStdout = oldStdout
+		mirrorStderr = oldStderr
+	})
+	return stdout, stderr
+}
+
+func withMirrorClientFactory(t *testing.T, factory func(*config.Settings, *context.Context, string) (jira.Client, error)) {
+	t.Helper()
+	oldFactory := mirrorClientFactory
+	mirrorClientFactory = factory
+	t.Cleanup(func() {
+		mirrorClientFactory = oldFactory
+	})
 }
 
 // TestRunMirrorArchiveSweep_NoProject verifies that archive-sweep
@@ -92,10 +123,183 @@ func writeMirror(t *testing.T, tmpDir string) {
 	}
 }
 
+func writeMirrorWithScopes(t *testing.T, tmpDir string, scopesYAML string) {
+	t.Helper()
+	mirrorDir := filepath.Join(tmpDir, "mirror")
+	if err := os.MkdirAll(mirrorDir, 0o755); err != nil {
+		t.Fatalf("MkdirAll mirror: %v", err)
+	}
+	mirrorYAML := `project:
+  type: project
+  value: TEST
+` + scopesYAML
+	if err := os.WriteFile(filepath.Join(mirrorDir, "mirror.yml"), []byte(mirrorYAML), 0o644); err != nil {
+		t.Fatalf("WriteFile mirror: %v", err)
+	}
+}
+
 func writeIssue(t *testing.T, localDir string, name string, content string) {
 	t.Helper()
 	if err := os.WriteFile(filepath.Join(localDir, name), []byte(content), 0o644); err != nil {
 		t.Fatalf("WriteFile %s: %v", name, err)
+	}
+}
+
+func TestRunMirrorRefresh_MissingScope(t *testing.T) {
+	tmpDir := t.TempDir()
+	homeDir := writeSettings(t, tmpDir)
+	oldHome := os.Getenv("HOME")
+	os.Setenv("HOME", homeDir)
+	defer os.Setenv("HOME", oldHome)
+	_, stderr := withMirrorTestIO(t)
+	exit := RunMirror([]string{"refresh"})
+	if exit != 1 {
+		t.Fatalf("RunMirror([\"refresh\"]) = %d, want 1", exit)
+	}
+	if !strings.Contains(stderr.String(), "missing scope name") {
+		t.Fatalf("stderr = %q, want missing scope name", stderr.String())
+	}
+}
+
+func TestRunMirrorRefresh_ResolvesProjectAndRefreshesScope(t *testing.T) {
+	tmpDir := t.TempDir()
+	homeDir := writeSettings(t, tmpDir)
+	writeMirrorWithScopes(t, tmpDir, `
+scopes:
+  - name: my-issues
+    type: jql
+    target: assignee = currentUser()
+`)
+	oldHome := os.Getenv("HOME")
+	os.Setenv("HOME", homeDir)
+	defer os.Setenv("HOME", oldHome)
+
+	fake := jira.NewFakeTransport()
+	fake.SetIssuesByScope("my-issues", []*schema.Issue{
+		{Identity: schema.IssueIdentity{Key: "TEST-2", Type: "story"}},
+		{Identity: schema.IssueIdentity{Key: "TEST-1", Type: "bug"}},
+	})
+	withMirrorClientFactory(t, func(*config.Settings, *context.Context, string) (jira.Client, error) {
+		return fake, nil
+	})
+	stdout, stderr := withMirrorTestIO(t)
+
+	exit := RunMirror([]string{"refresh", "--project", "test", "my-issues"})
+	if exit != 0 {
+		t.Fatalf("RunMirror(refresh) = %d, stderr = %q", exit, stderr.String())
+	}
+	if !strings.Contains(stdout.String(), `added 2 issue(s) to scope "my-issues"`) {
+		t.Fatalf("stdout = %q, want refresh summary", stdout.String())
+	}
+
+	data, err := os.ReadFile(filepath.Join(tmpDir, "mirror", "mirror.yml"))
+	if err != nil {
+		t.Fatalf("ReadFile mirror.yml: %v", err)
+	}
+	got := string(data)
+	if !strings.Contains(got, "scope_members:") {
+		t.Fatalf("mirror.yml = %q, want scope_members", got)
+	}
+	if !strings.Contains(got, "key: TEST-1") || !strings.Contains(got, "key: TEST-2") {
+		t.Fatalf("mirror.yml = %q, want both scope member keys", got)
+	}
+}
+
+func TestRunMirrorRefresh_ScopeNotFound(t *testing.T) {
+	tmpDir := t.TempDir()
+	homeDir := writeSettings(t, tmpDir)
+	writeMirror(t, tmpDir)
+	oldHome := os.Getenv("HOME")
+	os.Setenv("HOME", homeDir)
+	defer os.Setenv("HOME", oldHome)
+	_, stderr := withMirrorTestIO(t)
+
+	exit := RunMirror([]string{"refresh", "--project", "test", "my-issues"})
+	if exit != 1 {
+		t.Fatalf("RunMirror(refresh unknown scope) = %d, want 1", exit)
+	}
+	if !strings.Contains(stderr.String(), `scope "my-issues" not found`) {
+		t.Fatalf("stderr = %q, want scope not found", stderr.String())
+	}
+}
+
+func TestRunMirrorRefresh_TooManyArgs(t *testing.T) {
+	tmpDir := t.TempDir()
+	homeDir := writeSettings(t, tmpDir)
+	oldHome := os.Getenv("HOME")
+	os.Setenv("HOME", homeDir)
+	defer os.Setenv("HOME", oldHome)
+	_, stderr := withMirrorTestIO(t)
+
+	exit := RunMirror([]string{"refresh", "my-issues", "extra"})
+	if exit != 1 {
+		t.Fatalf("RunMirror(refresh too many args) = %d, want 1", exit)
+	}
+	if !strings.Contains(stderr.String(), "too many positional arguments") {
+		t.Fatalf("stderr = %q, want too many positional arguments", stderr.String())
+	}
+}
+
+func TestRunMirrorRefresh_ClientCreationError(t *testing.T) {
+	tmpDir := t.TempDir()
+	homeDir := writeSettings(t, tmpDir)
+	writeMirrorWithScopes(t, tmpDir, `
+scopes:
+  - name: my-issues
+    type: jql
+    target: assignee = currentUser()
+`)
+	oldHome := os.Getenv("HOME")
+	os.Setenv("HOME", homeDir)
+	defer os.Setenv("HOME", oldHome)
+	withMirrorClientFactory(t, func(*config.Settings, *context.Context, string) (jira.Client, error) {
+		return nil, os.ErrPermission
+	})
+	_, stderr := withMirrorTestIO(t)
+
+	exit := RunMirror([]string{"refresh", "--project", "test", "my-issues"})
+	if exit != 1 {
+		t.Fatalf("RunMirror(refresh client error) = %d, want 1", exit)
+	}
+	if !strings.Contains(stderr.String(), "cannot create Jira client") {
+		t.Fatalf("stderr = %q, want client creation error", stderr.String())
+	}
+}
+
+func TestRunMirrorRefresh_SearchError(t *testing.T) {
+	tmpDir := t.TempDir()
+	homeDir := writeSettings(t, tmpDir)
+	writeMirrorWithScopes(t, tmpDir, `
+scopes:
+  - name: my-issues
+    type: jql
+    target: assignee = currentUser()
+`)
+	oldHome := os.Getenv("HOME")
+	os.Setenv("HOME", homeDir)
+	defer os.Setenv("HOME", oldHome)
+
+	fake := jira.NewFakeTransport()
+	fake.SetErr("search", jira.NewHTTPErr(500, "server error"))
+	withMirrorClientFactory(t, func(*config.Settings, *context.Context, string) (jira.Client, error) {
+		return fake, nil
+	})
+	_, stderr := withMirrorTestIO(t)
+
+	exit := RunMirror([]string{"refresh", "--project", "test", "my-issues"})
+	if exit != 1 {
+		t.Fatalf("RunMirror(refresh search error) = %d, want 1", exit)
+	}
+	if !strings.Contains(stderr.String(), "server error") {
+		t.Fatalf("stderr = %q, want search error", stderr.String())
+	}
+
+	data, err := os.ReadFile(filepath.Join(tmpDir, "mirror", "mirror.yml"))
+	if err != nil {
+		t.Fatalf("ReadFile mirror.yml: %v", err)
+	}
+	if strings.Contains(string(data), "scope_members:") {
+		t.Fatalf("mirror.yml = %q, want no persisted scope members on error", string(data))
 	}
 }
 
@@ -435,12 +639,15 @@ Summary: Out-of-scope issue
 // empty mirror when no mirror file exists.
 func TestLoadMirrorYAML_NoMirrorFile(t *testing.T) {
 	tmpDir := t.TempDir()
-	m, err := loadMirrorYAML(tmpDir)
+	m, path, err := loadMirrorYAML(tmpDir)
 	if err != nil {
 		t.Fatalf("loadMirrorYAML: %v", err)
 	}
 	if m == nil || m.Project.Value != "" {
 		t.Errorf("loadMirrorYAML(empty dir) = %#v, want empty mirror", m)
+	}
+	if path != filepath.Join(tmpDir, "mirror.yml") {
+		t.Fatalf("path = %q, want default mirror.yml path", path)
 	}
 }
 
@@ -455,7 +662,7 @@ func TestLoadMirrorYAML_YamlExtension(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(tmpDir, "mirror.yaml"), []byte(mirrorYAML), 0o644); err != nil {
 		t.Fatalf("WriteFile mirror.yaml: %v", err)
 	}
-	m, err := loadMirrorYAML(tmpDir)
+	m, _, err := loadMirrorYAML(tmpDir)
 	if err != nil {
 		t.Fatalf("loadMirrorYAML: %v", err)
 	}
@@ -472,9 +679,61 @@ func TestLoadMirrorYAML_InvalidYAML(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(tmpDir, "mirror.yml"), []byte(invalidYAML), 0o644); err != nil {
 		t.Fatalf("WriteFile mirror.yml: %v", err)
 	}
-	_, err := loadMirrorYAML(tmpDir)
+	_, _, err := loadMirrorYAML(tmpDir)
 	if err == nil {
 		t.Fatal("loadMirrorYAML(invalid) = nil, want error")
+	}
+}
+
+func TestResolveMirrorContext_NoProject(t *testing.T) {
+	tmpDir := t.TempDir()
+	homeDir := writeSettings(t, tmpDir)
+	oldHome := os.Getenv("HOME")
+	os.Setenv("HOME", homeDir)
+	defer os.Setenv("HOME", oldHome)
+	settings, err := config.Load()
+	if err != nil {
+		t.Fatalf("config.Load: %v", err)
+	}
+	_, stderr := withMirrorTestIO(t)
+
+	ctx, ok := resolveMirrorContext(settings, "", filepath.Join(tmpDir, "outside"), "refresh")
+	if ok {
+		t.Fatal("expected unresolved project")
+	}
+	if ctx != nil {
+		t.Fatalf("expected nil context, got %#v", ctx)
+	}
+	if !strings.Contains(stderr.String(), "no project resolved") {
+		t.Fatalf("stderr = %q, want no project resolved", stderr.String())
+	}
+	if !strings.Contains(stderr.String(), "Available projects:") {
+		t.Fatalf("stderr = %q, want candidate list", stderr.String())
+	}
+}
+
+func TestBuildMirrorClient_Success(t *testing.T) {
+	tmpDir := t.TempDir()
+	credsPath := filepath.Join(tmpDir, "creds.toml")
+	if err := os.WriteFile(credsPath, []byte("api_token = \"token\"\n"), 0o644); err != nil {
+		t.Fatalf("WriteFile creds.toml: %v", err)
+	}
+	settings := &config.Settings{
+		Instances: map[string]config.Instance{
+			"default": {
+				BaseURL:        "https://example.atlassian.net",
+				AuthType:       "atlassian_api_token",
+				CredentialRefs: []string{"file://" + credsPath},
+			},
+		},
+	}
+
+	client, err := buildMirrorClient(settings, &context.Context{Instance: "default"}, ".")
+	if err != nil {
+		t.Fatalf("buildMirrorClient: %v", err)
+	}
+	if client == nil {
+		t.Fatal("expected non-nil client")
 	}
 }
 
