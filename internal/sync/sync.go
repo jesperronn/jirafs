@@ -51,6 +51,13 @@ func Sync(local, remote schema.Issue, plan []schema.PlanOperation, archivePath s
 		}
 	}
 
+	if conflicts := validateTransitions(remote, plan); len(conflicts) > 0 {
+		return ApplyResult{
+			Remote:    &remote,
+			Conflicts: conflicts,
+		}
+	}
+
 	// No-op plan: return remote unchanged.
 	if len(plan) == 0 {
 		return ApplyResult{
@@ -74,6 +81,32 @@ func Sync(local, remote schema.Issue, plan []schema.PlanOperation, archivePath s
 // validatePlan checks that the plan is still valid given the current remote
 // state. Returns conflicts if the plan is stale or invalid.
 func validatePlan(local, remote schema.Issue, ops []schema.PlanOperation) []schema.Conflict {
+	if local.RemoteMetadata.RemoteVersion != "" &&
+		remote.RemoteMetadata.RemoteVersion != "" &&
+		local.RemoteMetadata.RemoteVersion != remote.RemoteMetadata.RemoteVersion {
+		return []schema.Conflict{
+			{
+				Field:       schema.EditableFieldSummary,
+				Type:        schema.ConflictBothEdited,
+				LocalValue:  local.RemoteMetadata.RemoteVersion,
+				RemoteValue: remote.RemoteMetadata.RemoteVersion,
+			},
+		}
+	}
+
+	if local.RemoteMetadata.ContentHash != "" &&
+		remote.RemoteMetadata.ContentHash != "" &&
+		local.RemoteMetadata.ContentHash != remote.RemoteMetadata.ContentHash {
+		return []schema.Conflict{
+			{
+				Field:       schema.EditableFieldSummary,
+				Type:        schema.ConflictBothEdited,
+				LocalValue:  local.RemoteMetadata.ContentHash,
+				RemoteValue: remote.RemoteMetadata.ContentHash,
+			},
+		}
+	}
+
 	if len(ops) == 0 {
 		return nil
 	}
@@ -104,6 +137,43 @@ func validatePlan(local, remote schema.Issue, ops []schema.PlanOperation) []sche
 				Type:        schema.ConflictBothEdited,
 				LocalValue:  "plan operation count mismatch",
 				RemoteValue: "expected",
+			},
+		}
+	}
+
+	for i := range computed {
+		if !computed[i].Equals(ops[i]) {
+			return []schema.Conflict{
+				{
+					Field:       computed[i].Field,
+					Type:        schema.ConflictBothEdited,
+					LocalValue:  "plan operation mismatch",
+					RemoteValue: "expected",
+				},
+			}
+		}
+	}
+
+	return nil
+}
+
+// validateTransitions rejects status changes that are not explicitly allowed by
+// the current sync rules. Status is mirrored, but direct status edits are not
+// yet supported as field writes.
+func validateTransitions(remote schema.Issue, ops []schema.PlanOperation) []schema.Conflict {
+	for _, op := range ops {
+		if op.Field != schema.EditableFieldStatus {
+			continue
+		}
+		if op.Value == remote.Status {
+			continue
+		}
+		return []schema.Conflict{
+			{
+				Field:       schema.EditableFieldStatus,
+				Type:        schema.ConflictInvalidTransition,
+				LocalValue:  op.Value,
+				RemoteValue: remote.Status,
 			},
 		}
 	}

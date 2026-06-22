@@ -202,7 +202,7 @@ func TestSync_assigneeChangeApplied(t *testing.T) {
 	}
 }
 
-func TestSync_statusChangeApplied(t *testing.T) {
+func TestSync_statusChangeRejectedBeforeMutation(t *testing.T) {
 	local := schema.Issue{Summary: "Test", Status: "In Progress"}
 	remote := schema.Issue{Summary: "Test", Status: "To Do"}
 	plan := []schema.PlanOperation{
@@ -211,14 +211,17 @@ func TestSync_statusChangeApplied(t *testing.T) {
 
 	result := Sync(local, remote, plan, t.TempDir())
 
-	if len(result.Conflicts) > 0 {
-		t.Fatalf("unexpected conflicts: %v", result.Conflicts)
+	if len(result.Conflicts) == 0 {
+		t.Fatal("expected invalid transition conflict, got none")
 	}
 	if result.Remote == nil {
 		t.Fatal("expected non-nil remote")
 	}
-	if result.Remote.Status != "In Progress" {
-		t.Errorf("expected status %q, got %q", "In Progress", result.Remote.Status)
+	if result.Conflicts[0].Type != schema.ConflictInvalidTransition {
+		t.Fatalf("expected conflict type %q, got %q", schema.ConflictInvalidTransition, result.Conflicts[0].Type)
+	}
+	if result.Remote.Status != "To Do" {
+		t.Errorf("expected status %q, got %q", "To Do", result.Remote.Status)
 	}
 }
 
@@ -525,5 +528,89 @@ func TestSync_allRefsResolved_allowsMutation(t *testing.T) {
 	}
 	if result.Remote.Summary != "New summary" {
 		t.Errorf("expected summary %q, got %q", "New summary", result.Remote.Summary)
+	}
+}
+
+func TestSync_staleRemoteVersionConflictsBeforeMutation(t *testing.T) {
+	local := schema.Issue{
+		Summary: "New summary",
+		RemoteMetadata: schema.RemoteMetadata{
+			RemoteVersion: "1",
+			ContentHash:   "abc",
+		},
+	}
+	remote := schema.Issue{
+		Summary: "Old summary",
+		RemoteMetadata: schema.RemoteMetadata{
+			RemoteVersion: "2",
+			ContentHash:   "abc",
+		},
+	}
+	ops := []schema.PlanOperation{
+		{Field: schema.EditableFieldSummary, Type: schema.OpSet, Value: "New summary"},
+	}
+
+	result := Sync(local, remote, ops, t.TempDir())
+
+	if len(result.Conflicts) == 0 {
+		t.Fatal("expected stale-state conflict, got none")
+	}
+	if result.Remote == nil {
+		t.Fatal("expected non-nil remote")
+	}
+	if result.Remote.Summary != "Old summary" {
+		t.Fatalf("expected remote to remain unchanged, got %q", result.Remote.Summary)
+	}
+}
+
+func TestSync_staleContentHashConflictsBeforeMutation(t *testing.T) {
+	local := schema.Issue{
+		Summary: "New summary",
+		RemoteMetadata: schema.RemoteMetadata{
+			RemoteVersion: "1",
+			ContentHash:   "abc",
+		},
+	}
+	remote := schema.Issue{
+		Summary: "Old summary",
+		RemoteMetadata: schema.RemoteMetadata{
+			RemoteVersion: "1",
+			ContentHash:   "def",
+		},
+	}
+	ops := []schema.PlanOperation{
+		{Field: schema.EditableFieldSummary, Type: schema.OpSet, Value: "New summary"},
+	}
+
+	result := Sync(local, remote, ops, t.TempDir())
+
+	if len(result.Conflicts) == 0 {
+		t.Fatal("expected stale-state conflict, got none")
+	}
+	if result.Remote == nil {
+		t.Fatal("expected non-nil remote")
+	}
+	if result.Remote.Summary != "Old summary" {
+		t.Fatalf("expected remote to remain unchanged, got %q", result.Remote.Summary)
+	}
+}
+
+func TestSync_planMismatchConflictsBeforeMutation(t *testing.T) {
+	local := schema.Issue{Summary: "Local summary"}
+	remote := schema.Issue{Summary: "Remote summary"}
+	ops := []schema.PlanOperation{
+		{Field: schema.EditableFieldDescription, Type: schema.OpSet, Value: "wrong op"},
+	}
+
+	result := Sync(local, remote, ops, t.TempDir())
+
+	if len(result.Conflicts) == 0 {
+		t.Fatal("expected plan mismatch conflict, got none")
+	}
+	if result.Remote == nil {
+		t.Fatal("expected non-nil remote")
+	}
+	if result.Remote.Summary != "Remote summary" {
+		t.Fatalf("expected remote to remain unchanged, got %q", result.Remote.Summary)
 	}
 }

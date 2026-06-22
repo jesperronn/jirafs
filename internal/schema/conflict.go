@@ -22,6 +22,9 @@ const (
 	// ConflictUnresolvedRef means a reference in the issue cannot be
 	// resolved (e.g. empty linked issue key, missing assignee).
 	ConflictUnresolvedRef ConflictType = "unresolved_ref"
+	// ConflictInvalidTransition means a requested status change is not a valid
+	// transition under the current sync rules.
+	ConflictInvalidTransition ConflictType = "invalid_transition"
 )
 
 // ValidConflictTypes returns the set of all recognized conflict types.
@@ -32,6 +35,7 @@ var ValidConflictTypes = []ConflictType{
 	ConflictLocalAddRemoteEdit,
 	ConflictArchivePathInvalid,
 	ConflictUnresolvedRef,
+	ConflictInvalidTransition,
 }
 
 // IsValidConflictType reports whether ct is a known conflict type.

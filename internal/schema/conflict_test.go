@@ -8,6 +8,9 @@ func TestConflictTypeConstants(t *testing.T) {
 		ConflictLocalDeleteRemoteEdit,
 		ConflictRemoteDeleteLocalEdit,
 		ConflictLocalAddRemoteEdit,
+		ConflictArchivePathInvalid,
+		ConflictUnresolvedRef,
+		ConflictInvalidTransition,
 	}
 	for _, ct := range expected {
 		if ct == "" {
