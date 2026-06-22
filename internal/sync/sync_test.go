@@ -614,3 +614,43 @@ func TestSync_planMismatchConflictsBeforeMutation(t *testing.T) {
 		t.Fatalf("expected remote to remain unchanged, got %q", result.Remote.Summary)
 	}
 }
+
+func TestSync_validateTransitions_statusUnchanged(t *testing.T) {
+	// validateTransitions returns no conflict when the status operation's
+	// value matches the remote status (no-op transition). Tested directly
+	// since validatePlan rejects stale plans before this path is reachable.
+	remote := schema.Issue{Summary: "Test", Status: "In Progress"}
+	plan := []schema.PlanOperation{
+		{Field: schema.EditableFieldStatus, Type: schema.OpSet, Value: "In Progress"},
+	}
+
+	conflicts := validateTransitions(remote, plan)
+
+	if len(conflicts) > 0 {
+		t.Fatalf("expected no conflicts when status unchanged, got %v", conflicts)
+	}
+}
+
+func TestSync_unresolvedRemoteFixVersion_failsBeforeMutation(t *testing.T) {
+	// validateUnresolvedRefs checks remote fix versions for empty strings.
+	local := schema.Issue{Summary: "Test issue"}
+	remote := schema.Issue{
+		Summary:     "Test issue",
+		FixVersions: []string{"1.0", ""},
+	}
+	plan := []schema.PlanOperation{}
+
+	result := Sync(local, remote, plan, t.TempDir())
+
+	if len(result.Conflicts) == 0 {
+		t.Fatal("expected conflict for unresolved remote fix version, got none")
+	}
+
+	conflict := result.Conflicts[0]
+	if conflict.Type != schema.ConflictUnresolvedRef {
+		t.Errorf("expected conflict type %q, got %q", schema.ConflictUnresolvedRef, conflict.Type)
+	}
+	if result.Remote == nil {
+		t.Fatal("expected non-nil remote")
+	}
+}
