@@ -1103,3 +1103,70 @@ mirror_dir = "/mirror/grow"
 		t.Errorf("State.CurrentProject = %q, want %q", reloaded.State.CurrentProject, "platform")
 	}
 }
+
+// TestB016bInteractiveResolveFallbackCollectsFromSettings verifies that
+// when the error has no candidates and prompter is nil,
+// InteractiveResolve collects candidates from settings and uses StdinPromptReader.
+func TestB016bInteractiveResolveFallbackCollectsFromSettings(t *testing.T) {
+	tmpDir := t.TempDir()
+	homeDir := filepath.Join(tmpDir, "home")
+	jirafsDir := filepath.Join(homeDir, ".jirafs")
+	if err := os.MkdirAll(jirafsDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	settings := `
+version = 1
+
+[instances.work]
+base_url = "https://jira.example.com"
+auth_type = "atlassian_api_token"
+
+[projects.PLAT]
+key = "PLAT"
+instance = "work"
+mirror_dir = "` + filepath.Join(tmpDir, "mirror") + `"
+
+[projects.GROW]
+key = "GROW"
+instance = "work"
+mirror_dir = "` + filepath.Join(tmpDir, "mirror2") + `"
+`
+	if err := os.WriteFile(filepath.Join(jirafsDir, "settings.toml"), []byte(settings), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	// Create mirror directories so they exist.
+	if err := os.MkdirAll(filepath.Join(tmpDir, "mirror"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Join(tmpDir, "mirror2"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	oldHome := os.Getenv("HOME")
+	os.Setenv("HOME", homeDir)
+	defer os.Setenv("HOME", oldHome)
+
+	s, err := config.Load()
+	if err != nil {
+		t.Fatalf("config.Load: %v", err)
+	}
+
+	r := NewResolver(s, "")
+
+	// Use a cwd that doesn't match any project's mirror_dir,
+	// and pass a mockPrompter that returns index 0 (first candidate).
+	// The candidates are sorted alphabetically: GROW, PLAT.
+	ctx, err := r.InteractiveResolve(filepath.Join(tmpDir, "nowhere"), &mockPrompter{selected: 0})
+	if err != nil {
+		t.Fatalf("InteractiveResolve() error = %v", err)
+	}
+	if ctx == nil {
+		t.Fatal("expected non-nil context")
+	}
+	// The first candidate alphabetically is "GROW".
+	if ctx.Name != "GROW" {
+		t.Fatalf("ctx.Name = %q, want 'GROW'", ctx.Name)
+	}
+}

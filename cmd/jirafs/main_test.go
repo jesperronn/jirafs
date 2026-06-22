@@ -559,6 +559,29 @@ current_project = "platform"
 	}
 }
 
+func TestUseMalformedSettings(t *testing.T) {
+	tmpDir := t.TempDir()
+	homeDir := filepath.Join(tmpDir, "home")
+	jirafsDir := filepath.Join(homeDir, settingsDir)
+	if err := os.MkdirAll(jirafsDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	// Write a malformed settings file so config.Load() fails.
+	malformed := `this is not valid toml {{{`
+	if err := os.WriteFile(filepath.Join(jirafsDir, settingsFile), []byte(malformed), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	output := runMainHelperWithHome(t, homeDir, "use", "PLAT")
+	if output.exitCode != 1 {
+		t.Fatalf("exitCode = %d, want 1", output.exitCode)
+	}
+	if !strings.Contains(output.stderr, "cannot load settings") {
+		t.Fatalf("stderr = %q, want 'cannot load settings'", output.stderr)
+	}
+}
+
 func runMainHelperWithHome(t *testing.T, home string, args ...string) helperOutput {
 	t.Helper()
 

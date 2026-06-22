@@ -11,6 +11,7 @@ import (
 	"github.com/jirafs/jirafs/internal/config"
 	"github.com/jirafs/jirafs/internal/context"
 	"github.com/jirafs/jirafs/internal/jira"
+	"github.com/jirafs/jirafs/internal/mirror"
 	"github.com/jirafs/jirafs/internal/schema"
 )
 
@@ -1365,5 +1366,53 @@ func TestRunMirrorArchiveSweep_CwdNotMatching(t *testing.T) {
 	}
 	if !strings.Contains(stderr.String(), "no project resolved") {
 		t.Fatalf("stderr = %q, want no project resolved", stderr.String())
+	}
+}
+
+// TestSaveMirrorYAML_WriteError verifies that saveMirrorYAML returns an
+// error when the file cannot be written.
+func TestSaveMirrorYAML_WriteError(t *testing.T) {
+	tmpDir := t.TempDir()
+	// Create a read-only directory to force a write error.
+	roDir := filepath.Join(tmpDir, "readonly")
+	if err := os.MkdirAll(roDir, 0o555); err != nil {
+		t.Fatalf("MkdirAll: %v", err)
+	}
+	roPath := filepath.Join(roDir, "mirror.yml")
+	m := &mirror.Mirror{}
+	err := saveMirrorYAML(roPath, m)
+	if err == nil {
+		t.Fatal("expected error writing to read-only directory")
+	}
+	if !strings.Contains(err.Error(), "write mirror file") {
+		t.Fatalf("error = %q, want 'write mirror file'", err.Error())
+	}
+}
+
+// TestResolveMirrorContext_Success verifies that resolveMirrorContext
+// returns a valid context when the cwd matches a project's mirror_dir.
+func TestResolveMirrorContext_Success(t *testing.T) {
+	tmpDir := t.TempDir()
+	homeDir := writeSettings(t, tmpDir)
+	oldHome := os.Getenv("HOME")
+	os.Setenv("HOME", homeDir)
+	defer os.Setenv("HOME", oldHome)
+
+	settings, err := config.Load()
+	if err != nil {
+		t.Fatalf("config.Load: %v", err)
+	}
+
+	// Use the project's actual mirror_dir as cwd.
+	mirrorDir := filepath.Join(tmpDir, "mirror")
+	ctx, ok := resolveMirrorContext(settings, "", mirrorDir, "refresh")
+	if !ok {
+		t.Fatal("expected resolved context")
+	}
+	if ctx == nil {
+		t.Fatal("expected non-nil context")
+	}
+	if ctx.Key != "TEST" {
+		t.Fatalf("ctx.Key = %q, want 'TEST'", ctx.Key)
 	}
 }
