@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -73,6 +74,116 @@ func TestSyncCommand(t *testing.T) {
 	}
 	if output.exitCode != 1 {
 		t.Fatalf("exitCode = %d, want 1", output.exitCode)
+	}
+}
+
+func TestUnimplementedCommands(t *testing.T) {
+	cmds := []string{"init", "new", "registry", "board", "archive"}
+	for _, cmd := range cmds {
+		output := runMainHelper(t, cmd)
+		want := fmt.Sprintf("jirafs %s: not yet implemented", cmd)
+		if !strings.Contains(output.stderr, want) {
+			t.Fatalf("cmd=%s: stderr = %q, want %q", cmd, output.stderr, want)
+		}
+		if output.exitCode != 1 {
+			t.Fatalf("cmd=%s: exitCode = %d, want 1", cmd, output.exitCode)
+		}
+	}
+}
+
+func TestExportCommand(t *testing.T) {
+	output := runMainHelper(t, "export")
+	if output.exitCode != 1 {
+		t.Fatalf("exitCode = %d, want 1", output.exitCode)
+	}
+	if !strings.Contains(output.stderr, "jirafs export: missing subcommand") {
+		t.Fatalf("stderr = %q, want missing subcommand message", output.stderr)
+	}
+}
+
+func TestPlanCommand(t *testing.T) {
+	tmpDir := t.TempDir()
+	homeDir := filepath.Join(tmpDir, "home")
+	jirafsDir := filepath.Join(homeDir, settingsDir)
+	if err := os.MkdirAll(jirafsDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	settings := `
+version = 1
+
+[instances.work]
+base_url = "https://jira.example.com"
+auth_type = "atlassian_api_token"
+
+[projects.platform]
+key = "PLAT"
+instance = "work"
+mirror_dir = "` + jirafsDir + `/jira/platform"
+`
+	if err := os.WriteFile(filepath.Join(jirafsDir, settingsFile), []byte(settings), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	output := runMainHelperWithHome(t, homeDir, "plan")
+	if output.exitCode != 1 {
+		t.Fatalf("exitCode = %d, want 1", output.exitCode)
+	}
+	if !strings.Contains(output.stderr, "jirafs plan: missing issue key") {
+		t.Fatalf("stderr = %q, want missing issue key message", output.stderr)
+	}
+}
+
+func TestMirrorNoSubcommand(t *testing.T) {
+	output := runMainHelper(t, "mirror")
+	if !strings.Contains(output.stderr, "jirafs mirror: missing subcommand") {
+		t.Fatalf("stderr = %q, want missing subcommand message", output.stderr)
+	}
+	if output.exitCode != 1 {
+		t.Fatalf("exitCode = %d, want 1", output.exitCode)
+	}
+}
+
+func TestMirrorUnknownSubcommand(t *testing.T) {
+	tmpDir := t.TempDir()
+	homeDir := filepath.Join(tmpDir, "home")
+	jirafsDir := filepath.Join(homeDir, settingsDir)
+	if err := os.MkdirAll(jirafsDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	settings := `
+version = 1
+
+[instances.work]
+base_url = "https://jira.example.com"
+auth_type = "atlassian_api_token"
+
+[projects.platform]
+key = "PLAT"
+instance = "work"
+mirror_dir = "` + jirafsDir + `/jira/platform"
+`
+	if err := os.WriteFile(filepath.Join(jirafsDir, settingsFile), []byte(settings), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	output := runMainHelperWithHome(t, homeDir, "mirror", "unknown-sub")
+	if !strings.Contains(output.stderr, `jirafs mirror: unknown subcommand "unknown-sub"`) {
+		t.Fatalf("stderr = %q, want unknown subcommand message", output.stderr)
+	}
+	if output.exitCode != 1 {
+		t.Fatalf("exitCode = %d, want 1", output.exitCode)
+	}
+}
+
+func TestLongHelpFlag(t *testing.T) {
+	output := runMainHelper(t, "--help")
+	if !strings.Contains(output.stderr, "Run \"jirafs <command> --help\"") {
+		t.Fatalf("stderr = %q, want help footer", output.stderr)
+	}
+	if output.exitCode != 0 {
+		t.Fatalf("exitCode = %d, want 0", output.exitCode)
 	}
 }
 
