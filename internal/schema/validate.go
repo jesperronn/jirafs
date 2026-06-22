@@ -60,3 +60,17 @@ func ValidateSections(sections []FixedSectionName) []ValidationError {
 	}
 	return errs
 }
+
+// Validate runs all validation checks on the issue and returns a combined
+// list of errors.  An empty slice means the issue is valid.
+func (i Issue) Validate() []ValidationError {
+	errs := i.Identity.ValidateRequired()
+	if len(i.Sections) > 0 {
+		sectionNames := make([]FixedSectionName, 0, len(i.Sections))
+		for name := range i.Sections {
+			sectionNames = append(sectionNames, name)
+		}
+		errs = append(errs, ValidateSections(sectionNames)...)
+	}
+	return errs
+}
