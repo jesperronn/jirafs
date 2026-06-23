@@ -1103,7 +1103,7 @@ func TestSetupProjectCreatesNewFile(t *testing.T) {
 		Projects:  make(map[string]Project),
 	}
 
-	err := s.SetupProject("work", "platform", "https://jira.example.com", "atlassian_api_token", filepath.Join(tmpDir, "mirror"), []string{"env://API_TOKEN"})
+	err := s.SetupProject("work", "platform", "PLAT", "https://jira.example.com", "atlassian_api_token", filepath.Join(tmpDir, "mirror"), []string{"env://API_TOKEN"})
 	if err != nil {
 		t.Fatalf("SetupProject() error = %v", err)
 	}
@@ -1163,7 +1163,7 @@ mirror_dir = "` + filepath.Join(tmpDir, "legacy-mirror") + `"
 	}
 
 	// Now setup a new project on the same instance.
-	err = s.SetupProject("work", "newproj", "https://new.example.com", "atlassian_api_token", filepath.Join(tmpDir, "new-mirror"), []string{"env://NEW_TOKEN"})
+	err = s.SetupProject("work", "newproj", "NP", "https://new.example.com", "atlassian_api_token", filepath.Join(tmpDir, "new-mirror"), []string{"env://NEW_TOKEN"})
 	if err != nil {
 		t.Fatalf("SetupProject() error = %v", err)
 	}
@@ -1228,7 +1228,7 @@ mirror_dir = "` + filepath.Join(tmpDir, "old-mirror") + `"
 		t.Fatalf("Load() error = %v", err)
 	}
 
-	err = s.SetupProject("work", "platform", "https://new.example.com", "atlassian_api_token", filepath.Join(tmpDir, "new-mirror"), nil)
+	err = s.SetupProject("work", "platform", "NEWP", "https://new.example.com", "atlassian_api_token", filepath.Join(tmpDir, "new-mirror"), nil)
 	if err != nil {
 		t.Fatalf("SetupProject() error = %v", err)
 	}
@@ -1244,6 +1244,12 @@ mirror_dir = "` + filepath.Join(tmpDir, "old-mirror") + `"
 	}
 	if proj.Instance != "work" {
 		t.Errorf("Project.platform.instance = %q, want %q", proj.Instance, "work")
+	}
+	if proj.Key != "NEWP" {
+		t.Errorf("Project.platform.key = %q, want %q", proj.Key, "NEWP")
+	}
+	if len(proj.LocalDirs) != 1 || proj.LocalDirs[0] != filepath.Join(tmpDir, "new-mirror") {
+		t.Errorf("Project.platform.local_dirs = %v, want default local_dir seeded from mirror_dir", proj.LocalDirs)
 	}
 }
 
@@ -1264,7 +1270,7 @@ func TestSetupProjectFailsOnInvalidURL(t *testing.T) {
 		Projects:  make(map[string]Project),
 	}
 
-	err := s.SetupProject("work", "platform", "not-a-url", "basic", filepath.Join(tmpDir, "mirror"), nil)
+	err := s.SetupProject("work", "platform", "PLAT", "not-a-url", "basic", filepath.Join(tmpDir, "mirror"), nil)
 	if err == nil {
 		t.Fatal("SetupProject() expected error for invalid URL, got nil")
 	}
@@ -1294,7 +1300,7 @@ func TestSetupProjectCreatesInstanceFirst(t *testing.T) {
 	// SetupProject creates the instance first, then validates.
 	// So referencing a non-existent instance name is fine —
 	// the instance gets created as part of the same operation.
-	err := s.SetupProject("newinst", "platform", "https://jira.example.com", "basic", filepath.Join(tmpDir, "mirror"), nil)
+	err := s.SetupProject("newinst", "platform", "PLAT", "https://jira.example.com", "basic", filepath.Join(tmpDir, "mirror"), nil)
 	if err != nil {
 		t.Fatalf("SetupProject() error = %v", err)
 	}
@@ -1344,7 +1350,7 @@ mirror_dir = "` + mirrorDir + `"
 	}
 
 	// Try to create a second project with the same mirror_dir.
-	err = s.SetupProject("work", "other", "https://other.example.com", "basic", mirrorDir, nil)
+	err = s.SetupProject("work", "other", "OTHER", "https://other.example.com", "basic", mirrorDir, nil)
 	if err == nil {
 		t.Fatal("SetupProject() expected error for duplicate mirror_dir, got nil")
 	}
@@ -1367,7 +1373,7 @@ func TestSetupProjectNoFileCreatesMinimalSettings(t *testing.T) {
 
 	s := &Settings{}
 
-	err := s.SetupProject("inst", "proj", "https://jira.example.com", "basic", filepath.Join(tmpDir, "mirror"), nil)
+	err := s.SetupProject("inst", "proj", "PROJ", "https://jira.example.com", "basic", filepath.Join(tmpDir, "mirror"), nil)
 	if err != nil {
 		t.Fatalf("SetupProject() error = %v", err)
 	}

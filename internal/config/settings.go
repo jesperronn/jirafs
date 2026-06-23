@@ -287,8 +287,8 @@ func (s *Settings) SaveState() error {
 // SetupProject records one instance and one project in the settings file.
 // It creates the settings file if it does not exist, or merges into an
 // existing file. The instance is keyed by instanceName, the project by
-// projectName. The caller provides baseURL, authType, mirrorDir, and
-// an optional set of credential ref strings.
+// projectName. The caller provides projectKey, baseURL, authType, mirrorDir,
+// and an optional set of credential ref strings.
 //
 // If the instance already exists, base_url and auth_type are overwritten
 // and credential_refs are appended (duplicates are not deduplicated).
@@ -300,6 +300,7 @@ func (s *Settings) SaveState() error {
 func (s *Settings) SetupProject(
 	instanceName string,
 	projectName string,
+	projectKey string,
 	baseURL string,
 	authType string,
 	mirrorDir string,
@@ -342,9 +343,12 @@ func (s *Settings) SetupProject(
 	if !ok {
 		proj = Project{}
 	}
-	proj.Key = projectName
+	proj.Key = projectKey
 	proj.Instance = instanceName
 	proj.MirrorDir = mirrorDir
+	if len(proj.LocalDirs) == 0 {
+		proj.LocalDirs = []string{mirrorDir}
+	}
 	existing.Projects[projectName] = proj
 
 	// Validate before persisting.

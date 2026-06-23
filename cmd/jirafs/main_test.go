@@ -709,6 +709,24 @@ func TestSetupCreatesSettingsFile(t *testing.T) {
 	if !strings.Contains(text, "atlassian_api_token") {
 		t.Errorf("settings = %q, want auth_type", text)
 	}
+	if !strings.Contains(text, "key = 'PLAT'") && !strings.Contains(text, "key = \"PLAT\"") {
+		t.Errorf("settings = %q, want Jira project key PLAT", text)
+	}
+	if !strings.Contains(text, "local_dirs") {
+		t.Errorf("settings = %q, want local_dirs entry", text)
+	}
+
+	mirrorData, err := os.ReadFile(filepath.Join(tmpDir, "mirror", "mirror.yml"))
+	if err != nil {
+		t.Fatalf("ReadFile(mirror.yml) error = %v", err)
+	}
+	mirrorText := string(mirrorData)
+	if !strings.Contains(mirrorText, "name: current-sprint") {
+		t.Fatalf("mirror.yml = %q, want current-sprint scope", mirrorText)
+	}
+	if !strings.Contains(mirrorText, "name: my-issues") {
+		t.Fatalf("mirror.yml = %q, want my-issues scope", mirrorText)
+	}
 }
 
 func TestSetupUpdatesExistingSettings(t *testing.T) {

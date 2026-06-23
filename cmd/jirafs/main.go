@@ -4,6 +4,7 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/jirafs/jirafs/internal/cli"
@@ -223,8 +224,13 @@ func runSetup(args []string) int {
 	}
 
 	// Call SetupProject to record the instance and project.
-	if err := s.SetupProject(*instanceName, *projectName, *baseURL, *authType, *mirrorDir, credentialRefs); err != nil {
+	if err := s.SetupProject(*instanceName, *projectName, *projectKey, *baseURL, *authType, *mirrorDir, credentialRefs); err != nil {
 		fmt.Fprintf(os.Stderr, "jirafs setup: %v\n", err)
+		return 1
+	}
+
+	if err := ensureDefaultMirror(*mirrorDir, *projectKey); err != nil {
+		fmt.Fprintf(os.Stderr, "jirafs setup: cannot initialize mirror config: %v\n", err)
 		return 1
 	}
 
@@ -239,6 +245,32 @@ func runSetup(args []string) int {
 
 	fmt.Printf("jirafs: setup complete — instance %q, project %q (key %q)\n", *instanceName, *projectName, *projectKey)
 	return 0
+}
+
+func ensureDefaultMirror(mirrorDir, projectKey string) error {
+	for _, name := range []string{"mirror.yml", "mirror.yaml"} {
+		path := filepath.Join(mirrorDir, name)
+		if _, err := os.Stat(path); err == nil {
+			return nil
+		}
+	}
+
+	content := fmt.Sprintf(`project:
+  type: project
+  value: %s
+scopes:
+  - name: current-sprint
+    type: jql
+    target: sprint in openSprints()
+  - name: my-issues
+    type: jql
+    target: assignee = currentUser()
+`, projectKey)
+	path := filepath.Join(mirrorDir, "mirror.yml")
+	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+		return err
+	}
+	return nil
 }
 
 // isNotADirectory reports whether err is a "not a directory" error.

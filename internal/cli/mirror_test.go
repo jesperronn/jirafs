@@ -181,6 +181,34 @@ scopes:
 		{Identity: schema.IssueIdentity{Key: "TEST-2", Type: "story"}},
 		{Identity: schema.IssueIdentity{Key: "TEST-1", Type: "bug"}},
 	})
+	fake.SetIssue("TEST-1", &schema.Issue{
+		Identity: schema.IssueIdentity{
+			Key:     "TEST-1",
+			Type:    "bug",
+			Project: schema.TypedRef{Type: schema.RefProject, Value: "TEST"},
+		},
+		MachineOwned: schema.MachineOwned{SchemaVersion: "1"},
+		RemoteMetadata: schema.RemoteMetadata{
+			StateFile:     "synced",
+			RemoteVersion: "1",
+			ContentHash:   "abc",
+		},
+		Summary: "First refreshed issue",
+	})
+	fake.SetIssue("TEST-2", &schema.Issue{
+		Identity: schema.IssueIdentity{
+			Key:     "TEST-2",
+			Type:    "story",
+			Project: schema.TypedRef{Type: schema.RefProject, Value: "TEST"},
+		},
+		MachineOwned: schema.MachineOwned{SchemaVersion: "1"},
+		RemoteMetadata: schema.RemoteMetadata{
+			StateFile:     "synced",
+			RemoteVersion: "2",
+			ContentHash:   "def",
+		},
+		Summary: "Second refreshed issue",
+	})
 	withMirrorClientFactory(t, func(*config.Settings, *context.Context, string) (jira.Client, error) {
 		return fake, nil
 	})
@@ -209,6 +237,14 @@ scopes:
 	}
 	if !strings.Contains(got, "key: TEST-1") || !strings.Contains(got, "key: TEST-2") {
 		t.Fatalf("mirror.yml = %q, want both scope member keys", got)
+	}
+
+	test1Data, err := os.ReadFile(filepath.Join(tmpDir, "local", "TEST-1.md"))
+	if err != nil {
+		t.Fatalf("ReadFile TEST-1.md: %v", err)
+	}
+	if !strings.Contains(string(test1Data), "First refreshed issue") {
+		t.Fatalf("TEST-1.md = %q, want refreshed issue summary", string(test1Data))
 	}
 }
 

@@ -14,6 +14,7 @@ import (
 	"github.com/jirafs/jirafs/internal/archive"
 	"github.com/jirafs/jirafs/internal/config"
 	"github.com/jirafs/jirafs/internal/context"
+	"github.com/jirafs/jirafs/internal/export"
 	"github.com/jirafs/jirafs/internal/jira"
 	"github.com/jirafs/jirafs/internal/mirror"
 	"github.com/jirafs/jirafs/internal/schema"
@@ -123,6 +124,11 @@ func runMirrorRefresh(args []string, settings *config.Settings, resolver *contex
 		return 1
 	}
 
+	if err := materializeScopeIssues(stdcontext.Background(), client, settings, ctx, scopeName); err != nil {
+		fmt.Fprintf(mirrorStderr, "jirafs mirror refresh: cannot write issue snapshots: %v\n", err)
+		return 1
+	}
+
 	if err := saveMirrorYAML(mirrorPath, m); err != nil {
 		fmt.Fprintf(mirrorStderr, "jirafs mirror refresh: cannot save mirror: %v\n", err)
 		return 1
@@ -141,6 +147,40 @@ func runMirrorRefresh(args []string, settings *config.Settings, resolver *contex
 		fmt.Fprintf(mirrorStdout, "  %s\n", key)
 	}
 	return 0
+}
+
+func materializeScopeIssues(ctx stdcontext.Context, client jira.Client, settings *config.Settings, projectCtx *context.Context, scopeName string) error {
+	proj, ok := settings.Projects[projectCtx.Name]
+	if !ok {
+		return fmt.Errorf("project %q not found in settings", projectCtx.Name)
+	}
+	if len(proj.LocalDirs) == 0 {
+		return fmt.Errorf("project %q has no local_dirs configured", projectCtx.Name)
+	}
+	if err := os.MkdirAll(proj.LocalDirs[0], 0o755); err != nil {
+		return fmt.Errorf("create local directory %s: %w", proj.LocalDirs[0], err)
+	}
+
+	issues, err := client.SearchIssues(ctx, scopeName)
+	if err != nil {
+		return err
+	}
+	for _, issue := range issues {
+		if issue == nil || issue.Identity.Key == "" {
+			continue
+		}
+		renderIssue := issue
+		fullIssue, err := client.FetchIssue(ctx, string(issue.Identity.Key))
+		if err == nil && fullIssue != nil && fullIssue.Identity.Key != "" {
+			renderIssue = fullIssue
+		}
+		output := export.ExportIssue(renderIssue)
+		dest := filepath.Join(proj.LocalDirs[0], string(renderIssue.Identity.Key)+".md")
+		if err := os.WriteFile(dest, []byte(output), 0o644); err != nil {
+			return fmt.Errorf("write issue file %s: %w", dest, err)
+		}
+	}
+	return nil
 }
 
 // runMirrorArchiveSweep handles `jirafs mirror archive-sweep`.
