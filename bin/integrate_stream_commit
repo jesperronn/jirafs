@@ -11,9 +11,9 @@ cd "${REPO_ROOT}"
 
 target="${1:-main}"
 
-if git merge-base --is-ancestor HEAD "${target}"; then
-  echo "integrate: branch is already up to date with ${target}"
-  exit 0
+if ! git diff --quiet || ! git diff --cached --quiet; then
+  echo "integrate: worktree must be clean before integration" >&2
+  exit 1
 fi
 
 attempt=1
@@ -21,10 +21,24 @@ while [ "${attempt}" -le "${MAX_ATTEMPTS}" ]; do
   echo "integrate: attempt ${attempt}/${MAX_ATTEMPTS} for HEAD -> ${target}"
 
   git rebase "${target}"
+
+  head_commit="$(git rev-parse HEAD)"
+  target_commit="$(git rev-parse "${target}")"
+
+  if [ "${head_commit}" = "${target_commit}" ]; then
+    echo "integrate: HEAD is already in ${target} — nothing to push" >&2
+    exit 0
+  fi
+
+  # Check if head_commit is reachable from target (already merged)
+  if git merge-base --is-ancestor "${head_commit}" "${target}"; then
+    echo "integrate: HEAD is already in ${target} — nothing to push" >&2
+    exit 0
+  fi
+
   bin/test
   bin/lint
 
-  head_commit="$(git rev-parse HEAD)"
   if git push . "${head_commit}:${target}"; then
     echo "integrate: pushed ${head_commit} to ${target}"
     exit 0
