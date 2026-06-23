@@ -124,8 +124,20 @@ Completed dependency IDs archived in [Ralph Task Archive](ralph-task-archive.md)
 - [x] B082b | B082a | `internal/cli/**`, `tests/cli/**` | `jirafs mirror archive-sweep --apply` calls archive service interface.
 - [x] B090a | B064a,B071a | `internal/archive/**`, `tests/archive/**` | Archive movement preserves issue snapshot files.
 - [ ] B090b | B090a,B071b | `internal/archive/**`, `tests/archive/**` | Archive movement preserves live membership rules.
+  - Keep pinned issues in live scope even when resolved.
+  - Keep unsynced or conflict-bearing issues in live scope even when resolved.
+  - Remove archive eligibility only after the live-membership rule set says the issue has no active reason to stay.
+  - Add tests that prove archive movement does not demote pinned or unsynced issues.
 - [ ] B091a | B052a,B070b | `internal/board/**`, `tests/board/**` | Board groups mirror issues by status.
+  - Build a board grouping model keyed by canonical status.
+  - Define the default board column order from registry/status metadata.
+  - Map each mirrored issue to exactly one status bucket.
+  - Add tests for open, in-progress, resolved, and unknown status buckets.
 - [ ] B091b | B091a,B052b | `internal/board/**`, `tests/board/**` | Board groups mirror issues by assignee and epic.
+  - Add secondary grouping for assignee on top of status buckets.
+  - Add epic grouping for issues that belong to an epic and a fallback bucket for ungrouped issues.
+  - Keep grouping deterministic when assignee or epic is missing.
+  - Add tests that cover grouped and ungrouped issues across assignee and epic views.
 
 Notes: packets in `docs/implementation-packets.md` are orchestrator-sized. These
 tasks are builder-sized. Start with B001; B020 can run after B001. Do not start

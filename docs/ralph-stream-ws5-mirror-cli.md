@@ -37,6 +37,18 @@ Completed dependency IDs archived in [Ralph Task Archive](ralph-task-archive.md)
 - [x] B083c | B063b | Wire `jirafs sync` through the real service path.
 - [x] B083d | B083a,B083b,B083c | Add a disposable real-data smoke runner for export-edit-plan-sync-reexport.
 - [x] B090a | B064a,B071a | Archive movement preserves issue snapshot files.
+- [ ] B090b | B090a,B071b | Archive movement preserves live membership rules.
+  - Keep pinned issues in live scope even when resolved.
+  - Keep unsynced or conflict-bearing issues in live scope even when resolved.
+  - Add tests that prove archive movement does not demote pinned or unsynced issues.
+- [ ] B091a | B052a,B070b | Board groups mirror issues by status.
+  - Build a board grouping model keyed by canonical status.
+  - Define the default board column order from registry/status metadata.
+  - Add tests for open, in-progress, resolved, and unknown status buckets.
+- [ ] B091b | B091a,B052b | Board groups mirror issues by assignee and epic.
+  - Add secondary grouping for assignee on top of status buckets.
+  - Add epic grouping with a fallback bucket for ungrouped issues.
+  - Add deterministic tests for grouped and ungrouped issues.
 
 Integration handoff after each commit:
 
