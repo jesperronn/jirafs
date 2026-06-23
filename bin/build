@@ -1,0 +1,49 @@
+#!/usr/bin/env bash
+
+set -euo pipefail
+
+# Usage: bin/build [--help] [--output PATH]
+#   --help          Print usage and exit.
+#   --output PATH   Write binary to PATH (default: ./jirafs).
+
+usage() {
+    cat >&2 <<EOF
+Usage: $(basename "$0") [OPTIONS]
+
+Options:
+  --help          Show this help message and exit.
+  --output PATH   Write binary to PATH (default: ./jirafs).
+EOF
+    exit 0
+}
+
+OUTPUT="./jirafs"
+
+while [ $# -gt 0 ]; do
+    case "$1" in
+        --help|-h)
+            usage
+            ;;
+        --output)
+            shift
+            if [ $# -eq 0 ] || [[ "$1" == -* ]]; then
+                echo "error: --output requires a PATH argument" >&2
+                exit 1
+            fi
+            OUTPUT="$1"
+            ;;
+        *)
+            echo "error: unknown argument: $1" >&2
+            exit 1
+            ;;
+    esac
+    shift
+done
+
+REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+cd "${REPO_ROOT}"
+
+VERSION="$(git describe --tags --always --dirty 2>/dev/null || echo "dev")"
+
+echo "building jirafs ${VERSION} → ${OUTPUT}"
+go build -ldflags "-X main.version=${VERSION}" -o "${OUTPUT}" ./cmd/jirafs

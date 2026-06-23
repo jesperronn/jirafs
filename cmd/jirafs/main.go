@@ -11,6 +11,9 @@ import (
 	"github.com/jirafs/jirafs/internal/config"
 )
 
+// version is set at build time via -ldflags "-X main.version=<value>".
+var version = "dev"
+
 func main() {
 	if len(os.Args) < 2 {
 		printHelp()
@@ -20,6 +23,8 @@ func main() {
 	switch os.Args[1] {
 	case "help":
 		printHelp()
+	case "--version", "-v":
+		fmt.Println("jirafs", version)
 	case "init", "new", "registry", "board", "archive":
 		fmt.Fprintf(os.Stderr, "jirafs %s: not yet implemented\n", os.Args[1])
 		os.Exit(1)

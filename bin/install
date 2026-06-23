@@ -1,0 +1,47 @@
+#!/usr/bin/env bash
+
+set -euo pipefail
+
+# Usage: bin/install [--help] [--prefix DIR]
+#   --help        Print usage and exit.
+#   --prefix DIR  Install to DIR/bin (default: ~/go).
+
+usage() {
+    cat >&2 <<EOF
+Usage: $(basename "$0") [OPTIONS]
+
+Options:
+  --help        Show this help message and exit.
+  --prefix DIR  Install to DIR/bin (default: ~/go).
+EOF
+    exit 0
+}
+
+PREFIX="${HOME}/go"
+
+while [ $# -gt 0 ]; do
+    case "$1" in
+        --help|-h)
+            usage
+            ;;
+        --prefix)
+            shift
+            if [ $# -eq 0 ] || [[ "$1" == -* ]]; then
+                echo "error: --prefix requires a DIR argument" >&2
+                exit 1
+            fi
+            PREFIX="$1"
+            ;;
+        *)
+            echo "error: unknown argument: $1" >&2
+            exit 1
+            ;;
+    esac
+    shift
+done
+
+REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+DEST="${PREFIX}/bin/jirafs"
+
+"${REPO_ROOT}/bin/build" --output "${DEST}"
+echo "installed → ${DEST}"

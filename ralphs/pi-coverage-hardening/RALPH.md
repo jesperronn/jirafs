@@ -13,11 +13,11 @@ commands:
   - name: integrate
     run: bin/integrate_stream_commit
 ---
-# jirafs Pi Coverage Hardening Loop
+# jirafs Pi development loop
 
 Implement one coverage-hardening task, then stop.
 
-Pick the first unchecked task in the `## Coverage Hardening` section of
+Pick the first unchecked task in 
 `docs/ralph-loop-implementation-tasks.md` whose deps are checked.
 
 Rules:
