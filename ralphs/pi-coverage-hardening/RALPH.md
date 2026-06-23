@@ -15,7 +15,7 @@ commands:
 ---
 # jirafs Pi development loop
 
-Implement one coverage-hardening task, then stop.
+Implement one task, then stop.
 
 Pick the first unchecked task in 
 `docs/ralph-loop-implementation-tasks.md` whose deps are checked.
