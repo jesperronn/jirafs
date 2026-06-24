@@ -1,5 +1,5 @@
 ---
-agent: claude -p --dangerously-skip-permissions
+agent: pi
 commands:
   - name: pending-tasks
     run: find tasks -maxdepth 1 -type f -name "*.md" -not -name "README.md" | sort
