@@ -1,23 +1,21 @@
 ---
 agent: pi
 commands:
-  - name: pending-tasks
-    run: find tasks -maxdepth 1 -type f -name "*.md" -not -name "README.md" | sort
-  - name: reset
+  - name: init
     run: git reset --hard main
+  - name: pending-tasks
+    run: find tasks -maxdepth 1 -type f -name "*.md" | sort
   - name: git-log
     run: git log --oneline -5
 ---
 
 # Prompt
 
-You are an autonomous coding agent running in a loop. Each iteration
-starts with a fresh context.
+You are an autonomous coding agent. Each iteration starts fresh.
+
+`init` has already run — you are at main.
 
 ## Pending tasks
-
-The following `.md` files in `tasks/` are pending (one task per file,
-sorted by filename):
 
 {{ commands.pending-tasks }}
 
@@ -25,70 +23,25 @@ sorted by filename):
 
 {{ commands.git-log }}
 
-## What to do
+## Steps
 
-1. Run `git reset --hard main` to start from a clean state. This
-   ensures parallel workers don't build on each other's uncommitted
-   work.
-2. If the pending tasks list above is **empty**, print exactly
-   `no tasks remaining` and stop — do nothing else this iteration.
-3. Otherwise, pick the **first** file from the pending tasks list
-   (lowest filename when sorted alphabetically).
-4. Read that task file in full. It describes one unit of work.
-5. Implement the task completely. No placeholder code, no TODO
-   comments, no partial implementations.
-6. Run the verification gates: `bin/test` and `bin/lint`. Both must
-   pass before committing. If either fails, fix the code and re-run
-   until both pass — do not commit failing work.
-7. Once both gates pass, commit the work with a descriptive message
-   like `feat: add X` or `fix: resolve Y`. Reference the task
-   filename in the commit body if it helps future readers.
-8. Move the task file from `tasks/` to `tasks/done/` using `git mv`
-   (create `tasks/done/` if it does not already exist). Include the
-   move in the same commit as the implementation, or a follow-up
-   commit — whichever keeps history cleaner.
-9. After a successful commit, merge back to `main` with
-   `git merge --ff-only` from the current branch. If the fast-forward
-   merge fails, leave `main` untouched and report the conflict in the
-   handoff.
+1. If pending tasks is empty, print `no tasks remaining` and stop.
+2. Pick the first file. Read it. Implement it fully — no placeholders, no TODOs.
+3. Run `bin/verify`. Fix until it passes. Do not commit failing work.
+4. Commit with a conventional message. Move the task file to `tasks/done/` in the same commit.
+5. Run `bin/handoff`. If it prints `blocked`, report it and stop.
 
 ## Rules
 
-- **One task per iteration.** Do not attempt a second task even if
-  the first was small.
-- Always work on the first pending task — do not skip ahead.
-- Both `bin/test` and `bin/lint` must pass before any commit.
-- Never delete a task file — always move it to `tasks/done/` so the
-  history is preserved.
-- If a task is unclear or blocked, add a note to the task file
-  explaining what is blocking it and leave it in `tasks/` for a
-  human to resolve. Then print `blocked: <filename>` and stop the
-  iteration without moving the file.
+- One task per iteration.
+- Never delete a task file — move it to `tasks/done/`.
+- If a task is unclear or blocked, add a note to the file, leave it in `tasks/`, print `blocked: <filename>`, and stop.
 
-## Required handoff
+## Handoff
 
-Return this at the end of every iteration:
-
-```text
-Task:
-- <filename and objective>
-
-Validation:
-- bin/test: <pass/fail>
-- bin/lint: <pass/fail>
-
-Files changed:
-- <paths>
-
-Commit:
-- <hash and subject, or none if partial/blocked>
-
-Merge to main:
-- <fast-forward succeeded | failed: <reason> | skipped: blocked>
-
-Status:
-- <done|partial|blocked>
-
-Risks:
-- <open issues or none>
+```
+Task: <filename and objective>
+Verify: <pass/fail>
+Commit: <hash and subject, or none>
+Handoff: <done/clean/blocked — output from bin/handoff>
 ```

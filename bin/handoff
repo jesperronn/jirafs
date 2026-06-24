@@ -1,0 +1,41 @@
+#!/usr/bin/env bash
+
+set -euo pipefail
+
+REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+cd "${REPO_ROOT}"
+
+MAIN_SHA=$(git rev-parse main)
+HEAD_SHA=$(git rev-parse HEAD)
+
+# Nothing to merge — worker did no commits
+if [ "$HEAD_SHA" = "$MAIN_SHA" ]; then
+  echo "clean: no new commits"
+  exit 0
+fi
+
+merge_ff() {
+  # Move main to HEAD without checking it out, only if it is a fast-forward
+  if git merge-base --is-ancestor main HEAD; then
+    git update-ref refs/heads/main HEAD
+    return 0
+  fi
+  return 1
+}
+
+if merge_ff; then
+  echo "done: fast-forward merged to main"
+  exit 0
+fi
+
+# main has moved ahead — rebase, re-verify, retry
+git rebase main || { echo "blocked: rebase conflict"; exit 1; }
+bin/verify   || { echo "blocked: verify failed after rebase"; exit 1; }
+
+if merge_ff; then
+  echo "done: fast-forward merged to main after rebase"
+  exit 0
+fi
+
+echo "blocked: merge failed after rebase"
+exit 1
