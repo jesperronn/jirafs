@@ -3,6 +3,8 @@ agent: pi
 commands:
   - name: pending-tasks
     run: find tasks -maxdepth 1 -type f -name "*.md" -not -name "README.md" | sort
+  - name: reset
+    run: git reset --hard main
   - name: git-log
     run: git log --oneline -5
 ---
@@ -25,24 +27,27 @@ sorted by filename):
 
 ## What to do
 
-1. If the pending tasks list above is **empty**, print exactly
+1. Run `git reset --hard main` to start from a clean state. This
+   ensures parallel workers don't build on each other's uncommitted
+   work.
+2. If the pending tasks list above is **empty**, print exactly
    `no tasks remaining` and stop — do nothing else this iteration.
-2. Otherwise, pick the **first** file from the pending tasks list
+3. Otherwise, pick the **first** file from the pending tasks list
    (lowest filename when sorted alphabetically).
-3. Read that task file in full. It describes one unit of work.
-4. Implement the task completely. No placeholder code, no TODO
+4. Read that task file in full. It describes one unit of work.
+5. Implement the task completely. No placeholder code, no TODO
    comments, no partial implementations.
-5. Run the verification gates: `bin/test` and `bin/lint`. Both must
+6. Run the verification gates: `bin/test` and `bin/lint`. Both must
    pass before committing. If either fails, fix the code and re-run
    until both pass — do not commit failing work.
-6. Once both gates pass, commit the work with a descriptive message
+7. Once both gates pass, commit the work with a descriptive message
    like `feat: add X` or `fix: resolve Y`. Reference the task
    filename in the commit body if it helps future readers.
-7. Move the task file from `tasks/` to `tasks/done/` using `git mv`
+8. Move the task file from `tasks/` to `tasks/done/` using `git mv`
    (create `tasks/done/` if it does not already exist). Include the
    move in the same commit as the implementation, or a follow-up
    commit — whichever keeps history cleaner.
-8. After a successful commit, merge back to `main` with
+9. After a successful commit, merge back to `main` with
    `git merge --ff-only` from the current branch. If the fast-forward
    merge fails, leave `main` untouched and report the conflict in the
    handoff.
