@@ -54,8 +54,8 @@ func TestBoard_GroupByStatus(t *testing.T) {
 		},
 	}
 	
-	// Group issues by status
-	board.GroupByStatus(issues)
+	// Group issues by status - using dummy registry parameter for now to make tests pass
+	board.GroupByStatus(issues, nil)
 	
 	// Check that we have columns for all statuses - this is a simple check
 	// that Open and In Progress are properly grouped, and the rest goes to Unknown
@@ -70,9 +70,6 @@ func TestBoard_GroupByStatus(t *testing.T) {
 	if len(board.StatusColumns["Resolved"]) != 1 {
 		t.Errorf("Expected 1 issue in 'Resolved' column, got %d", len(board.StatusColumns["Resolved"]))
 	}
-	
-	// The "Custom Status" and "" status should end up in Unknown column since they're not in our default columns
-	// But we can't predict exactly how many will end up there
 	
 	// Check that the column order is as expected
 	if len(board.ColumnOrder) == 0 {
@@ -89,19 +86,19 @@ func TestBoard_GroupByStatus(t *testing.T) {
 }
 
 func TestBoard_GroupByStatus_Empty(t *testing.T) {
-	board := NewBoard()
+	b := NewBoard()
 	
 	// Test with empty issues slice
-	board.GroupByStatus([]*schema.Issue{})
+	b.GroupByStatus([]*schema.Issue{}, nil)
 	
 	// Should have no columns or at least no issues in columns
-	if len(board.StatusColumns) != 0 {
-		t.Logf("Expected no columns, got %d", len(board.StatusColumns))
+	if len(b.StatusColumns) != 0 {
+		t.Logf("Expected no columns, got %d", len(b.StatusColumns))
 	}
 }
 
 func TestBoard_GroupByStatus_UnknownStatus(t *testing.T) {
-	board := NewBoard()
+	b := NewBoard()
 	
 	issues := []*schema.Issue{
 		{
@@ -114,11 +111,12 @@ func TestBoard_GroupByStatus_UnknownStatus(t *testing.T) {
 		},
 	}
 	
-	board.GroupByStatus(issues)
+	// Using dummy registry parameter for now to make tests pass
+	b.GroupByStatus(issues, nil)
 	
 	// Should end up in "Unknown" column
-	if len(board.StatusColumns["Unknown"]) != 1 {
-		t.Errorf("Expected 1 issue in 'Unknown' column, got %d", len(board.StatusColumns["Unknown"]))
+	if len(b.StatusColumns["Unknown"]) != 1 {
+		t.Errorf("Expected 1 issue in 'Unknown' column, got %d", len(b.StatusColumns["Unknown"]))
 	}
 }
 

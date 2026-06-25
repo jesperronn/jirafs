@@ -22,7 +22,7 @@ func NewBoard() *Board {
 }
 
 // GroupByStatus groups issues by their canonical status.
-func (b *Board) GroupByStatus(issues []*schema.Issue) {
+func (b *Board) GroupByStatus(issues []*schema.Issue, statusRegistry interface{}) {
 	// Clear existing columns
 	b.StatusColumns = make(map[string][]*schema.Issue)
 	
