@@ -25,6 +25,9 @@ When these documents overlap, keep the stricter rule.
   changed, why it changed, and how it was verified without reconstructing your
   intent from raw diffs.
 - Treat contract changes as coordination events, not incidental edits.
+- Never use real external endpoints for tests or agent verification unless the
+  task explicitly authorizes that live access.
+- Mock 1Password, Jira, and similar external services by default.
 
 ## Commit Chunking
 

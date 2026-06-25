@@ -75,6 +75,17 @@ If something fails:
 - project resolution issue: run `jirafs use --project <name>`
 - live Jira issue: retry with a single issue export before a whole-scope refresh
 
+## Testing Policy
+
+Tests and agent verification must stay offline unless a task explicitly says
+otherwise.
+
+- mock 1Password and Jira calls by default
+- use fake transports or injected providers for network-bound code
+- do not add live endpoint tests as a shortcut for missing test seams
+- if a live probe is genuinely required, state that in the task and the test
+  name
+
 ## Command Surface
 
 The most important commands right now are:

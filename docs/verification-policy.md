@@ -60,6 +60,18 @@ The author should repeat the narrowest possible loop while editing:
 - targeted validator after each document or schema edit
 - full suite before asking for review
 
+## Test Isolation
+
+Tests and agent-driven verification must be offline by default.
+
+- mock 1Password lookups, Jira HTTP calls, and other live endpoints in tests
+- do not call real external services unless the task explicitly says to do so
+- if a test truly needs a live endpoint, mark that assumption clearly in the
+  task, the test name, and the handoff notes
+- prefer dependency injection or fake transports over environment-dependent
+  probes
+- treat unmocked network access in tests as a defect, not a convenience
+
 Do not rely on review or CI to perform first-pass debugging.
 
 ## Required Checks
