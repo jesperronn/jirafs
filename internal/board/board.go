@@ -74,7 +74,7 @@ func contains(slice []string, item string) bool {
 
 // GroupByAssignee groups issues by their assignee.
 func (b *Board) GroupByAssignee(issues []*schema.Issue) {
-	// For now, just group by whether assignee exists or not
+	// Group issues by their assignee - this is part of B091b
 	assigneeColumns := make(map[string][]*schema.Issue)
 	
 	for _, issue := range issues {
@@ -88,14 +88,12 @@ func (b *Board) GroupByAssignee(issues []*schema.Issue) {
 		assigneeColumns[assigneeKey] = append(assigneeColumns[assigneeKey], issue)
 	}
 	
-	// For B091a, we just need to make sure grouping by status works properly
-	// This method exists for B091b to use, but B091a is about status grouping
+	// For B091b, we just need to make sure the method exists
+	// This will be expanded in future implementations or task B091b implementation
 }
 
 // GroupByEpic groups issues by their epic.
 func (b *Board) GroupByEpic(issues []*schema.Issue) {
-	// For B091b, we want to group by epic - this is a more complex operation
-	// For now just make sure the method exists
-	
-	// This will be implemented in B091b task
+	// This method will implement grouping by epic, which is part of B091b
+	// For now just make sure it exists - implementation will be added as part of B091b
 }
