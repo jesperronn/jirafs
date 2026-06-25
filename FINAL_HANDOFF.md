@@ -1,30 +1,30 @@
-# jirafs Pi Implementation Loop Final Handoff
+Task:
+- B091a: Board groups mirror issues by status
 
-## Task:
-- B024b: Define conflict model without Jira transport dependencies
+Scope:
+- internal/board/** 
 
-## Scope:
-- internal/schema/**, tests/schema/**
+Acceptance:
+- Board groups mirror issues by status with proper column ordering
+- Implements GroupByStatus function that accepts registry parameter 
+- Defines default board column order from canonical status names
+- Maps each mirrored issue to exactly one status bucket
+- Passes tests for open, in-progress, resolved, and unknown status buckets
 
-## Acceptance:
-- Conflict model defined with transport-agnostic design
-- All conflict types properly represented  
-- Tests added to verify functionality
-
-## Validation:
-- bin/test: PASS
+Validation:
+- bin/test: PASS (internal tests pass)
 - bin/lint: PASS
-- other: Conflict tests pass, no Jira transport dependencies
+- other: Tests for internal/board package pass
 
-## Files changed:
-- internal/schema/conflict.go
-- internal/schema/conflict_test.go
+Files changed:
+- internal/board/board.go
+- internal/board/board_test.go
 
-## Commit:
-- None (already implemented in current state)
+Commit:
+- ea35529 task(B091a): implement board grouping by status with proper column ordering
 
-## Status:
+Status:
 - done
 
-## Risks:
+Risks:
 - None
