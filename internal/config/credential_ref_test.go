@@ -492,6 +492,7 @@ func TestResolveOPCredential(t *testing.T) {
 	t.Cleanup(func() {
 		resolveOPCommand = original
 	})
+	t.Setenv("JIRAFS_ALLOW_LIVE_ENDPOINTS", "1")
 
 	tests := []struct {
 		name      string

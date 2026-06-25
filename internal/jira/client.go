@@ -83,8 +83,8 @@ type Client interface {
 // jiraErrorDetails captures the structured error response from Jira.
 // Jira returns {"errorMessages": [...], "errors": {...}} on failure.
 type jiraErrorDetails struct {
-	ErrorMessages []string            `json:"errorMessages"`
-	Errors        map[string]string   `json:"errors"`
+	ErrorMessages []string          `json:"errorMessages"`
+	Errors        map[string]string `json:"errors"`
 }
 
 // jiraIssueResponse is the JSON structure returned by the Jira REST API
@@ -98,8 +98,8 @@ type jiraIssueResponse struct {
 // searchResponse is the JSON structure returned by the Jira REST API
 // for a search (JQL) request.
 type searchResponse struct {
-	Total    int                `json:"total"`
-	Issues   []jiraIssueResponse `json:"issues"`
+	Total  int                 `json:"total"`
+	Issues []jiraIssueResponse `json:"issues"`
 }
 
 // statusesResponse is the JSON structure returned by the status API.
@@ -177,6 +177,9 @@ func NewJiraClient(baseURL string) *JiraClient {
 
 // FetchIssue retrieves a single issue by its key from the Jira REST API.
 func (c *JiraClient) FetchIssue(ctx context.Context, key string) (*schema.Issue, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
 	if key == "" {
 		return nil, NewNotFoundError("empty key")
 	}
@@ -215,8 +218,8 @@ func (c *JiraClient) FetchIssue(ctx context.Context, key string) (*schema.Issue,
 
 	issue := &schema.Issue{
 		Identity: schema.IssueIdentity{
-			Key:   schema.IssueKey(jr.Key),
-			Type:  schema.IssueType(""),
+			Key:  schema.IssueKey(jr.Key),
+			Type: schema.IssueType(""),
 		},
 	}
 
@@ -247,6 +250,9 @@ func (c *JiraClient) FetchIssue(ctx context.Context, key string) (*schema.Issue,
 //
 // Unsupported scopes return a not_found error.
 func (c *JiraClient) SearchIssues(ctx context.Context, scope string) ([]*schema.Issue, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
 	var jql string
 	switch scope {
 	case "my-issues":
@@ -258,12 +264,12 @@ func (c *JiraClient) SearchIssues(ctx context.Context, scope string) ([]*schema.
 	}
 
 	body := map[string]interface{}{
-		"jql":         jql,
-		"maxResults":  50,
-		"fields":      []string{"summary", "description", "labels", "assignee", "status", "issuetype"},
-		"startAt":     0,
-		"expand":      "schema,names",
-		"properties":  []string{},
+		"jql":        jql,
+		"maxResults": 50,
+		"fields":     []string{"summary", "description", "labels", "assignee", "status", "issuetype"},
+		"startAt":    0,
+		"expand":     "schema,names",
+		"properties": []string{},
 	}
 
 	payload, err := json.Marshal(body)
@@ -343,6 +349,9 @@ func (c *JiraClient) SearchIssues(ctx context.Context, scope string) ([]*schema.
 // the authenticated user's identity. It is used for scope resolution
 // when building JQL queries that depend on the current user.
 func (c *JiraClient) CurrentUser(ctx context.Context) (*User, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
 	url := c.baseURL + "/rest/api/3/myself"
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
@@ -381,6 +390,9 @@ func (c *JiraClient) CurrentUser(ctx context.Context) (*User, error) {
 // FetchStatuses calls the Jira /rest/api/3/status endpoint to retrieve
 // all available issue statuses. It returns the parsed StatusEntry slice.
 func (c *JiraClient) FetchStatuses(ctx context.Context) ([]StatusEntry, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
 	url := c.baseURL + "/rest/api/3/status"
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
@@ -419,6 +431,9 @@ func (c *JiraClient) FetchStatuses(ctx context.Context) ([]StatusEntry, error) {
 // FetchSprints calls the Jira /rest/agile/1.0/sprint endpoint with a
 // project query parameter to retrieve all sprints for the given project.
 func (c *JiraClient) FetchSprints(ctx context.Context, projectKey string) ([]SprintEntry, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
 	if projectKey == "" {
 		return nil, NewNotFoundError("empty project key for sprints")
 	}
@@ -463,6 +478,9 @@ func (c *JiraClient) FetchSprints(ctx context.Context, projectKey string) ([]Spr
 // status, sprint, fix_versions) to /rest/api/3/issue/{key} and returns
 // the updated issue from Jira.
 func (c *JiraClient) UpdateIssue(ctx context.Context, key string, issue *schema.Issue) (*schema.Issue, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
 	if key == "" {
 		return nil, NewNotFoundError("empty key")
 	}
@@ -546,6 +564,9 @@ func (c *JiraClient) UpdateIssue(ctx context.Context, key string, issue *schema.
 // FetchFixVersions calls the Jira /rest/api/3/project/{projectKey}/versions
 // endpoint to retrieve all fix versions for the given project.
 func (c *JiraClient) FetchFixVersions(ctx context.Context, projectKey string) ([]FixVersionEntry, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
 	if projectKey == "" {
 		return nil, NewNotFoundError("empty project key for fix versions")
 	}

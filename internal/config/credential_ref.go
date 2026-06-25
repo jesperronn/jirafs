@@ -133,6 +133,11 @@ var resolveOPCommand = func(args ...string) ([]byte, error) {
 	return exec.Command("op", args...).Output()
 }
 
+func liveEndpointsAllowed() bool {
+	v := strings.TrimSpace(os.Getenv("JIRAFS_ALLOW_LIVE_ENDPOINTS"))
+	return v == "1" || strings.EqualFold(v, "true") || strings.EqualFold(v, "yes")
+}
+
 // ResolveOPCredential reads one field from a 1Password item using the op CLI.
 // Targets use the form "item" or "item/field-label". When the field label is
 // omitted, "token" is used by default.
@@ -150,6 +155,14 @@ func ResolveOPCredential(ref CredentialRef) (ResolvedCredential, error) {
 		return ResolvedCredential{}, NewSettingError(
 			ErrCredentialResolve,
 			err.Error(),
+			"credential_ref", "op://"+ref.Target,
+		)
+	}
+
+	if !liveEndpointsAllowed() {
+		return ResolvedCredential{}, NewSettingError(
+			ErrCredentialResolve,
+			"1Password access is disabled by default; set JIRAFS_ALLOW_LIVE_ENDPOINTS=1 to allow it",
 			"credential_ref", "op://"+ref.Target,
 		)
 	}
