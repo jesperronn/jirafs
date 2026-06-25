@@ -126,6 +126,7 @@ type Issue struct {
 	Status         string
 	Sprint         string
 	FixVersions    []string
+	Epic           string
 	LinkedIssues   []LinkedIssue `yaml:"linked_issues,omitempty"`
 	// Sections holds the body sections keyed by their fixed section name.
 	// Only populated by ParseIssue when section parsing is enabled.

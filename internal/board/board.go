@@ -11,13 +11,21 @@ type Board struct {
 	StatusColumns map[string][]*schema.Issue
 	// ColumnOrder defines the canonical order of columns.
 	ColumnOrder []string
+	
+	// AssigneeGroups maps assignees to lists of issues assigned to them.
+	AssigneeGroups map[string][]*schema.Issue
+	
+	// EpicGroups maps epics to lists of issues belonging to them.
+	EpicGroups map[string][]*schema.Issue
 }
 
 // NewBoard creates a new board grouping issues by status.
 func NewBoard() *Board {
 	return &Board{
-		StatusColumns: make(map[string][]*schema.Issue),
-		ColumnOrder:   []string{},
+		StatusColumns:  make(map[string][]*schema.Issue),
+		ColumnOrder:    []string{},
+		AssigneeGroups: make(map[string][]*schema.Issue),
+		EpicGroups:     make(map[string][]*schema.Issue),
 	}
 }
 
@@ -49,6 +57,45 @@ func (b *Board) GroupByStatus(issues []*schema.Issue, statusRegistry interface{}
 		}
 		
 		b.StatusColumns[statusName] = append(b.StatusColumns[statusName], issue)
+	}
+}
+
+// GroupByAssignee groups issues by their assignee.
+func (b *Board) GroupByAssignee(issues []*schema.Issue) {
+	// Clear existing assignee groups
+	b.AssigneeGroups = make(map[string][]*schema.Issue)
+	
+	// Group issues by assignee
+	for _, issue := range issues {
+		var assignee string
+		
+		if issue.Assignee != nil {
+			assignee = *issue.Assignee
+		} else {
+			assignee = "Unassigned"
+		}
+		
+		b.AssigneeGroups[assignee] = append(b.AssigneeGroups[assignee], issue)
+	}
+}
+
+// GroupByEpic groups issues by their epic.
+func (b *Board) GroupByEpic(issues []*schema.Issue) {
+	// Clear existing epic groups
+	b.EpicGroups = make(map[string][]*schema.Issue)
+	
+	// Group issues by epic
+	for _, issue := range issues {
+		var epic string
+		
+		// If there's an epic field in the issue, use that
+		if issue.Epic != "" {
+			epic = issue.Epic
+		} else {
+			epic = "No Epic"
+		}
+		
+		b.EpicGroups[epic] = append(b.EpicGroups[epic], issue)
 	}
 }
 
