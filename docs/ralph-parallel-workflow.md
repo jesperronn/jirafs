@@ -8,11 +8,10 @@ Use separate git worktrees for parallel ralph streams:
 - `P4-worktree`: WS4 plan and sync.
 - `P5-worktree`: WS5 mirror, CLI, archive.
 
-Run each worktree with `ralph run --stop-on-error`. The ralph prompt chooses
-the first ready unchecked task in that stream ledger, commits it, and stops.
-When a stream has no unchecked tasks left, it should report `complete` and exit
-non-zero so the Ralphify loop terminates. When tasks remain but none are ready,
-it should report `blocked` and exit non-zero for the same reason.
+Run each worktree with `ralph run --stop-on-error`.
+The prompt must take exactly one ready task, commit it, hand off, and exit.
+If no unchecked tasks remain, report `complete` and exit non-zero.
+If tasks remain but none are ready, report `blocked` and exit non-zero.
 
 Each stream task must produce one commit containing both:
 

@@ -26,10 +26,13 @@ Rules:
 - New code needs tests in the same task.
 - Final gates: `bin/test` and `bin/lint`.
 - Mark `[x]` only after both gates pass.
-- Commit successful work after gates pass. Use conventional commit wording.
+- Commit after gates pass.
 - Do not commit blocked or failing work.
+- After handoff, exit immediately.
+- No unchecked tasks left: report `complete` and exit non-zero.
+- Tasks remain but none ready: report `blocked` and exit non-zero.
 - Handoff must include final gate results and commit hash.
-- Local model context is small: read only the docs needed for the chosen task.
+- Read only the docs needed for the chosen task.
 
 Progress source: the task ledger is canonical. Each iteration starts at the
 first unchecked task whose deps are checked. Do not plan later work in the
