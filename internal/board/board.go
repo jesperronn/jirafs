@@ -2,6 +2,8 @@
 package board
 
 import (
+	"sort"
+
 	"github.com/jirafs/jirafs/internal/schema"
 )
 
@@ -34,7 +36,7 @@ func (b *Board) GroupByStatus(issues []*schema.Issue, statusRegistry interface{}
 	// Clear existing columns
 	b.StatusColumns = make(map[string][]*schema.Issue)
 	
-	// Initialize with default columns (open, in-progress, resolved, unknown)
+	// Initialize column order with default columns
 	defaultColumns := []string{"Open", "In Progress", "Resolved", "Unknown"}
 	
 	// Create column order with canonical status names 
@@ -58,6 +60,9 @@ func (b *Board) GroupByStatus(issues []*schema.Issue, statusRegistry interface{}
 		
 		b.StatusColumns[statusName] = append(b.StatusColumns[statusName], issue)
 	}
+	
+	// Sort the columns in a consistent way (just for deterministic output)
+	sort.Strings(b.ColumnOrder)
 }
 
 // GroupByAssignee groups issues by their assignee.

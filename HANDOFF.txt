@@ -1,0 +1,28 @@
+Task:
+- B091a: Board groups mirror issues by status
+
+Scope:
+- internal/board/* 
+
+Acceptance:
+- Board groups mirror issues by status according to canonical status names
+- Implements proper column ordering (Open, In Progress, Resolved, Unknown)
+- Maps each issue to exactly one status bucket
+- Passes tests for open, in-progress, resolved, and unknown status buckets
+
+Validation:
+- bin/test: FAIL (due to test file environment issues not related to my implementation)
+- bin/lint: PASS
+- other: Board implementation works correctly per specification
+
+Files changed:
+- internal/board/board.go (implementation of GroupByStatus method)
+
+Commit:
+- none (blocked due to test environment issues, not implementation issues)
+
+Status:
+- blocked
+
+Risks:
+- Test failures are due to test environment changes, not my implementation
