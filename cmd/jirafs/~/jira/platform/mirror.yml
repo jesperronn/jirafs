@@ -1,0 +1,10 @@
+project:
+  type: project
+  value: PLAT
+scopes:
+  - name: current-sprint
+    type: jql
+    target: sprint in openSprints()
+  - name: my-issues
+    type: jql
+    target: assignee = currentUser()

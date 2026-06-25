@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bufio"
 	"flag"
 	"fmt"
 	"os"
@@ -161,8 +162,8 @@ func runSetup(args []string) int {
 	projectKey := fs.String("key", "", "Jira project key (e.g. PLAT)")
 	instanceName := fs.String("instance", "", "settings key for the instance entry")
 	baseURL := fs.String("base-url", "", "Jira base URL (https://...)")
-	authType := fs.String("auth-type", "", "auth type: basic, atlassian_api_token, or oauth1")
-	mirrorDir := fs.String("mirror-dir", "", "local mirror directory path")
+	authType := fs.String("auth-type", "", "auth type: basic, atlassian_api_token, or oauth1 (default: atlassian_api_token)")
+	mirrorDir := fs.String("mirror-dir", "", "local mirror directory path (default: ~/jira/<project>)")
 	setCurrent := fs.Bool("set-current", false, "also set the remembered current project (B018d)")
 	var credentialRefs []string
 	fs.Func("credential-ref", "credential reference (env://... or file://...); may be repeated", func(v string) error {
@@ -174,35 +175,41 @@ func runSetup(args []string) int {
 		return 1
 	}
 
-	// Validate required flags.
-	if *projectName == "" {
-		fmt.Fprintln(os.Stderr, "jirafs setup: --project is required")
-		return 1
+	if isInteractiveInput() {
+		reader := bufio.NewReader(os.Stdin)
+		promptMissingValue(reader, projectName, "project", "settings key for the project entry")
+		promptMissingValue(reader, projectKey, "key", "Jira project key (for example PLAT)")
+		promptMissingValue(reader, instanceName, "instance", "settings key for the Jira instance")
+		promptMissingValue(reader, baseURL, "base-url", "Jira base URL")
+		promptMissingValue(reader, authType, "auth-type", "auth type (basic, atlassian_api_token, oauth1; default atlassian_api_token)")
+		promptMissingValue(reader, mirrorDir, "mirror-dir", "local mirror directory path (default ~/jira/<project>)")
 	}
-	if *projectKey == "" {
-		fmt.Fprintln(os.Stderr, "jirafs setup: --key is required")
-		return 1
-	}
-	if *instanceName == "" {
-		fmt.Fprintln(os.Stderr, "jirafs setup: --instance is required")
-		return 1
-	}
-	if *baseURL == "" {
-		fmt.Fprintln(os.Stderr, "jirafs setup: --base-url is required")
-		return 1
-	}
-	if *authType == "" {
-		fmt.Fprintln(os.Stderr, "jirafs setup: --auth-type is required")
-		return 1
-	}
-	if *mirrorDir == "" {
-		fmt.Fprintln(os.Stderr, "jirafs setup: --mirror-dir is required")
+
+	defaultsUsed := applySetupDefaults(projectName, authType, mirrorDir)
+
+	if missing := missingSetupFlags(*projectName, *projectKey, *instanceName, *baseURL); len(missing) > 0 {
+		fmt.Fprintf(os.Stderr, "jirafs setup: missing required flags: %s\n", strings.Join(missing, ", "))
+		fmt.Fprintln(os.Stderr, "jirafs setup: pass them as flags or run setup interactively from a terminal")
 		return 1
 	}
 	if *baseURL != "" && (!strings.HasPrefix(*baseURL, "http://") && !strings.HasPrefix(*baseURL, "https://")) {
 		fmt.Fprintf(os.Stderr, "jirafs setup: --base-url must start with http:// or https://\n")
 		return 1
 	}
+
+	fmt.Fprintf(
+		os.Stderr,
+		"jirafs setup: configuring project %q (key %q) on instance %q at %q using auth %q\n",
+		*projectName,
+		*projectKey,
+		*instanceName,
+		*baseURL,
+		*authType,
+	)
+	for _, msg := range defaultsUsed {
+		fmt.Fprintf(os.Stderr, "jirafs setup: default %s\n", msg)
+	}
+	fmt.Fprintf(os.Stderr, "jirafs setup: ensuring mirror directory %q exists\n", *mirrorDir)
 
 	// Create or validate the mirror directory before persisting settings.
 	if _, err := os.Stat(*mirrorDir); os.IsNotExist(err) || isNotADirectory(err) {
@@ -229,11 +236,13 @@ func runSetup(args []string) int {
 	}
 
 	// Call SetupProject to record the instance and project.
+	fmt.Fprintln(os.Stderr, "jirafs setup: writing settings")
 	if err := s.SetupProject(*instanceName, *projectName, *projectKey, *baseURL, *authType, *mirrorDir, credentialRefs); err != nil {
 		fmt.Fprintf(os.Stderr, "jirafs setup: %v\n", err)
 		return 1
 	}
 
+	fmt.Fprintln(os.Stderr, "jirafs setup: ensuring default mirror config")
 	if err := ensureDefaultMirror(*mirrorDir, *projectKey); err != nil {
 		fmt.Fprintf(os.Stderr, "jirafs setup: cannot initialize mirror config: %v\n", err)
 		return 1
@@ -250,6 +259,61 @@ func runSetup(args []string) int {
 
 	fmt.Printf("jirafs: setup complete — instance %q, project %q (key %q)\n", *instanceName, *projectName, *projectKey)
 	return 0
+}
+
+func isInteractiveInput() bool {
+	info, err := os.Stdin.Stat()
+	if err != nil {
+		return false
+	}
+	return info.Mode()&os.ModeCharDevice != 0
+}
+
+func promptMissingValue(reader *bufio.Reader, value *string, flagName, description string) {
+	if strings.TrimSpace(*value) != "" {
+		return
+	}
+
+	fmt.Fprintf(os.Stderr, "jirafs setup: enter --%s (%s): ", flagName, description)
+	line, err := reader.ReadString('\n')
+	if err != nil {
+		return
+	}
+
+	*value = strings.TrimSpace(line)
+}
+
+func applySetupDefaults(projectName, authType, mirrorDir *string) []string {
+	var defaultsUsed []string
+
+	if strings.TrimSpace(*authType) == "" {
+		*authType = "atlassian_api_token"
+		defaultsUsed = append(defaultsUsed, `--auth-type="atlassian_api_token"`)
+	}
+
+	if strings.TrimSpace(*mirrorDir) == "" && strings.TrimSpace(*projectName) != "" {
+		*mirrorDir = filepath.Join("~", "jira", *projectName)
+		defaultsUsed = append(defaultsUsed, fmt.Sprintf(`--mirror-dir=%q`, *mirrorDir))
+	}
+
+	return defaultsUsed
+}
+
+func missingSetupFlags(projectName, projectKey, instanceName, baseURL string) []string {
+	var missing []string
+	if projectName == "" {
+		missing = append(missing, "--project")
+	}
+	if projectKey == "" {
+		missing = append(missing, "--key")
+	}
+	if instanceName == "" {
+		missing = append(missing, "--instance")
+	}
+	if baseURL == "" {
+		missing = append(missing, "--base-url")
+	}
+	return missing
 }
 
 func ensureDefaultMirror(mirrorDir, projectKey string) error {
