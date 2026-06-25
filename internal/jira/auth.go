@@ -14,12 +14,16 @@ const AuthTypeBasic = "basic"
 // AuthTypeAtlassianAPI indicates Atlassian API token authentication.
 const AuthTypeAtlassianAPI = "atlassian_api_token"
 
+// AuthTypeBearerToken indicates bearer token authentication.
+const AuthTypeBearerToken = "bearer_token"
+
 // AuthTypeOAuth1 indicates OAuth 1.0a authentication.
 const AuthTypeOAuth1 = "oauth1"
 
 // BuildAuthenticatedRequest applies the appropriate authentication headers
-// to req based on the provided credentials. It supports basic, atlassian_api_token,
-// and oauth1 auth types. Unsupported or missing required fields return an error.
+// to req based on the provided credentials. It supports basic,
+// atlassian_api_token, bearer_token, and oauth1 auth types. Unsupported or
+// missing required fields return an error.
 //
 // The function mutates req in place and returns the same request pointer for
 // convenience.
@@ -33,6 +37,8 @@ func BuildAuthenticatedRequest(req *http.Request, creds config.ResolvedInstanceC
 		return applyBasicAuth(req, creds.Credential)
 	case AuthTypeAtlassianAPI:
 		return applyAPITokenAuth(req, creds.Credential)
+	case AuthTypeBearerToken:
+		return applyBearerTokenAuth(req, creds.Credential)
 	case AuthTypeOAuth1:
 		return nil, fmt.Errorf("jira: BuildAuthenticatedRequest: oauth1 auth not yet implemented")
 	default:
@@ -75,5 +81,15 @@ func applyAPITokenAuth(req *http.Request, cred config.ResolvedCredential) (*http
 
 	encoded := base64.StdEncoding.EncodeToString([]byte(email + ":" + apiToken))
 	req.Header.Set("Authorization", "Basic "+encoded)
+	return req, nil
+}
+
+func applyBearerTokenAuth(req *http.Request, cred config.ResolvedCredential) (*http.Request, error) {
+	token := cred.Fields["bearer_token"]
+	if token == "" {
+		return nil, fmt.Errorf("jira: bearer_token auth requires 'bearer_token' field")
+	}
+
+	req.Header.Set("Authorization", "Bearer "+token)
 	return req, nil
 }

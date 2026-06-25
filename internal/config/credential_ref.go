@@ -3,6 +3,7 @@ package config
 import (
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 
@@ -62,12 +63,12 @@ func ParseCredentialRef(ref string) (CredentialRef, error) {
 	}
 
 	switch scheme {
-	case "env", "file":
+	case "env", "file", "op":
 		// Supported schemes — allow through.
 	default:
 		return CredentialRef{}, NewSettingError(
 			ErrInvalidCredentialRef,
-			fmt.Sprintf("unsupported credential ref scheme %q: only env:// and file:// are allowed", scheme),
+			fmt.Sprintf("unsupported credential ref scheme %q: only env://, file://, and op:// are allowed", scheme),
 			"credential_ref",
 			ref,
 		)
@@ -127,6 +128,100 @@ func ResolveEnvCredential(ref CredentialRef) (ResolvedCredential, error) {
 	}, nil
 }
 
+// resolveOPCommand is extracted for testability.
+var resolveOPCommand = func(args ...string) ([]byte, error) {
+	return exec.Command("op", args...).Output()
+}
+
+// ResolveOPCredential reads one field from a 1Password item using the op CLI.
+// Targets use the form "item" or "item/field-label". When the field label is
+// omitted, "token" is used by default.
+func ResolveOPCredential(ref CredentialRef) (ResolvedCredential, error) {
+	if ref.Scheme != "op" {
+		return ResolvedCredential{}, NewSettingError(
+			ErrCredentialResolve,
+			fmt.Sprintf("expected op:// scheme, got %q", ref.Scheme),
+			"credential_ref", ref.Scheme+"://"+ref.Target,
+		)
+	}
+
+	item, fieldLabel, err := parseOPTarget(ref.Target)
+	if err != nil {
+		return ResolvedCredential{}, NewSettingError(
+			ErrCredentialResolve,
+			err.Error(),
+			"credential_ref", "op://"+ref.Target,
+		)
+	}
+
+	output, err := resolveOPCommand(
+		"item", "get", item,
+		"--fields", "label="+fieldLabel,
+		"--reveal",
+	)
+	if err != nil {
+		return ResolvedCredential{}, NewSettingError(
+			ErrCredentialResolve,
+			fmt.Sprintf("cannot read 1Password item %q field %q: %s", item, fieldLabel, err.Error()),
+			"credential_ref", "op://"+ref.Target,
+		)
+	}
+
+	value := strings.TrimSpace(string(output))
+	if value == "" {
+		return ResolvedCredential{}, NewSettingError(
+			ErrCredentialResolve,
+			fmt.Sprintf("1Password item %q field %q returned an empty value", item, fieldLabel),
+			"credential_ref", "op://"+ref.Target,
+		)
+	}
+
+	return ResolvedCredential{
+		Scheme: "op",
+		Target: ref.Target,
+		Fields: normalizedCredentialFields(fieldLabel, value),
+	}, nil
+}
+
+func parseOPTarget(target string) (item string, fieldLabel string, err error) {
+	parts := strings.Split(target, "/")
+	switch len(parts) {
+	case 1:
+		if strings.TrimSpace(parts[0]) == "" {
+			return "", "", fmt.Errorf("1Password item name must not be empty")
+		}
+		return parts[0], "token", nil
+	case 2:
+		if strings.TrimSpace(parts[0]) == "" || strings.TrimSpace(parts[1]) == "" {
+			return "", "", fmt.Errorf("1Password target must be item or item/field-label")
+		}
+		return parts[0], parts[1], nil
+	default:
+		return "", "", fmt.Errorf("1Password target must be item or item/field-label")
+	}
+}
+
+func normalizeCredentialFieldName(fieldLabel string) string {
+	normalized := strings.ToLower(strings.TrimSpace(fieldLabel))
+	normalized = strings.ReplaceAll(normalized, "-", "_")
+	normalized = strings.ReplaceAll(normalized, " ", "_")
+	if normalized == "token" {
+		return "api_token"
+	}
+	return normalized
+}
+
+func normalizedCredentialFields(fieldLabel, value string) map[string]string {
+	normalized := normalizeCredentialFieldName(fieldLabel)
+	fields := map[string]string{
+		normalized: value,
+	}
+	if normalized == "api_token" {
+		fields["bearer_token"] = value
+	}
+	return fields
+}
+
 // AuthTypeRequiredFields maps supported auth types to the set of field keys
 // that must be present in a resolved credential for that auth type to be
 // considered valid. This is the first implementation of auth field validation.
@@ -136,13 +231,17 @@ var AuthTypeRequiredFields = map[string]map[string]struct{}{
 		"password": {},
 	},
 	"atlassian_api_token": {
+		"email":     {},
 		"api_token": {},
 	},
+	"bearer_token": {
+		"bearer_token": {},
+	},
 	"oauth1": {
-		"oauth_token":      {},
-		"oauth_secret":     {},
+		"oauth_token":        {},
+		"oauth_secret":       {},
 		"oauth_consumer_key": {},
-		"oauth_signature":  {},
+		"oauth_signature":    {},
 	},
 }
 
@@ -334,6 +433,12 @@ func (s *Settings) ResolveInstanceCredentials(instanceName string) (ResolvedInst
 			resolved = append(resolved, cred)
 		case "file":
 			cred, err := ResolveFileCredential(ref)
+			if err != nil {
+				return ResolvedInstanceCredentials{}, err
+			}
+			resolved = append(resolved, cred)
+		case "op":
+			cred, err := ResolveOPCredential(ref)
 			if err != nil {
 				return ResolvedInstanceCredentials{}, err
 			}

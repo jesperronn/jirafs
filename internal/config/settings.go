@@ -11,8 +11,8 @@ import (
 
 // Instance holds one Jira site definition.
 type Instance struct {
-	BaseURL       string   `toml:"base_url"`
-	AuthType      string   `toml:"auth_type"`
+	BaseURL        string   `toml:"base_url"`
+	AuthType       string   `toml:"auth_type"`
 	CredentialRefs []string `toml:"credential_refs"`
 }
 
@@ -24,27 +24,27 @@ type State struct {
 
 // Project holds one project definition.
 type Project struct {
-	Key        string   `toml:"key"`
-	Instance   string   `toml:"instance"`
-	MirrorDir  string   `toml:"mirror_dir"`
-	LocalDirs  []string `toml:"local_dirs"`
-	DefaultUser string  `toml:"default_user"`
+	Key         string   `toml:"key"`
+	Instance    string   `toml:"instance"`
+	MirrorDir   string   `toml:"mirror_dir"`
+	LocalDirs   []string `toml:"local_dirs"`
+	DefaultUser string   `toml:"default_user"`
 }
 
 // Settings is the top-level parsed settings document.
 type Settings struct {
-	Version   int                    `toml:"version"`
-	Instances map[string]Instance    `toml:"-"`
-	Projects  map[string]Project     `toml:"-"`
-	State     State                  `toml:"state"`
+	Version   int                 `toml:"version"`
+	Instances map[string]Instance `toml:"-"`
+	Projects  map[string]Project  `toml:"-"`
+	State     State               `toml:"state"`
 }
 
 // SettingsTOML is the raw TOML mapping used during unmarshalling.
 type SettingsTOML struct {
-	Version   int                    `toml:"version"`
-	Instances map[string]Instance    `toml:"instances"`
-	Projects  map[string]Project     `toml:"projects"`
-	State     State                  `toml:"state"`
+	Version   int                 `toml:"version"`
+	Instances map[string]Instance `toml:"instances"`
+	Projects  map[string]Project  `toml:"projects"`
+	State     State               `toml:"state"`
 }
 
 const (
@@ -107,6 +107,18 @@ func settingsPath() (string, error) {
 		return "", err
 	}
 	return filepath.Join(home, settingsDir, settingsFile), nil
+}
+
+func ensureSettingsDirExists() error {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return NewSettingError(ErrMissingField, "home directory is not set", "home", "")
+	}
+	dir := filepath.Join(home, settingsDir)
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return NewSettingError(ErrMissingField, "cannot create settings directory: "+err.Error(), "path", dir)
+	}
+	return nil
 }
 
 // validate checks the parsed settings for structural correctness.
@@ -235,10 +247,10 @@ func (s *Settings) expandPaths() error {
 
 		// Write back the updated project.
 		s.Projects[name] = Project{
-			Key:        proj.Key,
-			Instance:   proj.Instance,
-			MirrorDir:  expanded,
-			LocalDirs:  expandedDirs,
+			Key:         proj.Key,
+			Instance:    proj.Instance,
+			MirrorDir:   expanded,
+			LocalDirs:   expandedDirs,
 			DefaultUser: proj.DefaultUser,
 		}
 	}
@@ -277,6 +289,9 @@ func (s *Settings) SaveState() error {
 		return NewSettingError(ErrMissingField, "cannot marshal settings: "+err.Error(), "state", "")
 	}
 
+	if err := ensureSettingsDirExists(); err != nil {
+		return err
+	}
 	if err := os.WriteFile(path, data, 0o644); err != nil {
 		return NewSettingError(ErrMissingField, "cannot write settings file: "+err.Error(), "path", path)
 	}
@@ -383,6 +398,9 @@ func (s *Settings) SetupProject(
 		return NewSettingError(ErrMissingField, "cannot marshal settings: "+err.Error(), "state", "")
 	}
 
+	if err := ensureSettingsDirExists(); err != nil {
+		return err
+	}
 	if err := os.WriteFile(path, data, 0o644); err != nil {
 		return NewSettingError(ErrMissingField, "cannot write settings file: "+err.Error(), "path", path)
 	}

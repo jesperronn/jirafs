@@ -139,13 +139,13 @@ func runUse(args []string) int {
 // instance and one named project into ~/.jirafs/settings.toml, creating
 // the file if it does not exist. The caller provides:
 //
-//  - --project <name>: the settings key for the project entry
-//  - --key <KEY>: the Jira project key (e.g. "PLAT")
-//  - --instance <name>: the settings key for the instance entry
-//  - --base-url <URL>: the Jira base URL
-//  - --auth-type <type>: the auth type (basic, atlassian_api_token, oauth1)
-//  - --credential-ref <ref>: one credential reference (can be repeated)
-//  - --set-current: also set the remembered current project (B018d)
+//   - --project <name>: the settings key for the project entry
+//   - --key <KEY>: the Jira project key (e.g. "PLAT")
+//   - --instance <name>: the settings key for the instance entry
+//   - --base-url <URL>: the Jira base URL
+//   - --auth-type <type>: the auth type (basic, atlassian_api_token, bearer_token, oauth1)
+//   - --credential-ref <ref>: one credential reference (can be repeated)
+//   - --set-current: also set the remembered current project (B018d)
 //
 // Example:
 //
@@ -162,11 +162,11 @@ func runSetup(args []string) int {
 	projectKey := fs.String("key", "", "Jira project key (e.g. PLAT)")
 	instanceName := fs.String("instance", "", "settings key for the instance entry")
 	baseURL := fs.String("base-url", "", "Jira base URL (https://...)")
-	authType := fs.String("auth-type", "", "auth type: basic, atlassian_api_token, or oauth1 (default: atlassian_api_token)")
+	authType := fs.String("auth-type", "", "auth type: basic, atlassian_api_token, bearer_token, or oauth1 (default: atlassian_api_token)")
 	mirrorDir := fs.String("mirror-dir", "", "local mirror directory path (default: ~/jira/<project>)")
 	setCurrent := fs.Bool("set-current", false, "also set the remembered current project (B018d)")
 	var credentialRefs []string
-	fs.Func("credential-ref", "credential reference (env://... or file://...); may be repeated", func(v string) error {
+	fs.Func("credential-ref", "credential reference (env://..., file://..., or op://...); may be repeated", func(v string) error {
 		credentialRefs = append(credentialRefs, v)
 		return nil
 	})
@@ -181,7 +181,7 @@ func runSetup(args []string) int {
 		promptMissingValue(reader, projectKey, "key", "Jira project key (for example PLAT)")
 		promptMissingValue(reader, instanceName, "instance", "settings key for the Jira instance")
 		promptMissingValue(reader, baseURL, "base-url", "Jira base URL")
-		promptMissingValue(reader, authType, "auth-type", "auth type (basic, atlassian_api_token, oauth1; default atlassian_api_token)")
+		promptMissingValue(reader, authType, "auth-type", "auth type (basic, atlassian_api_token, bearer_token, oauth1; default atlassian_api_token)")
 		promptMissingValue(reader, mirrorDir, "mirror-dir", "local mirror directory path (default ~/jira/<project>)")
 	}
 

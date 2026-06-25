@@ -8,12 +8,12 @@ import (
 
 func TestParseCredentialRef(t *testing.T) {
 	tests := []struct {
-		name        string
-		input       string
-		wantScheme  string
-		wantTarget  string
-		wantErr     bool
-		wantCode    string
+		name       string
+		input      string
+		wantScheme string
+		wantTarget string
+		wantErr    bool
+		wantCode   string
 	}{
 		{
 			name:       "env scheme",
@@ -37,40 +37,54 @@ func TestParseCredentialRef(t *testing.T) {
 			wantErr:    false,
 		},
 		{
-			name:      "unsupported scheme vault",
-			input:     "vault://secret/jira",
-			wantErr:   true,
-			wantCode:  ErrInvalidCredentialRef,
+			name:       "op scheme with item only",
+			input:      "op://JIRA_API_TOKEN_NINE_JRJ",
+			wantScheme: "op",
+			wantTarget: "JIRA_API_TOKEN_NINE_JRJ",
+			wantErr:    false,
 		},
 		{
-			name:      "unsupported scheme ssh",
-			input:     "ssh://git@github.com/jirafs/jirafs.git",
-			wantErr:   true,
-			wantCode:  ErrInvalidCredentialRef,
+			name:       "op scheme with item field",
+			input:      "op://JIRA_API_TOKEN_NINE_JRJ/email",
+			wantScheme: "op",
+			wantTarget: "JIRA_API_TOKEN_NINE_JRJ/email",
+			wantErr:    false,
 		},
 		{
-			name:      "empty string",
-			input:     "",
-			wantErr:   true,
-			wantCode:  ErrInvalidCredentialRef,
+			name:     "unsupported scheme vault",
+			input:    "vault://secret/jira",
+			wantErr:  true,
+			wantCode: ErrInvalidCredentialRef,
 		},
 		{
-			name:      "no scheme separator",
-			input:     "just-a-target",
-			wantErr:   true,
-			wantCode:  ErrInvalidCredentialRef,
+			name:     "unsupported scheme ssh",
+			input:    "ssh://git@github.com/jirafs/jirafs.git",
+			wantErr:  true,
+			wantCode: ErrInvalidCredentialRef,
 		},
 		{
-			name:      "empty scheme",
-			input:     "://target",
-			wantErr:   true,
-			wantCode:  ErrInvalidCredentialRef,
+			name:     "empty string",
+			input:    "",
+			wantErr:  true,
+			wantCode: ErrInvalidCredentialRef,
 		},
 		{
-			name:      "empty target",
-			input:     "env://",
-			wantErr:   true,
-			wantCode:  ErrInvalidCredentialRef,
+			name:     "no scheme separator",
+			input:    "just-a-target",
+			wantErr:  true,
+			wantCode: ErrInvalidCredentialRef,
+		},
+		{
+			name:     "empty scheme",
+			input:    "://target",
+			wantErr:  true,
+			wantCode: ErrInvalidCredentialRef,
+		},
+		{
+			name:     "empty target",
+			input:    "env://",
+			wantErr:  true,
+			wantCode: ErrInvalidCredentialRef,
 		},
 		{
 			name:       "target with colons",
@@ -143,21 +157,21 @@ func TestResolveEnvCredential(t *testing.T) {
 			wantValue: "testuser",
 		},
 		{
-			name:    "unset env var returns error",
-			ref:     CredentialRef{Scheme: "env", Target: "UNSET_VAR_DOES_NOT_EXIST"},
-			wantErr: true,
+			name:     "unset env var returns error",
+			ref:      CredentialRef{Scheme: "env", Target: "UNSET_VAR_DOES_NOT_EXIST"},
+			wantErr:  true,
 			wantCode: ErrCredentialResolve,
 		},
 		{
-			name:    "non-env scheme returns error",
-			ref:     CredentialRef{Scheme: "file", Target: "/path/to/file"},
-			wantErr: true,
+			name:     "non-env scheme returns error",
+			ref:      CredentialRef{Scheme: "file", Target: "/path/to/file"},
+			wantErr:  true,
 			wantCode: ErrCredentialResolve,
 		},
 		{
-			name:    "empty target returns error",
-			ref:     CredentialRef{Scheme: "env", Target: ""},
-			wantErr: true,
+			name:     "empty target returns error",
+			ref:      CredentialRef{Scheme: "env", Target: ""},
+			wantErr:  true,
 			wantCode: ErrCredentialResolve,
 		},
 	}
@@ -234,6 +248,13 @@ func TestParseCredentialRefs(t *testing.T) {
 			input: []string{"file://~/.jirafs/creds.toml"},
 			want: []CredentialRef{
 				{Scheme: "file", Target: "~/.jirafs/creds.toml"},
+			},
+		},
+		{
+			name:  "single op ref",
+			input: []string{"op://JIRA_API_TOKEN_NINE_JRJ/email"},
+			want: []CredentialRef{
+				{Scheme: "op", Target: "JIRA_API_TOKEN_NINE_JRJ/email"},
 			},
 		},
 		{
@@ -326,16 +347,16 @@ ssl = true
 	}
 
 	tests := []struct {
-		name      string
-		ref       CredentialRef
-		wantErr   bool
-		wantCode  string
+		name       string
+		ref        CredentialRef
+		wantErr    bool
+		wantCode   string
 		wantFields map[string]string
 	}{
 		{
-			name:     "file scheme resolves fields",
-			ref:      CredentialRef{Scheme: "file", Target: credsFile},
-			wantErr:  false,
+			name:    "file scheme resolves fields",
+			ref:     CredentialRef{Scheme: "file", Target: credsFile},
+			wantErr: false,
 			wantFields: map[string]string{
 				"username":  "fileuser",
 				"password":  "filepass",
@@ -345,35 +366,35 @@ ssl = true
 			},
 		},
 		{
-			name:     "single field file resolves",
-			ref:      CredentialRef{Scheme: "file", Target: singleFile},
-			wantErr:  false,
+			name:    "single field file resolves",
+			ref:     CredentialRef{Scheme: "file", Target: singleFile},
+			wantErr: false,
 			wantFields: map[string]string{
 				"api_token": "single-token",
 			},
 		},
 		{
-			name:    "non-existent file returns error",
-			ref:     CredentialRef{Scheme: "file", Target: "/nonexistent/path/creds.toml"},
-			wantErr: true,
+			name:     "non-existent file returns error",
+			ref:      CredentialRef{Scheme: "file", Target: "/nonexistent/path/creds.toml"},
+			wantErr:  true,
 			wantCode: ErrCredentialResolve,
 		},
 		{
-			name:    "non-TOML file returns error",
-			ref:     CredentialRef{Scheme: "file", Target: tmpDir + "/not-toml.txt"},
-			wantErr: true,
+			name:     "non-TOML file returns error",
+			ref:      CredentialRef{Scheme: "file", Target: tmpDir + "/not-toml.txt"},
+			wantErr:  true,
 			wantCode: ErrCredentialResolve,
 		},
 		{
-			name:    "env scheme returns error",
-			ref:     CredentialRef{Scheme: "env", Target: "SOME_VAR"},
-			wantErr: true,
+			name:     "env scheme returns error",
+			ref:      CredentialRef{Scheme: "env", Target: "SOME_VAR"},
+			wantErr:  true,
 			wantCode: ErrCredentialResolve,
 		},
 		{
-			name:    "empty target returns error",
-			ref:     CredentialRef{Scheme: "file", Target: ""},
-			wantErr: true,
+			name:     "empty target returns error",
+			ref:      CredentialRef{Scheme: "file", Target: ""},
+			wantErr:  true,
 			wantCode: ErrCredentialResolve,
 		},
 	}
@@ -466,24 +487,109 @@ func TestResolveFileCredentialTildeExpansion(t *testing.T) {
 	}
 }
 
+func TestResolveOPCredential(t *testing.T) {
+	original := resolveOPCommand
+	t.Cleanup(func() {
+		resolveOPCommand = original
+	})
+
+	tests := []struct {
+		name      string
+		ref       CredentialRef
+		output    []byte
+		runErr    error
+		wantErr   bool
+		wantCode  string
+		wantField string
+		wantValue string
+		wantArgs  []string
+	}{
+		{
+			name:      "default token field maps to api_token",
+			ref:       CredentialRef{Scheme: "op", Target: "JIRA_API_TOKEN_NINE_JRJ"},
+			output:    []byte("secret-token\n"),
+			wantField: "api_token",
+			wantValue: "secret-token",
+			wantArgs:  []string{"item", "get", "JIRA_API_TOKEN_NINE_JRJ", "--fields", "label=token", "--reveal"},
+		},
+		{
+			name:      "email field is preserved",
+			ref:       CredentialRef{Scheme: "op", Target: "JIRA_API_TOKEN_NINE_JRJ/email"},
+			output:    []byte("user@example.com\n"),
+			wantField: "email",
+			wantValue: "user@example.com",
+			wantArgs:  []string{"item", "get", "JIRA_API_TOKEN_NINE_JRJ", "--fields", "label=email", "--reveal"},
+		},
+		{
+			name:     "op cli error returns credential resolve",
+			ref:      CredentialRef{Scheme: "op", Target: "JIRA_API_TOKEN_NINE_JRJ"},
+			runErr:   os.ErrNotExist,
+			wantErr:  true,
+			wantCode: ErrCredentialResolve,
+			wantArgs: []string{"item", "get", "JIRA_API_TOKEN_NINE_JRJ", "--fields", "label=token", "--reveal"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var gotArgs []string
+			resolveOPCommand = func(args ...string) ([]byte, error) {
+				gotArgs = append([]string(nil), args...)
+				return tt.output, tt.runErr
+			}
+
+			got, err := ResolveOPCredential(tt.ref)
+
+			if len(gotArgs) != len(tt.wantArgs) {
+				t.Fatalf("op args len = %d, want %d (%v)", len(gotArgs), len(tt.wantArgs), gotArgs)
+			}
+			for i := range gotArgs {
+				if gotArgs[i] != tt.wantArgs[i] {
+					t.Fatalf("op args[%d] = %q, want %q", i, gotArgs[i], tt.wantArgs[i])
+				}
+			}
+
+			if tt.wantErr {
+				if err == nil {
+					t.Fatalf("ResolveOPCredential(%+v) expected error, got nil", tt.ref)
+				}
+				if tt.wantCode != "" && !IsSettingError(err, tt.wantCode) {
+					t.Fatalf("ResolveOPCredential(%+v) error = %v, want code %q", tt.ref, err, tt.wantCode)
+				}
+				return
+			}
+
+			if err != nil {
+				t.Fatalf("ResolveOPCredential(%+v) unexpected error = %v", tt.ref, err)
+			}
+			if got.Fields[tt.wantField] != tt.wantValue {
+				t.Fatalf("ResolveOPCredential(%+v) field %q = %q, want %q", tt.ref, tt.wantField, got.Fields[tt.wantField], tt.wantValue)
+			}
+			if tt.wantField == "api_token" && got.Fields["bearer_token"] != tt.wantValue {
+				t.Fatalf("ResolveOPCredential(%+v) field %q = %q, want %q", tt.ref, "bearer_token", got.Fields["bearer_token"], tt.wantValue)
+			}
+		})
+	}
+}
+
 func TestMergeCredentials(t *testing.T) {
 	tests := []struct {
-		name     string
-		input    []ResolvedCredential
+		name       string
+		input      []ResolvedCredential
 		wantScheme string
 		wantTarget string
 		wantFields map[string]string
 	}{
 		{
-			name:     "empty slice returns empty fields",
-			input:    []ResolvedCredential{},
+			name:       "empty slice returns empty fields",
+			input:      []ResolvedCredential{},
 			wantScheme: "",
 			wantTarget: "",
 			wantFields: map[string]string{},
 		},
 		{
-			name: "nil slice returns empty fields",
-			input: nil,
+			name:       "nil slice returns empty fields",
+			input:      nil,
 			wantScheme: "",
 			wantTarget: "",
 			wantFields: map[string]string{},
@@ -580,11 +686,11 @@ func TestMergeCredentials(t *testing.T) {
 
 func TestValidateResolvedCredential(t *testing.T) {
 	tests := []struct {
-		name      string
-		authType  string
-		cred      ResolvedCredential
-		wantErr   bool
-		wantCode  string
+		name     string
+		authType string
+		cred     ResolvedCredential
+		wantErr  bool
+		wantCode string
 	}{
 		{
 			name:     "empty auth_type passes",
@@ -626,15 +732,35 @@ func TestValidateResolvedCredential(t *testing.T) {
 			wantCode: ErrMissingAuthField,
 		},
 		{
-			name:     "atlassian_api_token with api_token passes",
+			name:     "atlassian_api_token with email and api_token passes",
+			authType: "atlassian_api_token",
+			cred:     ResolvedCredential{Fields: map[string]string{"email": "test@example.com", "api_token": "tok"}},
+			wantErr:  false,
+		},
+		{
+			name:     "atlassian_api_token missing email fails",
 			authType: "atlassian_api_token",
 			cred:     ResolvedCredential{Fields: map[string]string{"api_token": "tok"}},
-			wantErr:  false,
+			wantErr:  true,
+			wantCode: ErrMissingAuthField,
 		},
 		{
 			name:     "atlassian_api_token missing api_token fails",
 			authType: "atlassian_api_token",
 			cred:     ResolvedCredential{Fields: map[string]string{"email": "test@example.com"}},
+			wantErr:  true,
+			wantCode: ErrMissingAuthField,
+		},
+		{
+			name:     "bearer_token with bearer_token passes",
+			authType: "bearer_token",
+			cred:     ResolvedCredential{Fields: map[string]string{"bearer_token": "tok"}},
+			wantErr:  false,
+		},
+		{
+			name:     "bearer_token missing bearer_token fails",
+			authType: "bearer_token",
+			cred:     ResolvedCredential{Fields: map[string]string{"api_token": "tok"}},
 			wantErr:  true,
 			wantCode: ErrMissingAuthField,
 		},
@@ -677,7 +803,7 @@ func TestValidateResolvedCredential(t *testing.T) {
 		{
 			name:     "extra fields do not cause failure",
 			authType: "atlassian_api_token",
-			cred:     ResolvedCredential{Fields: map[string]string{"api_token": "tok", "extra": "val"}},
+			cred:     ResolvedCredential{Fields: map[string]string{"email": "test@example.com", "api_token": "tok", "extra": "val"}},
 			wantErr:  false,
 		},
 	}
@@ -710,11 +836,9 @@ func TestValidateResolvedCredential(t *testing.T) {
 func TestResolveInstanceCredentials(t *testing.T) {
 	tmpDir := t.TempDir()
 	credsFile := filepath.Join(tmpDir, "creds.toml")
-	if err := os.WriteFile(credsFile, []byte("api_token = \"file-token\"\n"), 0o644); err != nil {
+	if err := os.WriteFile(credsFile, []byte("email = \"user@example.com\"\napi_token = \"file-token\"\n"), 0o644); err != nil {
 		t.Fatalf("setup: write creds file: %v", err)
 	}
-
-	t.Setenv("API_TOKEN_OVERRIDE", "env-token")
 
 	tests := []struct {
 		name         string
@@ -735,7 +859,6 @@ func TestResolveInstanceCredentials(t *testing.T) {
 						AuthType: "atlassian_api_token",
 						CredentialRefs: []string{
 							"file://" + credsFile,
-							"env://API_TOKEN_OVERRIDE",
 						},
 					},
 				},
@@ -744,8 +867,8 @@ func TestResolveInstanceCredentials(t *testing.T) {
 			wantBaseURL:  "https://jira.example.com",
 			wantAuthType: "atlassian_api_token",
 			wantFields: map[string]string{
-				"api_token":          "file-token",
-				"API_TOKEN_OVERRIDE": "env-token",
+				"email":     "user@example.com",
+				"api_token": "file-token",
 			},
 		},
 		{
@@ -796,7 +919,7 @@ func TestResolveInstanceCredentials(t *testing.T) {
 						BaseURL:  "https://jira.example.com",
 						AuthType: "basic",
 						CredentialRefs: []string{
-							"env://API_TOKEN_OVERRIDE",
+							"file://" + credsFile,
 						},
 					},
 				},
@@ -834,8 +957,8 @@ func TestResolveInstanceCredentials(t *testing.T) {
 				t.Fatalf("credential field count = %d, want %d", len(got.Credential.Fields), len(tt.wantFields))
 			}
 			for key, want := range tt.wantFields {
-			if got.Credential.Fields[key] != want {
-				t.Fatalf("credential field %q = %q, want %q", key, got.Credential.Fields[key], want)
+				if got.Credential.Fields[key] != want {
+					t.Fatalf("credential field %q = %q, want %q", key, got.Credential.Fields[key], want)
 				}
 			}
 		})
@@ -860,7 +983,8 @@ password = "pathpass"
 	}
 
 	instBCredsFile := filepath.Join(jirafsDir, "instb.toml")
-	instBCredsContent := `api_token = "instb-api-token"
+	instBCredsContent := `email = "instb@example.com"
+api_token = "instb-api-token"
 `
 	if err := os.WriteFile(instBCredsFile, []byte(instBCredsContent), 0o644); err != nil {
 		t.Fatalf("setup: write instb creds file: %v", err)
@@ -938,12 +1062,12 @@ local_dirs = ["` + localB + `"]
 			path:       filepath.Join(localB, "src"),
 			wantErr:    false,
 			wantCode:   "",
-			wantFields: 1,
+			wantFields: 2,
 		},
 		{
-			name:    "no matching project returns ErrNoUsableInstance",
-			path:    filepath.Join(tmpDir, "nowhere"),
-			wantErr: true,
+			name:     "no matching project returns ErrNoUsableInstance",
+			path:     filepath.Join(tmpDir, "nowhere"),
+			wantErr:  true,
 			wantCode: ErrNoUsableInstance,
 		},
 		{

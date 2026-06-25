@@ -135,10 +135,10 @@ func TestRunExportIssue_Success(t *testing.T) {
 			Type:    "story",
 			Project: schema.TypedRef{Type: schema.RefProject, Value: "PROJ"},
 		},
-		Summary:    "Test issue summary",
-		Description: "Test issue description",
-		Labels:     []string{"bug", "urgent"},
-		Assignee:   ptrString("alice"),
+		Summary:      "Test issue summary",
+		Description:  "Test issue description",
+		Labels:       []string{"bug", "urgent"},
+		Assignee:     ptrString("alice"),
 		MachineOwned: schema.MachineOwned{SchemaVersion: "1"},
 		RemoteMetadata: schema.RemoteMetadata{
 			StateFile:     "synced",
@@ -320,7 +320,7 @@ func TestRunExportIssue_MinimalIssue(t *testing.T) {
 func TestBuildExportClient_Success(t *testing.T) {
 	tmpDir := t.TempDir()
 	credsPath := filepath.Join(tmpDir, "creds.toml")
-	if err := os.WriteFile(credsPath, []byte("api_token = \"token\"\n"), 0o644); err != nil {
+	if err := os.WriteFile(credsPath, []byte("email = \"user@example.com\"\napi_token = \"token\"\n"), 0o644); err != nil {
 		t.Fatalf("WriteFile creds.toml: %v", err)
 	}
 	settings := &config.Settings{
@@ -395,7 +395,7 @@ func TestBuildExportClient_CredentialError(t *testing.T) {
 	settings := &config.Settings{
 		Instances: map[string]config.Instance{
 			"default": {
-				BaseURL: "https://example.atlassian.net",
+				BaseURL:  "https://example.atlassian.net",
 				AuthType: "basic",
 				// No CredentialRefs → should fail.
 			},

@@ -138,6 +138,31 @@ Completed dependency IDs archived in [Ralph Task Archive](ralph-task-archive.md)
   - Add epic grouping for issues that belong to an epic and a fallback bucket for ungrouped issues.
   - Keep grouping deterministic when assignee or epic is missing.
   - Add tests that cover grouped and ungrouped issues across assignee and epic views.
+- [ ] B092a | B018d,B081b | `internal/cli/**`, `tests/cli/**` | Define a status snapshot model for project, mirror, and onboarding state.
+  - Model the current project, instance, mirror dir, and mirror config presence.
+  - Model configured scopes and simple onboarding gaps such as missing settings or mirror files.
+  - Keep the snapshot read-only and independent of live Jira probes.
+  - Add tests for configured and partially configured states.
+- [ ] B092b | B092a | `cmd/jirafs/**`, `internal/cli/**`, `tests/cli/**` | Add `jirafs status` that reports config, mirror files, scopes, and a next-step hint.
+  - Add the `status` command to help output and command routing.
+  - Render a concise human-readable status summary.
+  - Include one obvious next command based on the snapshot state.
+  - Add CLI tests for normal and missing-config cases.
+- [ ] B092c | B092b | `cmd/jirafs/**`, `internal/cli/**`, `tests/cli/**` | `jirafs status` reports local mirror progress such as mirrored issue count and missing setup steps.
+  - Count mirrored issue files without contacting Jira.
+  - Show when setup is incomplete versus configured-but-empty.
+  - Keep progress reporting deterministic and cheap for local use.
+  - Add tests for empty, partial, and populated mirror dirs.
+- [ ] B092d | B092a | `internal/cli/**`, `internal/config/**`, `internal/jira/**`, `tests/**` | Add a doctor snapshot model for config, credential, and live-probe checks.
+  - Model config validation, credential-ref resolution, and writable-path checks separately.
+  - Define a bounded live-probe shape that can report skipped, ok, and failed states.
+  - Keep doctor-specific checks separate from ordinary status output.
+  - Add tests for passing and failing diagnostic states.
+- [ ] B092e | B092d | `cmd/jirafs/**`, `internal/cli/**`, `internal/config/**`, `internal/jira/**`, `tests/**` | Add `jirafs doctor` for focused config, auth, and connectivity diagnostics.
+  - Add the `doctor` command to help output and command routing.
+  - Report config, auth, and connectivity checks with clear pass/fail output.
+  - Fail clearly when local configuration is unusable before live probes.
+  - Add CLI tests for config-only failures and mocked live-probe results.
 
 Notes: packets in `docs/implementation-packets.md` are orchestrator-sized. These
 tasks are builder-sized. Start with B001; B020 can run after B001. Do not start

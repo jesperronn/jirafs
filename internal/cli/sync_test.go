@@ -727,7 +727,7 @@ func TestResolveSyncContext_NoProject(t *testing.T) {
 func TestBuildSyncClient_Success(t *testing.T) {
 	tmpDir := t.TempDir()
 	credsPath := filepath.Join(tmpDir, "creds.toml")
-	if err := os.WriteFile(credsPath, []byte("api_token = \"token\"\n"), 0o644); err != nil {
+	if err := os.WriteFile(credsPath, []byte("email = \"user@example.com\"\napi_token = \"token\"\n"), 0o644); err != nil {
 		t.Fatalf("WriteFile creds.toml: %v", err)
 	}
 	settings := &config.Settings{
@@ -756,7 +756,7 @@ func TestBuildSyncClient_CredentialError(t *testing.T) {
 	settings := &config.Settings{
 		Instances: map[string]config.Instance{
 			"default": {
-				BaseURL: "https://example.atlassian.net",
+				BaseURL:  "https://example.atlassian.net",
 				AuthType: "basic",
 				// No CredentialRefs → should fail.
 			},

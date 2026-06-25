@@ -6,6 +6,86 @@ The project goal is to make Jira issues editable as structured Markdown files,
 sync those files safely back to Jira, and retain a durable archive that can be
 used for analysis, agent workflows, and team process improvement.
 
+## Current Workflow
+
+The current CLI is usable as a narrow operator workflow:
+
+1. Configure one Jira instance and one project with `jirafs setup`.
+2. Select or confirm the active project with `jirafs use`.
+3. Refresh one live mirror scope with `jirafs mirror refresh`.
+4. Export or inspect one issue locally with `jirafs export issue`.
+5. Edit the mirrored Markdown file.
+6. Review the planned write-back with `jirafs plan`.
+7. Apply the write path with `jirafs sync`.
+
+Example:
+
+```bash
+jirafs setup \
+  --project platform \
+  --key PLAT \
+  --instance work \
+  --base-url https://jira.example.com \
+  --auth-type atlassian_api_token \
+  --credential-ref file://~/.jirafs/credentials/work-user.toml \
+  --credential-ref env://JIRAFS_WORK_API_TOKEN \
+  --set-current
+
+jirafs use
+jirafs mirror refresh my-issues
+jirafs export issue PLAT-123 > /tmp/PLAT-123.md
+jirafs plan PLAT-123
+jirafs sync PLAT-123
+```
+
+## Current Status
+
+What works today:
+
+- user-level setup writes `~/.jirafs/settings.toml`
+- project selection and remembered current-project state
+- mirror refresh wiring for named scopes such as `my-issues`
+- export, plan, and sync command paths for the current safe field set
+- credential refs from `env://`, `file://`, and `op://`
+- auth support for `basic`, `atlassian_api_token`, and `bearer_token`
+
+What is still rough:
+
+- the README has historically assumed the deeper docs carry most of the
+  operator story
+- the CLI does not yet present one obvious “show me status” command
+- the CLI does not yet present one obvious “next step” hint after each command
+- live Jira behavior still needs real-instance shakeout and better diagnostics
+
+## Obvious Next Steps
+
+If you are trying `jirafs` for the first time:
+
+1. Run `jirafs setup ... --set-current`.
+2. Run `jirafs use` to confirm the active project.
+3. Run `jirafs mirror refresh my-issues`.
+4. Inspect the mirror directory and `mirror.yml`.
+5. Run `jirafs export issue ABC-123` or open a mirrored issue file.
+6. Run `jirafs plan ABC-123` before any write attempt.
+
+If something fails:
+
+- config or auth issue: inspect `~/.jirafs/settings.toml`
+- scope issue: inspect `<mirror_dir>/mirror.yml`
+- project resolution issue: run `jirafs use --project <name>`
+- live Jira issue: retry with a single issue export before a whole-scope refresh
+
+## Command Surface
+
+The most important commands right now are:
+
+- `jirafs setup`
+- `jirafs use`
+- `jirafs mirror refresh`
+- `jirafs export issue`
+- `jirafs plan`
+- `jirafs sync`
+
 ## Initial Scope
 
 - Export Jira issues, sprints, and related metadata into a local filesystem.
@@ -52,6 +132,14 @@ used for analysis, agent workflows, and team process improvement.
 - [Pre-Live Parallel Plan](docs/pre-live-parallel-plan.md)
 - [Ralph Stream WS4: Plan And Sync](docs/ralph-stream-ws4-plan-sync.md)
 - [Ralph Stream WS5: Mirror, CLI, Archive](docs/ralph-stream-ws5-mirror-cli.md)
+
+Read these after the README:
+
+- [CLI](docs/cli.md) for command-level intent
+- [Settings And Context](docs/settings-and-context.md) for config shape
+- [Credential Sources](docs/credential-sources.md) for auth references
+- [Mirror Model](docs/mirror-model.md) for live/archive behavior
+- [Sync Model](docs/sync-model.md) for plan/sync behavior
 
 ## Implementation Direction
 

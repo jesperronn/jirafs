@@ -289,7 +289,7 @@ func TestSaveStateWritesSettingsFile(t *testing.T) {
 	}
 }
 
-func TestSaveStateReturnsStructuredWriteError(t *testing.T) {
+func TestSaveStateCreatesSettingsDirWhenMissing(t *testing.T) {
 	tmpDir := t.TempDir()
 	homeDir := filepath.Join(tmpDir, "home")
 	if err := os.MkdirAll(homeDir, 0o755); err != nil {
@@ -316,11 +316,13 @@ func TestSaveStateReturnsStructuredWriteError(t *testing.T) {
 	}
 
 	err := settings.SaveState()
-	if err == nil {
-		t.Fatal("SaveState() error = nil, want write failure")
+	if err != nil {
+		t.Fatalf("SaveState() error = %v", err)
 	}
-	if !IsSettingError(err, ErrMissingField) {
-		t.Fatalf("SaveState() error = %v, want structured settings error", err)
+
+	path := filepath.Join(homeDir, settingsDir, settingsFile)
+	if _, err := os.Stat(path); err != nil {
+		t.Fatalf("settings file stat error = %v", err)
 	}
 }
 
@@ -1385,5 +1387,23 @@ func TestSetupProjectNoFileCreatesMinimalSettings(t *testing.T) {
 	text := string(data)
 	if !strings.Contains(text, "version = 1") {
 		t.Errorf("settings = %q, want version = 1", text)
+	}
+}
+
+func TestSetupProjectCreatesSettingsDirWhenMissing(t *testing.T) {
+	tmpDir := t.TempDir()
+	homeDir := filepath.Join(tmpDir, "home")
+	t.Setenv("HOME", homeDir)
+
+	s := &Settings{}
+
+	err := s.SetupProject("inst", "proj", "PROJ", "https://jira.example.com", "basic", filepath.Join(tmpDir, "mirror"), nil)
+	if err != nil {
+		t.Fatalf("SetupProject() error = %v", err)
+	}
+
+	path := filepath.Join(homeDir, settingsDir, settingsFile)
+	if _, err := os.Stat(path); err != nil {
+		t.Fatalf("settings file stat error = %v", err)
 	}
 }

@@ -29,8 +29,8 @@ func TestNewJiraClient(t *testing.T) {
 
 func TestFetchIssueSuccess(t *testing.T) {
 	payload := map[string]interface{}{
-		"id":   "10001",
-		"key":  "PROJ-123",
+		"id":  "10001",
+		"key": "PROJ-123",
 		"fields": map[string]interface{}{
 			"issuetype": map[string]interface{}{
 				"name": "Story",
@@ -119,7 +119,7 @@ func TestFetchIssueEmptyKey(t *testing.T) {
 }
 
 func TestFetchIssueTransportError(t *testing.T) {
-	client := NewJiraClient("http://localhost:1") // unlikely to be listening
+	client := NewJiraClient("http://localhost:1")                         // unlikely to be listening
 	ctx, cancel := context.WithTimeout(context.Background(), 100*1000000) // 100ms
 	defer cancel()
 	_, err := client.FetchIssue(ctx, "PROJ-123")
@@ -134,8 +134,8 @@ func TestJiraClientImplementsClient(t *testing.T) {
 
 func TestFetchIssueWithAssignee(t *testing.T) {
 	payload := map[string]interface{}{
-		"id":   "10002",
-		"key":  "PROJ-456",
+		"id":  "10002",
+		"key": "PROJ-456",
 		"fields": map[string]interface{}{
 			"issuetype": map[string]interface{}{
 				"name": "Bug",
@@ -166,8 +166,8 @@ func TestFetchIssueWithAssignee(t *testing.T) {
 
 func TestFetchIssueWithLabels(t *testing.T) {
 	payload := map[string]interface{}{
-		"id":   "10003",
-		"key":  "PROJ-789",
+		"id":  "10003",
+		"key": "PROJ-789",
 		"fields": map[string]interface{}{
 			"issuetype": map[string]interface{}{
 				"name": "Task",
@@ -195,8 +195,8 @@ func TestFetchIssueWithLabels(t *testing.T) {
 
 func TestFetchIssueWithNoIssueType(t *testing.T) {
 	payload := map[string]interface{}{
-		"id":   "10004",
-		"key":  "PROJ-000",
+		"id":  "10004",
+		"key": "PROJ-000",
 		"fields": map[string]interface{}{
 			"summary": "Issue without type",
 		},
@@ -394,7 +394,7 @@ func TestFetchIssueWithNilFields(t *testing.T) {
 
 func TestBuildAuthenticatedRequestBasicAuth(t *testing.T) {
 	creds := config.ResolvedInstanceCredentials{
-		BaseURL: "https://jira.example.com",
+		BaseURL:  "https://jira.example.com",
 		AuthType: "basic",
 		Credential: config.ResolvedCredential{
 			Scheme: "env",
@@ -428,7 +428,7 @@ func TestBuildAuthenticatedRequestBasicAuth(t *testing.T) {
 
 func TestBuildAuthenticatedRequestAPIToken(t *testing.T) {
 	creds := config.ResolvedInstanceCredentials{
-		BaseURL: "https://jira.example.com",
+		BaseURL:  "https://jira.example.com",
 		AuthType: "atlassian_api_token",
 		Credential: config.ResolvedCredential{
 			Scheme: "env",
@@ -454,6 +454,35 @@ func TestBuildAuthenticatedRequestAPIToken(t *testing.T) {
 	got := out.Header.Get("Authorization")
 	if got != want {
 		t.Errorf("Authorization = %q, want %q", got, want)
+	}
+}
+
+func TestBuildAuthenticatedRequestBearerToken(t *testing.T) {
+	creds := config.ResolvedInstanceCredentials{
+		BaseURL:  "https://jira.example.com",
+		AuthType: "bearer_token",
+		Credential: config.ResolvedCredential{
+			Scheme: "op",
+			Target: "JIRA_API_TOKEN_NINE_JRJ",
+			Fields: map[string]string{
+				"bearer_token": "my-bearer-token",
+			},
+		},
+	}
+
+	req, err := http.NewRequest(http.MethodGet, "https://jira.example.com/rest/api/3/issue/PROJ-1", nil)
+	if err != nil {
+		t.Fatalf("unexpected error creating request: %v", err)
+	}
+
+	out, err := BuildAuthenticatedRequest(req, creds)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	got := out.Header.Get("Authorization")
+	if got != "Bearer my-bearer-token" {
+		t.Errorf("Authorization = %q, want %q", got, "Bearer my-bearer-token")
 	}
 }
 
@@ -558,6 +587,22 @@ func TestBuildAuthenticatedRequestAPITokenMissingToken(t *testing.T) {
 	}
 	if !contains(err.Error(), "api_token") {
 		t.Errorf("error should mention api_token, got %q", err.Error())
+	}
+}
+
+func TestBuildAuthenticatedRequestBearerTokenMissingToken(t *testing.T) {
+	creds := config.ResolvedInstanceCredentials{
+		AuthType:   "bearer_token",
+		Credential: config.ResolvedCredential{Fields: map[string]string{}},
+	}
+
+	req, _ := http.NewRequest(http.MethodGet, "https://jira.example.com/rest/api/3/issue/PROJ-1", nil)
+	_, err := BuildAuthenticatedRequest(req, creds)
+	if err == nil {
+		t.Fatal("expected error for missing bearer_token")
+	}
+	if !contains(err.Error(), "bearer_token") {
+		t.Errorf("error should mention bearer_token, got %q", err.Error())
 	}
 }
 
@@ -685,12 +730,12 @@ func TestCurrentUserTransportError(t *testing.T) {
 
 func TestSearchIssuesMyIssues(t *testing.T) {
 	payload := map[string]interface{}{
-		"total":    2,
+		"total":      2,
 		"maxResults": 50,
 		"issues": []map[string]interface{}{
 			{
-				"id":   "10001",
-				"key":  "PROJ-10",
+				"id":  "10001",
+				"key": "PROJ-10",
 				"fields": map[string]interface{}{
 					"issuetype": map[string]interface{}{
 						"name": "Story",
@@ -700,8 +745,8 @@ func TestSearchIssuesMyIssues(t *testing.T) {
 				},
 			},
 			{
-				"id":   "10002",
-				"key":  "PROJ-11",
+				"id":  "10002",
+				"key": "PROJ-11",
 				"fields": map[string]interface{}{
 					"issuetype": map[string]interface{}{
 						"name": "Bug",
@@ -765,12 +810,12 @@ func TestSearchIssuesMyIssues(t *testing.T) {
 
 func TestSearchIssuesCurrentSprint(t *testing.T) {
 	payload := map[string]interface{}{
-		"total":    2,
+		"total":      2,
 		"maxResults": 50,
 		"issues": []map[string]interface{}{
 			{
-				"id":   "10003",
-				"key":  "PROJ-20",
+				"id":  "10003",
+				"key": "PROJ-20",
 				"fields": map[string]interface{}{
 					"issuetype": map[string]interface{}{
 						"name": "Story",
@@ -779,8 +824,8 @@ func TestSearchIssuesCurrentSprint(t *testing.T) {
 				},
 			},
 			{
-				"id":   "10004",
-				"key":  "PROJ-21",
+				"id":  "10004",
+				"key": "PROJ-21",
 				"fields": map[string]interface{}{
 					"issuetype": map[string]interface{}{
 						"name": "Bug",
@@ -952,9 +997,9 @@ func TestSearchIssuesEmptyBody(t *testing.T) {
 
 func TestSearchIssuesNoIssuesReturned(t *testing.T) {
 	payload := map[string]interface{}{
-		"total":    0,
+		"total":      0,
 		"maxResults": 50,
-		"issues":   []map[string]interface{}{},
+		"issues":     []map[string]interface{}{},
 	}
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -1091,7 +1136,7 @@ func TestFetchSprintsSuccess(t *testing.T) {
 		"values": []map[string]interface{}{
 			{"id": 100, "name": "Sprint 1", "state": "active",
 				"startDate": "2024-01-01T00:00:00Z",
-				"endDate": "2024-01-14T00:00:00Z"},
+				"endDate":   "2024-01-14T00:00:00Z"},
 			{"id": 101, "name": "Sprint 2", "state": "closed"},
 		},
 	}
@@ -1331,12 +1376,12 @@ func TestUpdateIssueEmptyKey(t *testing.T) {
 
 func TestUpdateIssueSuccess(t *testing.T) {
 	payload := map[string]interface{}{
-		"id":   "10001",
-		"key":  "PROJ-42",
+		"id":  "10001",
+		"key": "PROJ-42",
 		"fields": map[string]interface{}{
-			"summary":   "Updated summary",
+			"summary":     "Updated summary",
 			"description": "Updated description",
-			"issuetype": map[string]interface{}{"name": "Story"},
+			"issuetype":   map[string]interface{}{"name": "Story"},
 		},
 	}
 	body, err := json.Marshal(payload)
@@ -1428,12 +1473,12 @@ func TestBuildAuthenticatedRequestOAuth1(t *testing.T) {
 
 func TestSearchIssuesNoCredentials(t *testing.T) {
 	payload := map[string]interface{}{
-		"total":    1,
+		"total":      1,
 		"maxResults": 50,
 		"issues": []map[string]interface{}{
 			{
-				"id":   "10001",
-				"key":  "PROJ-10",
+				"id":  "10001",
+				"key": "PROJ-10",
 				"fields": map[string]interface{}{
 					"issuetype": map[string]interface{}{
 						"name": "Story",
@@ -1491,9 +1536,9 @@ func TestSearchIssuesForbidden(t *testing.T) {
 
 func TestSearchIssuesNoCredentialsAuthError(t *testing.T) {
 	payload := map[string]interface{}{
-		"total":    0,
+		"total":      0,
 		"maxResults": 50,
-		"issues":   []map[string]interface{}{},
+		"issues":     []map[string]interface{}{},
 	}
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
