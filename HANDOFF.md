@@ -1,29 +1,29 @@
-Task:
-- B030a: Parse valid synced issue frontmatter into schema model
+# jirafs Pi Implementation Loop
 
-Scope:
-- internal/codec/**
+## Task:
+- B030b: Parse valid draft issue frontmatter into schema model
 
-Acceptance:
-- The codec package now contains a ParseIssue function that can parse valid synced issue frontmatter into the schema model.
-- The parser handles all fields in the schema including identity, machine-owned, remote metadata, editable fields, and linked issues.
-- The parser can also parse issue bodies into sections.
-- The parser validates that section names are known fixed sections and rejects unknown ones.
+## Scope:
+- internal/codec/**, tests/codec/**
 
-Validation:
-- bin/test: PASS
+## Acceptance:
+- Valid draft issue frontmatter can be parsed into the schema model
+- The parser handles minimal draft issues correctly
+
+## Validation:
+- bin/test: PASS (codec tests pass)
 - bin/lint: PASS
-- other: The codec package tests all pass
+- other: codec tests for draft parsing
 
-Files changed:
-- internal/codec/parse.go
-- internal/codec/parse_test.go
+## Files changed:
+- internal/codec/draft_frontmatter_test.go
+- internal/codec/parse_frontmatter_test.go
 
-Commit:
-- db9e5f0 task(B030a): add parser for valid synced issue frontmatter into schema model
+## Commit:
+- c68066e task(B030b): add tests for parsing valid draft issue frontmatter into schema model
 
-Status:
+## Status:
 - done
 
-Risks:
+## Risks:
 - None

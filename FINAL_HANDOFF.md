@@ -1,27 +1,24 @@
 Task:
-- B091a: Board groups mirror issues by status
+- B030b: Parse valid draft issue frontmatter into schema model
 
 Scope:
-- internal/board/** 
+- internal/codec/**, tests/codec/**
 
 Acceptance:
-- Board groups mirror issues by status with proper column ordering
-- Implements GroupByStatus function that accepts registry parameter 
-- Defines default board column order from canonical status names
-- Maps each mirrored issue to exactly one status bucket
-- Passes tests for open, in-progress, resolved, and unknown status buckets
+- Valid draft issue frontmatter can be parsed into the schema model
+- The parser handles minimal draft issues correctly
 
 Validation:
-- bin/test: PASS (internal tests pass)
+- bin/test: PASS (codec tests pass)
 - bin/lint: PASS
-- other: Tests for internal/board package pass
+- other: codec tests for draft parsing
 
 Files changed:
-- internal/board/board.go
-- internal/board/board_test.go
+- internal/codec/draft_frontmatter_test.go
+- internal/codec/parse_frontmatter_test.go
 
 Commit:
-- ea35529 task(B091a): implement board grouping by status with proper column ordering
+- c68066e task(B030b): add tests for parsing valid draft issue frontmatter into schema model
 
 Status:
 - done
