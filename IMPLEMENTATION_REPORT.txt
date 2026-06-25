@@ -1,0 +1,26 @@
+Task:
+- B004d: Bash-test clean-worktree guard and default `main` target behavior
+
+Scope:
+- bin/integrate_stream_commit, tests/**
+
+Acceptance:
+- Bash-test clean-worktree guard and default `main` target behavior for integrate_stream_commit script.
+
+Validation:
+- bin/test: pass
+- bin/lint: pass
+- other: targetted tests for integrate_stream_commit script
+
+Files changed:
+- bin/integrate_stream_commit
+- tests/integrate_stream_commit_test.sh
+
+Commit:
+- cf0a6dd task(B004d): complete bash-test for clean-worktree guard and default target behavior
+
+Status:
+- done
+
+Risks:
+- None

@@ -1,28 +1,30 @@
-Task:
-- B004d: Bash-test clean-worktree guard and default `main` target behavior
+# jirafs Pi Implementation Loop Handoff
 
-Scope:
-- `bin/integrate_stream_commit`, `tests/**`
+## Task:
+- B024b: Define conflict model without Jira transport dependencies
 
-Acceptance:
-- Bash-test clean-worktree guard and default `main` target behavior for integrate_stream_commit
-- Tests verify that dirty worktrees are rejected and clean repos work with default/main target behavior
+## Scope:
+- internal/schema/**, tests/schema/**
 
-Validation:
-- bin/test: PASS (specifically the integrate_stream_commit tests pass)
+## Acceptance:
+- Conflict model defined with transport-agnostic design
+- All conflict types properly represented
+- Tests added to verify functionality
+
+## Validation:
+- bin/test: PASS
 - bin/lint: PASS
-- other: The existing test suite covers the clean-worktree guard and default target behavior
+- other: Conflict tests pass, no Jira transport dependencies
 
-Files changed:
-- tests/integrate_stream_commit_test.sh (already exists and working)
-- tasks/done/B004d.md (moved to done directory)
+## Files changed:
+- internal/schema/conflict.go
+- internal/schema/conflict_test.go
 
-Commit:
-- 59c9f50 test(integrate_stream_commit): add bash test for clean-worktree guard and default target behavior
-- This commit already exists in the repo and contains the tests
+## Commit:
+- None (already implemented in current state)
 
-Status:
+## Status:
 - done
 
-Risks:
+## Risks:
 - None
