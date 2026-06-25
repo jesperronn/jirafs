@@ -27,7 +27,6 @@ DOC_FILES = [
     "docs/credential-sources.md",
     "docs/project-selection-cli.md",
     "docs/implementation-packets.md",
-    "docs/ralph-loop-implementation-tasks.md",
     "docs/ralph-task-archive.md",
     "docs/ralph-stream-ws1-schema-codec.md",
     "docs/ralph-stream-ws2-settings-references.md",

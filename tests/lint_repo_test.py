@@ -32,12 +32,11 @@ MINIMAL_DOCS = {
     "docs/credential-sources.md": "# Q\n",
     "docs/project-selection-cli.md": "# R\n",
     "docs/implementation-packets.md": "# S\n",
-    "docs/ralph-loop-implementation-tasks.md": "# T\n",
-    "docs/ralph-task-archive.md": "# U\n",
-    "docs/ralph-stream-ws1-schema-codec.md": "# V\n",
-    "docs/ralph-stream-ws2-settings-references.md": "# W\n",
-    "docs/ralph-stream-ws3-jira-export.md": "# X\n",
-    "docs/ralph-parallel-workflow.md": "# Y\n",
+    "docs/ralph-task-archive.md": "# T\n",
+    "docs/ralph-stream-ws1-schema-codec.md": "# U\n",
+    "docs/ralph-stream-ws2-settings-references.md": "# V\n",
+    "docs/ralph-stream-ws3-jira-export.md": "# W\n",
+    "docs/ralph-parallel-workflow.md": "# X\n",
 }
 
 MINIMAL_SCRIPTS = {

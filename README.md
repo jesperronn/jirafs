@@ -126,12 +126,10 @@ The most important commands right now are:
 - [Credential Sources](docs/credential-sources.md)
 - [Project Selection CLI](docs/project-selection-cli.md)
 - [Implementation Packets](docs/implementation-packets.md)
-- [Ralph Loop Implementation Tasks](docs/ralph-loop-implementation-tasks.md)
 - [Ralph Task Archive](docs/ralph-task-archive.md)
 - [Ralph Parallel Workflow](docs/ralph-parallel-workflow.md)
 - [Pre-Live Parallel Plan](docs/pre-live-parallel-plan.md)
 - [Ralph Stream WS4: Plan And Sync](docs/ralph-stream-ws4-plan-sync.md)
-- [Ralph Stream WS5: Mirror, CLI, Archive](docs/ralph-stream-ws5-mirror-cli.md)
 
 Read these after the README:
 
@@ -168,12 +166,10 @@ The execution plan for that work now lives in:
 - [Credential Sources](docs/credential-sources.md)
 - [Project Selection CLI](docs/project-selection-cli.md)
 - [Implementation Packets](docs/implementation-packets.md)
-- [Ralph Loop Implementation Tasks](docs/ralph-loop-implementation-tasks.md)
 - [Ralph Task Archive](docs/ralph-task-archive.md)
 - [Ralph Parallel Workflow](docs/ralph-parallel-workflow.md)
 - [Pre-Live Parallel Plan](docs/pre-live-parallel-plan.md)
 - [Ralph Stream WS4: Plan And Sync](docs/ralph-stream-ws4-plan-sync.md)
-- [Ralph Stream WS5: Mirror, CLI, Archive](docs/ralph-stream-ws5-mirror-cli.md)
 
 ## Language Direction
 
