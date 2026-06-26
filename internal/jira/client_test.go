@@ -43,7 +43,7 @@ func TestFetchIssueSuccess(t *testing.T) {
 		if r.Method != http.MethodGet {
 			t.Errorf("method = %s, want GET", r.Method)
 		}
-		wantPath := "/rest/api/3/issue/PROJ-123"
+		wantPath := "/rest/api/2/issue/PROJ-123"
 		if r.URL.Path != wantPath {
 			t.Errorf("path = %s, want %s", r.URL.Path, wantPath)
 		}
@@ -406,7 +406,7 @@ func TestBuildAuthenticatedRequestBasicAuth(t *testing.T) {
 		},
 	}
 
-	req, err := http.NewRequest(http.MethodGet, "https://jira.example.com/rest/api/3/issue/PROJ-1", nil)
+	req, err := http.NewRequest(http.MethodGet, "https://jira.example.com/rest/api/2/issue/PROJ-1", nil)
 	if err != nil {
 		t.Fatalf("unexpected error creating request: %v", err)
 	}
@@ -440,7 +440,7 @@ func TestBuildAuthenticatedRequestAPIToken(t *testing.T) {
 		},
 	}
 
-	req, err := http.NewRequest(http.MethodGet, "https://jira.example.com/rest/api/3/issue/PROJ-1", nil)
+	req, err := http.NewRequest(http.MethodGet, "https://jira.example.com/rest/api/2/issue/PROJ-1", nil)
 	if err != nil {
 		t.Fatalf("unexpected error creating request: %v", err)
 	}
@@ -470,7 +470,7 @@ func TestBuildAuthenticatedRequestBearerToken(t *testing.T) {
 		},
 	}
 
-	req, err := http.NewRequest(http.MethodGet, "https://jira.example.com/rest/api/3/issue/PROJ-1", nil)
+	req, err := http.NewRequest(http.MethodGet, "https://jira.example.com/rest/api/2/issue/PROJ-1", nil)
 	if err != nil {
 		t.Fatalf("unexpected error creating request: %v", err)
 	}
@@ -493,7 +493,7 @@ func TestBuildAuthenticatedRequestEmptyAuthType(t *testing.T) {
 		Credential: config.ResolvedCredential{},
 	}
 
-	req, _ := http.NewRequest(http.MethodGet, "https://jira.example.com/rest/api/3/issue/PROJ-1", nil)
+	req, _ := http.NewRequest(http.MethodGet, "https://jira.example.com/rest/api/2/issue/PROJ-1", nil)
 	out, err := BuildAuthenticatedRequest(req, creds)
 	if err != nil {
 		t.Fatalf("unexpected error for empty auth type: %v", err)
@@ -508,7 +508,7 @@ func TestBuildAuthenticatedRequestUnsupportedAuthType(t *testing.T) {
 		AuthType: "oauth2",
 	}
 
-	req, _ := http.NewRequest(http.MethodGet, "https://jira.example.com/rest/api/3/issue/PROJ-1", nil)
+	req, _ := http.NewRequest(http.MethodGet, "https://jira.example.com/rest/api/2/issue/PROJ-1", nil)
 	_, err := BuildAuthenticatedRequest(req, creds)
 	if err == nil {
 		t.Fatal("expected error for unsupported auth type")
@@ -526,7 +526,7 @@ func TestBuildAuthenticatedRequestBasicMissingUsername(t *testing.T) {
 		},
 	}
 
-	req, _ := http.NewRequest(http.MethodGet, "https://jira.example.com/rest/api/3/issue/PROJ-1", nil)
+	req, _ := http.NewRequest(http.MethodGet, "https://jira.example.com/rest/api/2/issue/PROJ-1", nil)
 	_, err := BuildAuthenticatedRequest(req, creds)
 	if err == nil {
 		t.Fatal("expected error for missing username")
@@ -544,7 +544,7 @@ func TestBuildAuthenticatedRequestBasicMissingPassword(t *testing.T) {
 		},
 	}
 
-	req, _ := http.NewRequest(http.MethodGet, "https://jira.example.com/rest/api/3/issue/PROJ-1", nil)
+	req, _ := http.NewRequest(http.MethodGet, "https://jira.example.com/rest/api/2/issue/PROJ-1", nil)
 	_, err := BuildAuthenticatedRequest(req, creds)
 	if err == nil {
 		t.Fatal("expected error for missing password")
@@ -562,7 +562,7 @@ func TestBuildAuthenticatedRequestAPITokenMissingEmail(t *testing.T) {
 		},
 	}
 
-	req, _ := http.NewRequest(http.MethodGet, "https://jira.example.com/rest/api/3/issue/PROJ-1", nil)
+	req, _ := http.NewRequest(http.MethodGet, "https://jira.example.com/rest/api/2/issue/PROJ-1", nil)
 	_, err := BuildAuthenticatedRequest(req, creds)
 	if err == nil {
 		t.Fatal("expected error for missing email")
@@ -580,7 +580,7 @@ func TestBuildAuthenticatedRequestAPITokenMissingToken(t *testing.T) {
 		},
 	}
 
-	req, _ := http.NewRequest(http.MethodGet, "https://jira.example.com/rest/api/3/issue/PROJ-1", nil)
+	req, _ := http.NewRequest(http.MethodGet, "https://jira.example.com/rest/api/2/issue/PROJ-1", nil)
 	_, err := BuildAuthenticatedRequest(req, creds)
 	if err == nil {
 		t.Fatal("expected error for missing api_token")
@@ -596,7 +596,7 @@ func TestBuildAuthenticatedRequestBearerTokenMissingToken(t *testing.T) {
 		Credential: config.ResolvedCredential{Fields: map[string]string{}},
 	}
 
-	req, _ := http.NewRequest(http.MethodGet, "https://jira.example.com/rest/api/3/issue/PROJ-1", nil)
+	req, _ := http.NewRequest(http.MethodGet, "https://jira.example.com/rest/api/2/issue/PROJ-1", nil)
 	_, err := BuildAuthenticatedRequest(req, creds)
 	if err == nil {
 		t.Fatal("expected error for missing bearer_token")
@@ -625,7 +625,7 @@ func TestBuildAuthenticatedRequestNilRequest(t *testing.T) {
 
 func TestCurrentUserSuccess(t *testing.T) {
 	payload := map[string]interface{}{
-		"self":         "https://jira.example.com/rest/api/3/user?username=john.doe",
+		"self":         "https://jira.example.com/rest/api/2/user?username=john.doe",
 		"key":          "john.doe",
 		"name":         "john.doe",
 		"emailAddress": "john@example.com",
@@ -639,9 +639,12 @@ func TestCurrentUserSuccess(t *testing.T) {
 		if r.Method != http.MethodGet {
 			t.Errorf("method = %s, want GET", r.Method)
 		}
-		wantPath := "/rest/api/3/myself"
+		wantPath := "/rest/api/2/myself"
 		if r.URL.Path != wantPath {
 			t.Errorf("path = %s, want %s", r.URL.Path, wantPath)
+		}
+		if got := r.Header.Get("Authorization"); got != "Bearer my-bearer-token" {
+			t.Errorf("Authorization = %q, want %q", got, "Bearer my-bearer-token")
 		}
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(payload)
@@ -649,6 +652,14 @@ func TestCurrentUserSuccess(t *testing.T) {
 	defer server.Close()
 
 	client := NewJiraClient(server.URL)
+	client.SetCredentials(config.ResolvedInstanceCredentials{
+		AuthType: "bearer_token",
+		Credential: config.ResolvedCredential{
+			Fields: map[string]string{
+				"bearer_token": "my-bearer-token",
+			},
+		},
+	})
 	user, err := client.CurrentUser(context.Background())
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -673,6 +684,36 @@ func TestCurrentUserSuccess(t *testing.T) {
 	}
 	if user.AccountType != "atlassian" {
 		t.Errorf("accountType = %q, want %q", user.AccountType, "atlassian")
+	}
+}
+
+func TestCurrentUserParseErrorIncludesBodyPreview(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		w.Header().Set("Content-Type", "text/html")
+		w.Write([]byte("<html><body>login</body></html>"))
+	}))
+	defer server.Close()
+
+	client := NewJiraClient(server.URL)
+	client.SetCredentials(config.ResolvedInstanceCredentials{
+		AuthType: "bearer_token",
+		Credential: config.ResolvedCredential{
+			Fields: map[string]string{
+				"bearer_token": "my-bearer-token",
+			},
+		},
+	})
+
+	_, err := client.CurrentUser(context.Background())
+	if err == nil {
+		t.Fatal("expected parse error, got nil")
+	}
+	if !contains(err.Error(), "HTTP 200") {
+		t.Fatalf("error = %q, want status code", err.Error())
+	}
+	if !contains(err.Error(), "login") {
+		t.Fatalf("error = %q, want body preview", err.Error())
 	}
 }
 
@@ -761,7 +802,7 @@ func TestSearchIssuesMyIssues(t *testing.T) {
 		if r.Method != http.MethodPost {
 			t.Errorf("method = %s, want POST", r.Method)
 		}
-		wantPath := "/rest/api/3/search"
+		wantPath := "/rest/api/2/search"
 		if r.URL.Path != wantPath {
 			t.Errorf("path = %s, want %s", r.URL.Path, wantPath)
 		}
@@ -841,8 +882,8 @@ func TestSearchIssuesCurrentSprint(t *testing.T) {
 		if r.Method != http.MethodPost {
 			t.Errorf("method = %s, want POST", r.Method)
 		}
-		if r.URL.Path != "/rest/api/3/search" {
-			t.Errorf("path = %s, want /rest/api/3/search", r.URL.Path)
+		if r.URL.Path != "/rest/api/2/search" {
+			t.Errorf("path = %s, want /rest/api/2/search", r.URL.Path)
 		}
 		if r.Header.Get("Content-Type") != "application/json" {
 			t.Errorf("Content-Type = %q, want application/json", r.Header.Get("Content-Type"))
@@ -1061,7 +1102,7 @@ func TestFetchStatusesSuccess(t *testing.T) {
 		if r.Method != http.MethodGet {
 			t.Errorf("method = %s, want GET", r.Method)
 		}
-		wantPath := "/rest/api/3/status"
+		wantPath := "/rest/api/2/status"
 		if r.URL.Path != wantPath {
 			t.Errorf("path = %s, want %s", r.URL.Path, wantPath)
 		}
@@ -1145,7 +1186,7 @@ func TestFetchSprintsSuccess(t *testing.T) {
 		if r.Method != http.MethodGet {
 			t.Errorf("method = %s, want GET", r.Method)
 		}
-		wantPath := "/rest/agile/1.0/sprint"
+		wantPath := "/rest/api/2/project/PROJ/versions"
 		if r.URL.Path != wantPath {
 			t.Errorf("path = %s, want %s", r.URL.Path, wantPath)
 		}
@@ -1241,7 +1282,7 @@ func TestFetchFixVersionsSuccess(t *testing.T) {
 		if r.Method != http.MethodGet {
 			t.Errorf("method = %s, want GET", r.Method)
 		}
-		wantPath := "/rest/api/3/project/PROJ/versions"
+		wantPath := "/rest/api/2/project/PROJ/versions"
 		if r.URL.Path != wantPath {
 			t.Errorf("path = %s, want %s", r.URL.Path, wantPath)
 		}
@@ -1458,7 +1499,7 @@ func TestBuildAuthenticatedRequestOAuth1(t *testing.T) {
 		AuthType: AuthTypeOAuth1,
 	}
 
-	req, _ := http.NewRequest(http.MethodGet, "https://jira.example.com/rest/api/3/issue/PROJ-1", nil)
+	req, _ := http.NewRequest(http.MethodGet, "https://jira.example.com/rest/api/2/issue/PROJ-1", nil)
 	_, err := BuildAuthenticatedRequest(req, creds)
 	if err == nil {
 		t.Fatal("expected error for oauth1 auth type")

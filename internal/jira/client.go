@@ -8,7 +8,9 @@ import (
 	"crypto/tls"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
+	"strings"
 
 	"github.com/jirafs/jirafs/internal/config"
 	"github.com/jirafs/jirafs/internal/export"
@@ -122,6 +124,28 @@ type fixVersionsResponse struct {
 	Values []FixVersionEntry `json:"values"`
 }
 
+func decodeJSONResponse(resp *http.Response, target interface{}, contextLabel string) error {
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return NewUnknownErr(fmt.Sprintf("cannot read %s response body: %s", contextLabel, err.Error()))
+	}
+	if err := json.Unmarshal(body, target); err != nil {
+		preview := strings.TrimSpace(string(body))
+		if len(preview) > 300 {
+			preview = preview[:300] + "..."
+		}
+		respURL := ""
+		if resp != nil && resp.Request != nil && resp.Request.URL != nil {
+			respURL = resp.Request.URL.String()
+		}
+		if preview != "" {
+			return NewUnknownErrWithURL(respURL, fmt.Sprintf("cannot parse %s JSON from HTTP %d: %s; body: %q", contextLabel, resp.StatusCode, err.Error(), preview))
+		}
+		return NewUnknownErrWithURL(respURL, fmt.Sprintf("cannot parse %s JSON from HTTP %d: %s", contextLabel, resp.StatusCode, err.Error()))
+	}
+	return nil
+}
+
 // mapHTTPErr reads the response body and maps the HTTP status to a
 // structured ClientError, preferring Jira error details when available.
 func mapHTTPErr(resp *http.Response) *ClientError {
@@ -189,10 +213,14 @@ func (c *JiraClient) FetchIssue(ctx context.Context, key string) (*schema.Issue,
 		return nil, NewNotFoundError("empty key")
 	}
 
-	url := fmt.Sprintf("%s/rest/api/3/issue/%s", c.baseURL, key)
+	url := fmt.Sprintf("%s/rest/api/2/issue/%s", c.baseURL, key)
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
 		return nil, NewTransportError("cannot create request: " + err.Error())
+	}
+	req, err = BuildAuthenticatedRequest(req, c.credential)
+	if err != nil {
+		return nil, NewUnknownErr("cannot authenticate user request: " + err.Error())
 	}
 
 	resp, err := c.httpClient.Do(req)
@@ -246,7 +274,7 @@ func (c *JiraClient) FetchIssue(ctx context.Context, key string) (*schema.Issue,
 }
 
 // SearchIssues builds a JQL query for the given scope and POSTs it to the
-// Jira /rest/api/3/search endpoint, returning the matching issues.
+// Jira /rest/api/2/search endpoint, returning the matching issues.
 //
 // Supported scopes:
 //
@@ -282,7 +310,7 @@ func (c *JiraClient) SearchIssues(ctx context.Context, scope string) ([]*schema.
 		return nil, NewUnknownErr("cannot marshal search request: " + err.Error())
 	}
 
-	url := c.baseURL + "/rest/api/3/search"
+	url := c.baseURL + "/rest/api/2/search"
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(payload))
 	if err != nil {
 		return nil, NewTransportError("cannot create search request: " + err.Error())
@@ -350,14 +378,14 @@ func (c *JiraClient) SearchIssues(ctx context.Context, scope string) ([]*schema.
 	return issues, nil
 }
 
-// CurrentUser calls the Jira /rest/api/3/myself endpoint to retrieve
+// CurrentUser calls the Jira /rest/api/2/myself endpoint to retrieve
 // the authenticated user's identity. It is used for scope resolution
 // when building JQL queries that depend on the current user.
 func (c *JiraClient) CurrentUser(ctx context.Context) (*User, error) {
 	if ctx == nil {
 		ctx = context.Background()
 	}
-	url := c.baseURL + "/rest/api/3/myself"
+	url := c.baseURL + "/rest/api/2/myself"
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
 		return nil, NewTransportError("cannot create request: " + err.Error())
@@ -385,20 +413,20 @@ func (c *JiraClient) CurrentUser(ctx context.Context) (*User, error) {
 	}
 
 	var u User
-	if err := json.NewDecoder(resp.Body).Decode(&u); err != nil {
-		return nil, NewUnknownErr("cannot parse user JSON: " + err.Error())
+	if err := decodeJSONResponse(resp, &u, "user"); err != nil {
+		return nil, err
 	}
 
 	return &u, nil
 }
 
-// FetchStatuses calls the Jira /rest/api/3/status endpoint to retrieve
+// FetchStatuses calls the Jira /rest/api/2/status endpoint to retrieve
 // all available issue statuses. It returns the parsed StatusEntry slice.
 func (c *JiraClient) FetchStatuses(ctx context.Context) ([]StatusEntry, error) {
 	if ctx == nil {
 		ctx = context.Background()
 	}
-	url := c.baseURL + "/rest/api/3/status"
+	url := c.baseURL + "/rest/api/2/status"
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
 		return nil, NewTransportError("cannot create status request: " + err.Error())
@@ -426,15 +454,15 @@ func (c *JiraClient) FetchStatuses(ctx context.Context) ([]StatusEntry, error) {
 	}
 
 	var sr statusesResponse
-	if err := json.NewDecoder(resp.Body).Decode(&sr); err != nil {
-		return nil, NewUnknownErr("cannot parse statuses JSON: " + err.Error())
+	if err := decodeJSONResponse(resp, &sr, "statuses"); err != nil {
+		return nil, err
 	}
 
 	return sr.Statuses, nil
 }
 
-// FetchSprints calls the Jira /rest/agile/1.0/sprint endpoint with a
-// project query parameter to retrieve all sprints for the given project.
+// FetchSprints calls the Jira /rest/api/2/project/{projectKey}/versions
+// endpoint to retrieve all fix versions for the given project.
 func (c *JiraClient) FetchSprints(ctx context.Context, projectKey string) ([]SprintEntry, error) {
 	if ctx == nil {
 		ctx = context.Background()
@@ -443,7 +471,7 @@ func (c *JiraClient) FetchSprints(ctx context.Context, projectKey string) ([]Spr
 		return nil, NewNotFoundError("empty project key for sprints")
 	}
 
-	url := fmt.Sprintf("%s/rest/agile/1.0/sprint?project=%s", c.baseURL, projectKey)
+	url := fmt.Sprintf("%s/rest/api/2/project/%s/versions", c.baseURL, projectKey)
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
 		return nil, NewTransportError("cannot create sprint request: " + err.Error())
@@ -470,17 +498,33 @@ func (c *JiraClient) FetchSprints(ctx context.Context, projectKey string) ([]Spr
 		return nil, mapHTTPErr(resp)
 	}
 
-	var sr sprintsResponse
-	if err := json.NewDecoder(resp.Body).Decode(&sr); err != nil {
-		return nil, NewUnknownErr("cannot parse sprints JSON: " + err.Error())
+	var sr fixVersionsResponse
+	if err := decodeJSONResponse(resp, &sr, "versions"); err != nil {
+		return nil, err
 	}
 
-	return sr.Values, nil
+	sprints := make([]SprintEntry, 0, len(sr.Values))
+	for _, v := range sr.Values {
+		sprints = append(sprints, SprintEntry{
+			ID:   0,
+			Name: v.Name,
+			State: func() string {
+				if v.Released {
+					return "released"
+				}
+				if v.Archived {
+					return "archived"
+				}
+				return "unreleased"
+			}(),
+		})
+	}
+	return sprints, nil
 }
 
 // UpdateIssue updates a single issue by its key via the Jira REST API.
 // It POSTs the editable fields (summary, description, labels, assignee,
-// status, sprint, fix_versions) to /rest/api/3/issue/{key} and returns
+// status, sprint, fix_versions) to /rest/api/2/issue/{key} and returns
 // the updated issue from Jira.
 func (c *JiraClient) UpdateIssue(ctx context.Context, key string, issue *schema.Issue) (*schema.Issue, error) {
 	if ctx == nil {
@@ -490,7 +534,7 @@ func (c *JiraClient) UpdateIssue(ctx context.Context, key string, issue *schema.
 		return nil, NewNotFoundError("empty key")
 	}
 
-	url := fmt.Sprintf("%s/rest/api/3/issue/%s", c.baseURL, key)
+	url := fmt.Sprintf("%s/rest/api/2/issue/%s", c.baseURL, key)
 
 	// Build the fields object from the issue.
 	fields := issue.ToFieldsMap()
@@ -566,7 +610,7 @@ func (c *JiraClient) UpdateIssue(ctx context.Context, key string, issue *schema.
 	return updated, nil
 }
 
-// FetchFixVersions calls the Jira /rest/api/3/project/{projectKey}/versions
+// FetchFixVersions calls the Jira /rest/api/2/project/{projectKey}/versions
 // endpoint to retrieve all fix versions for the given project.
 func (c *JiraClient) FetchFixVersions(ctx context.Context, projectKey string) ([]FixVersionEntry, error) {
 	if ctx == nil {
@@ -576,7 +620,7 @@ func (c *JiraClient) FetchFixVersions(ctx context.Context, projectKey string) ([
 		return nil, NewNotFoundError("empty project key for fix versions")
 	}
 
-	url := fmt.Sprintf("%s/rest/api/3/project/%s/versions", c.baseURL, projectKey)
+	url := fmt.Sprintf("%s/rest/api/2/project/%s/versions", c.baseURL, projectKey)
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
 		return nil, NewTransportError("cannot create version request: " + err.Error())

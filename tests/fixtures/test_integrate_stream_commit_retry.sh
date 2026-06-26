@@ -50,6 +50,7 @@ wrapper_dir="${tmpdir}/wrapper"
 mkdir -p "${wrapper_dir}"
 counter_file="${tmpdir}/failure_count"
 echo "2" > "${counter_file}"
+real_git="$(command -v git)"
 
 cat > "${wrapper_dir}/git" <<'EOF'
 #!/usr/bin/env bash
@@ -74,7 +75,7 @@ chmod +x "${wrapper_dir}/git"
 (
     export PATH="${wrapper_dir}:${PATH}"
     export INTEGRATE_FAILURE_COUNT="${counter_file}"
-    export REAL_GIT="$(command -v git)"
+    export REAL_GIT="${real_git}"
 
     cd "${repo}"
 

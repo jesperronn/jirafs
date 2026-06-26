@@ -2,10 +2,12 @@ package cli
 
 import (
 	"context"
+	"flag"
 	"fmt"
 	"io"
 	"os"
 	"sort"
+	"strings"
 
 	"github.com/jirafs/jirafs/internal/config"
 	jcontext "github.com/jirafs/jirafs/internal/context"
@@ -17,6 +19,8 @@ var (
 	doctorStderr   io.Writer = os.Stderr
 	doctorClientFactory = buildDoctorClient
 )
+
+var doctorVerbose bool
 
 // DoctorSnapshot extends StatusSnapshot with credential and live-probe checks.
 // It is consumed by the doctor command to report the health of a jirafs
@@ -52,6 +56,7 @@ type CredentialCheck struct {
 type LiveProbeCheck struct {
 	InstanceName  string
 	URL           string
+	HTTPStatus    int
 	Connected     bool
 	Authenticated bool
 	User          string // displayName if authenticated
@@ -103,7 +108,7 @@ func BuildDoctorSnapshot(settings *config.Settings, cwd string) DoctorSnapshot {
 	for name, inst := range settings.Instances {
 		lpc := LiveProbeCheck{
 			InstanceName: name,
-			URL:          inst.BaseURL,
+			URL:          fmt.Sprintf("%s/rest/api/2/myself", strings.TrimRight(inst.BaseURL, "/")),
 		}
 
 		// Skip live-probe if credentials did not resolve.
@@ -138,6 +143,12 @@ func BuildDoctorSnapshot(settings *config.Settings, cwd string) DoctorSnapshot {
 		if err != nil {
 			lpc.Connected = false
 			lpc.Error = err.Error()
+			if cerr, ok := err.(*jira.ClientError); ok {
+				lpc.HTTPStatus = cerr.HTTPCode
+				if cerr.URL != "" {
+					lpc.URL = cerr.URL
+				}
+			}
 		} else {
 			lpc.Connected = true
 			lpc.Authenticated = true
@@ -164,12 +175,18 @@ func buildDoctorClient(settings *config.Settings, projCtx *jcontext.Context, cwd
 // builds a doctor snapshot, and reports config, credential resolution, and
 // live-probe connectivity for each configured instance.
 func RunDoctor(args []string) int {
-	// Check for help before loading settings.
-	for _, arg := range args {
-		if arg == "--help" || arg == "-h" {
-			printDoctorHelp()
-			return 0
-		}
+	fs := flag.NewFlagSet("doctor", flag.ContinueOnError)
+	fs.SetOutput(doctorStderr)
+	verbose := fs.Bool("verbose", false, "print request URLs during checks")
+	help := fs.Bool("help", false, "show help")
+	if err := fs.Parse(args); err != nil {
+		fmt.Fprintf(doctorStderr, "jirafs doctor: invalid flags: %v\n", err)
+		return 1
+	}
+	doctorVerbose = *verbose
+	if *help {
+		printDoctorHelp()
+		return 0
 	}
 
 	// Load settings.
@@ -247,9 +264,19 @@ func RunDoctor(args []string) int {
 		for _, name := range instNames {
 			lpc := dsnap.LiveProbes[name]
 			if lpc.Connected {
-				fmt.Fprintf(doctorStdout, "  %s: OK (authenticated as %s)\n", name, lpc.User)
+				if doctorVerbose && lpc.URL != "" {
+					fmt.Fprintf(doctorStdout, "  %s: OK (%s, authenticated as %s)\n", name, lpc.URL, lpc.User)
+				} else {
+					fmt.Fprintf(doctorStdout, "  %s: OK (authenticated as %s)\n", name, lpc.User)
+				}
 			} else {
 				fmt.Fprintf(doctorStdout, "  %s: FAIL — %s\n", name, lpc.Error)
+				if lpc.URL != "" {
+					fmt.Fprintf(doctorStdout, "    url: %s\n", lpc.URL)
+				}
+				if lpc.HTTPStatus != 0 {
+					fmt.Fprintf(doctorStdout, "    http status: %d\n", lpc.HTTPStatus)
+				}
 			}
 		}
 	}
@@ -264,6 +291,12 @@ func RunDoctor(args []string) int {
 			fmt.Fprintf(doctorStdout, "    - %s\n", step)
 		}
 		fmt.Fprintf(doctorStdout, "  next step: %s\n", dsnap.NextStep())
+		if cmds := onboardingCommands(dsnap); len(cmds) > 0 {
+			fmt.Fprintln(doctorStdout, "  useful next commands:")
+			for _, cmd := range cmds {
+				fmt.Fprintf(doctorStdout, "    - %s\n", cmd)
+			}
+		}
 	} else {
 		fmt.Fprintln(doctorStdout, "  next step: (none — all setup complete)")
 	}
@@ -280,5 +313,18 @@ Reports the health of a jirafs workspace: config, credential resolution,
 and live-probe connectivity for each configured Jira instance.
 
 Flags:
+  --verbose    print request URLs during checks
   --help, -h   show this help message`)
+}
+
+func onboardingCommands(snap DoctorSnapshot) []string {
+	for _, step := range snap.MissingSteps {
+		if step == "no issues imported or in scope" {
+			return []string{
+				"jirafs mirror refresh current-sprint",
+				"jirafs mirror refresh my-issues",
+			}
+		}
+	}
+	return nil
 }

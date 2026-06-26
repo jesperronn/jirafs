@@ -504,3 +504,45 @@ local_dirs = ["` + filepath.Join(tmpDir, "local") + `"]
 		t.Fatalf("expected Instance 'work', got %q", dsnap.Instance)
 	}
 }
+
+// TestRunDoctor_VerbosePrintsURLs verifies that verbose doctor output
+// includes request URLs for live probes.
+func TestRunDoctor_VerbosePrintsURLs(t *testing.T) {
+	tmpDir := t.TempDir()
+	homeDir := filepath.Join(tmpDir, "home")
+	jirafsDir := filepath.Join(homeDir, ".jirafs")
+	if err := os.MkdirAll(jirafsDir, 0o755); err != nil {
+		t.Fatalf("MkdirAll: %v", err)
+	}
+
+	credsPath := filepath.Join(tmpDir, "creds.toml")
+	if err := os.WriteFile(credsPath, []byte("bearer_token = \"token\"\n"), 0o644); err != nil {
+		t.Fatalf("WriteFile creds: %v", err)
+	}
+
+	settingsTOML := `version = 1
+
+[instances.work]
+base_url = "https://example.atlassian.net"
+auth_type = "bearer_token"
+credential_refs = ["file://` + credsPath + `"]
+
+[projects.test]
+key = "TEST"
+instance = "work"
+mirror_dir = "` + filepath.Join(tmpDir, "mirror") + `"
+local_dirs = ["` + filepath.Join(tmpDir, "local") + `"]
+`
+	if err := os.WriteFile(filepath.Join(jirafsDir, "settings.toml"), []byte(settingsTOML), 0o644); err != nil {
+		t.Fatalf("WriteFile settings: %v", err)
+	}
+
+	oldHome := os.Getenv("HOME")
+	os.Setenv("HOME", homeDir)
+	defer os.Setenv("HOME", oldHome)
+
+	exit := RunDoctor([]string{"--verbose"})
+	if exit != 0 {
+		t.Fatalf("RunDoctor([\"--verbose\"]) = %d", exit)
+	}
+}

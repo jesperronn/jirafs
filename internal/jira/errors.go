@@ -23,6 +23,7 @@ type ClientError struct {
 	Code     ErrCode
 	Message  string
 	HTTPCode int
+	URL      string
 }
 
 // Error implements the error interface.
@@ -98,7 +99,17 @@ func NewHTTPErr(statusCode int, msg string) *ClientError {
 	return &ClientError{Code: ErrHTTP, HTTPCode: statusCode, Message: msg}
 }
 
+// NewHTTPErrorWithURL returns a new HTTP error with status and URL context.
+func NewHTTPErrorWithURL(statusCode int, url string, msg string) *ClientError {
+	return &ClientError{Code: ErrHTTP, HTTPCode: statusCode, URL: url, Message: msg}
+}
+
 // NewUnknownErr returns a new unknown error.
 func NewUnknownErr(msg string) *ClientError {
 	return &ClientError{Code: ErrUnknown, Message: msg}
+}
+
+// NewUnknownErrWithURL returns a new unknown error with URL context.
+func NewUnknownErrWithURL(url string, msg string) *ClientError {
+	return &ClientError{Code: ErrUnknown, URL: url, Message: msg}
 }
