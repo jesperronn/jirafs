@@ -176,19 +176,22 @@ func buildDoctorClient(settings *config.Settings, projCtx *jcontext.Context, cwd
 // builds a doctor snapshot, and reports config, credential resolution, and
 // live-probe connectivity for each configured instance.
 func RunDoctor(args []string) int {
+	// Check for help before flag parsing.
+	for _, arg := range args {
+		if arg == "--help" || arg == "-h" {
+			printDoctorHelp()
+			return 0
+		}
+	}
+
 	fs := flag.NewFlagSet("doctor", flag.ContinueOnError)
 	fs.SetOutput(doctorStderr)
 	verbose := fs.Bool("verbose", false, "print request URLs during checks")
-	help := fs.Bool("help", false, "show help")
 	if err := fs.Parse(args); err != nil {
 		fmt.Fprintf(doctorStderr, "jirafs doctor: invalid flags: %v\n", err)
 		return 1
 	}
 	doctorVerbose = *verbose
-	if *help {
-		printDoctorHelp()
-		return 0
-	}
 
 	// Load settings.
 	settings, err := config.Load()
