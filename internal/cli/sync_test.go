@@ -14,11 +14,385 @@ import (
 )
 
 // TestRunSync_NoArgs verifies that calling RunSync with no arguments
-// returns exit code 1 and prints a usage hint.
+// resolves the project and lists local issues (or reports none found).
 func TestRunSync_NoArgs(t *testing.T) {
+	tmpDir := t.TempDir()
+	homeDir := filepath.Join(tmpDir, "home")
+
+	// Create an empty local directory.
+	localDir := filepath.Join(tmpDir, "local")
+	if err := os.MkdirAll(localDir, 0o755); err != nil {
+		t.Fatalf("MkdirAll: %v", err)
+	}
+
+	// Create settings with local_dirs.
+	settingsTOML := `version = 1
+
+[instances.default]
+base_url = "https://example.atlassian.net"
+auth_type = "basic"
+
+[projects.test]
+key = "TEST"
+instance = "default"
+mirror_dir = "` + filepath.Join(tmpDir, "mirror") + `"
+local_dirs = ["` + localDir + `"]
+
+[state]
+current_project = "test"
+`
+	jirafsDir := filepath.Join(homeDir, ".jirafs")
+	if err := os.MkdirAll(jirafsDir, 0o755); err != nil {
+		t.Fatalf("MkdirAll: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(jirafsDir, "settings.toml"), []byte(settingsTOML), 0o644); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+
+	oldHome := os.Getenv("HOME")
+	os.Setenv("HOME", homeDir)
+	defer os.Setenv("HOME", oldHome)
+
+	stdout, stderr := withSyncTestIO(t)
+	exit := RunSync([]string{})
+	if exit != 0 {
+		t.Fatalf("RunSync([]) = %d, stderr = %q, want 0", exit, stderr.String())
+	}
+
+	output := stdout.String()
+	if !strings.Contains(output, "no local issues found") {
+		t.Fatalf("stdout = %q, want no local issues found", output)
+	}
+}
+
+// TestRunSync_NoArgs_NoLocalDirs verifies that when no issue key is
+// provided and the resolved project has no local directories, sync
+// returns exit code 1 with an appropriate message.
+func TestRunSync_NoArgs_NoLocalDirs(t *testing.T) {
+	tmpDir := t.TempDir()
+	homeDir := filepath.Join(tmpDir, "home")
+	jirafsDir := filepath.Join(homeDir, ".jirafs")
+	if err := os.MkdirAll(jirafsDir, 0o755); err != nil {
+		t.Fatalf("MkdirAll: %v", err)
+	}
+
+	// Create settings with a project that has no local_dirs.
+	settingsTOML := `version = 1
+
+[instances.default]
+base_url = "https://example.atlassian.net"
+auth_type = "basic"
+
+[projects.test]
+key = "TEST"
+instance = "default"
+mirror_dir = "` + filepath.Join(tmpDir, "mirror") + `"
+
+[state]
+current_project = "test"
+`
+	if err := os.WriteFile(filepath.Join(jirafsDir, "settings.toml"), []byte(settingsTOML), 0o644); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+
+	oldHome := os.Getenv("HOME")
+	os.Setenv("HOME", homeDir)
+	defer os.Setenv("HOME", oldHome)
+
+	_, stderr := withSyncTestIO(t)
 	exit := RunSync([]string{})
 	if exit != 1 {
-		t.Errorf("RunSync([]) = %d, want 1", exit)
+		t.Fatalf("RunSync([]) = %d, want 1", exit)
+	}
+	if !strings.Contains(stderr.String(), "no local directories") {
+		t.Fatalf("stderr = %q, want no local directories", stderr.String())
+	}
+}
+
+// TestRunSync_NoArgs_ListIssues verifies that when no issue key is
+// provided, sync resolves the project and lists all local issues.
+func TestRunSync_NoArgs_ListIssues(t *testing.T) {
+	tmpDir := t.TempDir()
+	homeDir := filepath.Join(tmpDir, "home")
+
+	// Create local issue files.
+	localDir := filepath.Join(tmpDir, "local")
+	if err := os.MkdirAll(localDir, 0o755); err != nil {
+		t.Fatalf("MkdirAll: %v", err)
+	}
+	issueContent1 := `---
+key: PROJ-1
+type: story
+project:
+  type: project
+  value: PROJ
+summary: First issue
+---
+
+Summary: First issue
+`
+	issueContent2 := `---
+key: PROJ-2
+type: bug
+project:
+  type: project
+  value: PROJ
+summary: Second issue
+---
+
+Summary: Second issue
+`
+	if err := os.WriteFile(filepath.Join(localDir, "PROJ-1.md"), []byte(issueContent1), 0o644); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(localDir, "PROJ-2.md"), []byte(issueContent2), 0o644); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+
+	// Create settings with local_dirs.
+	settingsTOML := `version = 1
+
+[instances.default]
+base_url = "https://example.atlassian.net"
+auth_type = "basic"
+
+[projects.test]
+key = "TEST"
+instance = "default"
+mirror_dir = "` + filepath.Join(tmpDir, "mirror") + `"
+local_dirs = ["` + localDir + `"]
+
+[state]
+current_project = "test"
+`
+	jirafsDir := filepath.Join(homeDir, ".jirafs")
+	if err := os.MkdirAll(jirafsDir, 0o755); err != nil {
+		t.Fatalf("MkdirAll: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(jirafsDir, "settings.toml"), []byte(settingsTOML), 0o644); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+
+	oldHome := os.Getenv("HOME")
+	os.Setenv("HOME", homeDir)
+	defer os.Setenv("HOME", oldHome)
+
+	// Fake transport returns no issues (remote not found).
+	fake := jira.NewFakeTransport()
+	withSyncClientFactory(t, func(*config.Settings, *context.Context, string) (jira.Client, error) {
+		return fake, nil
+	})
+	// Also set syncBuildClient so runSyncAll uses the fake.
+	oldBuildClient := syncBuildClient
+	syncBuildClient = func(*config.Settings, *context.Context, string) (jira.Client, error) {
+		return fake, nil
+	}
+	t.Cleanup(func() {
+		syncBuildClient = oldBuildClient
+	})
+	stdout, stderr := withSyncTestIO(t)
+
+	exit := RunSync([]string{})
+	if exit != 0 {
+		t.Fatalf("RunSync([]) = %d, stderr = %q, want 0", exit, stderr.String())
+	}
+
+	output := stdout.String()
+	t.Logf("stdout = %q", output)
+	t.Logf("stderr = %q", stderr.String())
+	if !strings.Contains(output, "PROJ-1") {
+		t.Fatalf("stdout = %q, want PROJ-1", output)
+	}
+	if !strings.Contains(output, "PROJ-2") {
+		t.Fatalf("stdout = %q, want PROJ-2", output)
+	}
+	if !strings.Contains(output, "project test") {
+		t.Fatalf("stdout = %q, want project test", output)
+	}
+	if !strings.Contains(output, "issue(s) have pending") {
+		t.Fatalf("stdout = %q, want issue(s) have pending", output)
+	}
+}
+
+// TestRunSync_NoArgs_UpToDate verifies that when no issue key is provided
+// and all local issues match their remote, sync reports all up to date.
+func TestRunSync_NoArgs_UpToDate(t *testing.T) {
+	tmpDir := t.TempDir()
+	homeDir := filepath.Join(tmpDir, "home")
+
+	// Create matching local issue files.
+	localDir := filepath.Join(tmpDir, "local")
+	if err := os.MkdirAll(localDir, 0o755); err != nil {
+		t.Fatalf("MkdirAll: %v", err)
+	}
+	issueContent := `---
+key: PROJ-1
+type: story
+project:
+  type: project
+  value: PROJ
+summary: Matching issue
+---
+
+Summary: Matching issue
+`
+	if err := os.WriteFile(filepath.Join(localDir, "PROJ-1.md"), []byte(issueContent), 0o644); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+
+	// Create settings with local_dirs.
+	settingsTOML := `version = 1
+
+[instances.default]
+base_url = "https://example.atlassian.net"
+auth_type = "basic"
+
+[projects.test]
+key = "TEST"
+instance = "default"
+mirror_dir = "` + filepath.Join(tmpDir, "mirror") + `"
+local_dirs = ["` + localDir + `"]
+
+[state]
+current_project = "test"
+`
+	jirafsDir := filepath.Join(homeDir, ".jirafs")
+	if err := os.MkdirAll(jirafsDir, 0o755); err != nil {
+		t.Fatalf("MkdirAll: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(jirafsDir, "settings.toml"), []byte(settingsTOML), 0o644); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+
+	oldHome := os.Getenv("HOME")
+	os.Setenv("HOME", homeDir)
+	defer os.Setenv("HOME", oldHome)
+
+	// Fake transport returns matching remote.
+	fake := jira.NewFakeTransport()
+	fake.SetIssue("PROJ-1", &schema.Issue{
+		Identity: schema.IssueIdentity{
+			Key:     "PROJ-1",
+			Type:    "story",
+			Project: schema.TypedRef{Type: schema.RefProject, Value: "PROJ"},
+		},
+		Summary: "Matching issue",
+	})
+	withSyncClientFactory(t, func(*config.Settings, *context.Context, string) (jira.Client, error) {
+		return fake, nil
+	})
+	oldBuildClient := syncBuildClient
+	syncBuildClient = func(*config.Settings, *context.Context, string) (jira.Client, error) {
+		return fake, nil
+	}
+	t.Cleanup(func() {
+		syncBuildClient = oldBuildClient
+	})
+	stdout, stderr := withSyncTestIO(t)
+
+	exit := RunSync([]string{})
+	if exit != 0 {
+		t.Fatalf("RunSync([]) = %d, stderr = %q, want 0", exit, stderr.String())
+	}
+
+	output := stdout.String()
+	if !strings.Contains(output, "up to date") {
+		t.Fatalf("stdout = %q, want up to date", output)
+	}
+	if !strings.Contains(output, "0 of 1 issue(s) have pending") {
+		t.Fatalf("stdout = %q, want 0 of 1 issue(s) have pending", output)
+	}
+}
+
+// TestRunSync_NoArgs_NoProjectResolved verifies that when no issue key is
+// provided and no project can be resolved, sync returns exit code 1.
+func TestRunSync_NoArgs_NoProjectResolved(t *testing.T) {
+	tmpDir := t.TempDir()
+	homeDir := writeSettings(t, tmpDir)
+	oldHome := os.Getenv("HOME")
+	os.Setenv("HOME", homeDir)
+	defer os.Setenv("HOME", oldHome)
+
+	// Create settings without a project that matches the cwd.
+	settingsTOML := `version = 1
+
+[instances.default]
+base_url = "https://example.atlassian.net"
+auth_type = "basic"
+
+[projects.other]
+key = "OTHER"
+instance = "default"
+mirror_dir = "` + filepath.Join(tmpDir, "other") + `"
+local_dirs = ["` + filepath.Join(tmpDir, "other") + `"]
+`
+	jirafsDir := filepath.Join(homeDir, ".jirafs")
+	if err := os.MkdirAll(jirafsDir, 0o755); err != nil {
+		t.Fatalf("MkdirAll: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(jirafsDir, "settings.toml"), []byte(settingsTOML), 0o644); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+
+	_, stderr := withSyncTestIO(t)
+	exit := RunSync([]string{})
+	if exit != 1 {
+		t.Fatalf("RunSync([]) = %d, want 1", exit)
+	}
+	if !strings.Contains(stderr.String(), "no project resolved") {
+		t.Fatalf("stderr = %q, want no project resolved", stderr.String())
+	}
+}
+
+// TestRunSync_NoArgs_EmptyLocalDir verifies that when no issue key is
+// provided but local directories exist and contain no .md files,
+// sync reports no local issues found.
+func TestRunSync_NoArgs_EmptyLocalDir(t *testing.T) {
+	tmpDir := t.TempDir()
+	homeDir := writeSettings(t, tmpDir)
+
+	// Create an empty local directory.
+	localDir := filepath.Join(tmpDir, "local")
+	if err := os.MkdirAll(localDir, 0o755); err != nil {
+		t.Fatalf("MkdirAll: %v", err)
+	}
+
+	settingsTOML := `version = 1
+
+[instances.default]
+base_url = "https://example.atlassian.net"
+auth_type = "basic"
+
+[projects.test]
+key = "TEST"
+instance = "default"
+mirror_dir = "` + filepath.Join(tmpDir, "mirror") + `"
+local_dirs = ["` + localDir + `"]
+
+[state]
+current_project = "test"
+`
+	jirafsDir := filepath.Join(homeDir, ".jirafs")
+	if err := os.MkdirAll(jirafsDir, 0o755); err != nil {
+		t.Fatalf("MkdirAll: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(jirafsDir, "settings.toml"), []byte(settingsTOML), 0o644); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+
+	oldHome := os.Getenv("HOME")
+	os.Setenv("HOME", homeDir)
+	defer os.Setenv("HOME", oldHome)
+
+	stdout, stderr := withSyncTestIO(t)
+	exit := RunSync([]string{})
+	if exit != 0 {
+		t.Fatalf("RunSync([]) = %d, stderr = %q, want 0", exit, stderr.String())
+	}
+
+	output := stdout.String()
+	if !strings.Contains(output, "no local issues found") {
+		t.Fatalf("stdout = %q, want no local issues found", output)
 	}
 }
 
@@ -63,8 +437,9 @@ func withSyncClientFactory(t *testing.T, factory func(*config.Settings, *context
 	})
 }
 
-// TestRunSync_MissingKey verifies that sync without an issue key
-// returns exit code 1.
+// TestRunSync_MissingKey verifies that when no issue key is provided
+// but flags like --cwd are given, sync resolves the project and lists
+// pending syncs (or reports no issues found).
 func TestRunSync_MissingKey(t *testing.T) {
 	tmpDir := t.TempDir()
 	homeDir := writeSettings(t, tmpDir)
@@ -72,13 +447,54 @@ func TestRunSync_MissingKey(t *testing.T) {
 	os.Setenv("HOME", homeDir)
 	defer os.Setenv("HOME", oldHome)
 
-	_, stderr := withSyncTestIO(t)
-	exit := RunSync([]string{"--cwd", filepath.Join(tmpDir, "outside")})
-	if exit != 1 {
-		t.Fatalf("RunSync([\"--cwd\", ...]) = %d, want 1", exit)
+	// Create settings with a project that matches the cwd.
+	settingsTOML := `version = 1
+
+[instances.default]
+base_url = "https://example.atlassian.net"
+auth_type = "basic"
+
+[projects.test]
+key = "TEST"
+instance = "default"
+mirror_dir = "` + filepath.Join(tmpDir, "mirror") + `"
+local_dirs = ["` + filepath.Join(tmpDir, "mirror") + `"]
+
+[state]
+current_project = "test"
+`
+	jirafsDir := filepath.Join(homeDir, ".jirafs")
+	if err := os.MkdirAll(jirafsDir, 0o755); err != nil {
+		t.Fatalf("MkdirAll: %v", err)
 	}
-	if !strings.Contains(stderr.String(), "missing issue key") {
-		t.Fatalf("stderr = %q, want missing issue key", stderr.String())
+	if err := os.WriteFile(filepath.Join(jirafsDir, "settings.toml"), []byte(settingsTOML), 0o644); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+
+	// Create a fake transport.
+	fake := jira.NewFakeTransport()
+	oldBuildClient := syncBuildClient
+	syncBuildClient = func(*config.Settings, *context.Context, string) (jira.Client, error) {
+		return fake, nil
+	}
+	t.Cleanup(func() {
+		syncBuildClient = oldBuildClient
+	})
+
+	stdout, stderr := withSyncTestIO(t)
+
+	exit := RunSync([]string{"--cwd", tmpDir})
+	if exit != 0 {
+		t.Fatalf("RunSync([\"--cwd\", ...]) = %d, want 0, stderr = %q", exit, stderr.String())
+	}
+
+	output := stdout.String()
+	// Should list issues or report none found, not "missing issue key".
+	if !strings.Contains(output, "no local issues found") && !strings.Contains(output, "issue(s)") {
+		t.Fatalf("stdout = %q, want listing output", output)
+	}
+	if strings.Contains(stderr.String(), "missing issue key") {
+		t.Fatalf("stderr should not contain 'missing issue key', got: %q", stderr.String())
 	}
 }
 
@@ -707,7 +1123,7 @@ func TestResolveSyncContext_NoProject(t *testing.T) {
 	}
 	_, stderr := withSyncTestIO(t)
 
-	ctx, ok := resolveSyncContext(settings, "", filepath.Join(tmpDir, "outside"))
+	ctx, ok := resolveSyncContext(settings, context.NewResolver(settings, ""))
 	if ok {
 		t.Fatal("expected unresolved project")
 	}

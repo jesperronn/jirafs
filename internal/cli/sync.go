@@ -6,7 +6,9 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 	"sort"
+	"strings"
 
 	"github.com/jirafs/jirafs/internal/config"
 	"github.com/jirafs/jirafs/internal/context"
@@ -20,68 +22,68 @@ var (
 	syncStdout   io.Writer = os.Stdout
 	syncStderr   io.Writer = os.Stderr
 	syncClientFactory  = buildSyncClient
+	syncBuildClient  = buildSyncClient
 )
 
-// RunSync dispatches the `jirafs sync` subcommand. It resolves the project
-// context, fetches the remote issue from Jira, reads the local issue from
-// the file system, builds and validates a plan, applies the plan, and
-// pushes the updated remote back to Jira through the real service path.
+// RunSync dispatches the `jirafs sync` subcommand. When an issue key is
+// provided, it resolves the project context, fetches the remote issue from
+// Jira, reads the local issue from the file system, builds and validates a
+// plan, applies the plan, and pushes the updated remote back to Jira through
+// the real service path. When no issue key is provided, it resolves the
+// project context and lists all local issues with their pending sync
+// operations, allowing the user to preview what would be synced.
 func RunSync(args []string) int {
-	if len(args) == 0 {
-		fmt.Fprintln(syncStderr, "jirafs sync: missing issue key. Use --help for usage.")
-		return 1
-	}
-
 	// Check for help before loading settings.
-	if args[0] == "help" {
+	if len(args) > 0 && args[0] == "help" {
 		printSyncHelp()
 		return 0
 	}
 
-	// Load settings and create resolver.
+	// Load settings.
 	settings, err := config.Load()
 	if err != nil {
 		fmt.Fprintf(syncStderr, "jirafs sync: cannot load settings: %v\n", err)
 		return 1
 	}
-	resolver := context.NewResolver(settings, "")
 
-	return runSyncIssue(args, settings, resolver)
-}
-
-// runSyncIssue handles `jirafs sync KEY`. It resolves the project context,
-// fetches the remote issue from Jira through the real service path, reads
-// the local issue from the file system, builds and validates a plan,
-// applies the plan, and pushes the updated remote back to Jira.
-func runSyncIssue(args []string, settings *config.Settings, resolver *context.Resolver) int {
+	// Parse flags to extract --project and --cwd regardless of whether
+	// an issue key is provided. This allows "jirafs sync --project TEST"
+	// (no key) to resolve the project and list pending syncs.
 	fs := flag.NewFlagSet("sync", flag.ExitOnError)
-	// --project overrides the auto-detected project.
 	projectFlag := fs.String("project", "", "project key or name to use")
-	// --cwd overrides the working directory for project resolution.
 	cwdFlag := fs.String("cwd", "", "working directory to use for project resolution")
-	// --apply writes the updated remote back to the local issue file.
 	applyFlag := fs.Bool("apply", false, "write the updated remote to the local issue file")
 	if err := fs.Parse(args); err != nil {
 		fmt.Fprintf(syncStderr, "jirafs sync: invalid flags: %v\n", err)
 		return 1
 	}
 
+	// If no positional arguments (no issue key), resolve the project from
+	// the parsed flags and list pending syncs.
 	if len(fs.Args()) == 0 {
+		return runSyncAll(settings, *projectFlag, *cwdFlag)
+	}
+
+	return runSyncIssue(fs.Args(), settings, context.NewResolver(settings, *projectFlag), *applyFlag)
+}
+
+// runSyncIssue handles `jirafs sync KEY`. It resolves the project context,
+// fetches the remote issue from Jira through the real service path, reads
+// the local issue from the file system, builds and validates a plan,
+// applies the plan, and pushes the updated remote back to Jira.
+func runSyncIssue(args []string, settings *config.Settings, resolver *context.Resolver, apply bool) int {
+	if len(args) == 0 {
 		fmt.Fprintln(syncStderr, "jirafs sync: missing issue key")
 		return 1
 	}
-	if len(fs.Args()) > 1 {
+	if len(args) > 1 {
 		fmt.Fprintln(syncStderr, "jirafs sync: too many positional arguments")
 		return 1
 	}
-	key := fs.Args()[0]
+	key := args[0]
 
 	cwd := "."
-	if *cwdFlag != "" {
-		cwd = *cwdFlag
-	}
-
-	ctx, ok := resolveSyncContext(settings, *projectFlag, cwd)
+	ctx, ok := resolveSyncContext(settings, resolver)
 	if !ok {
 		return 1
 	}
@@ -155,7 +157,7 @@ func runSyncIssue(args []string, settings *config.Settings, resolver *context.Re
 	// Update the remote metadata in the result with the updated remote.
 	result.Remote.RemoteMetadata = updatedRemote.RemoteMetadata
 
-	if *applyFlag {
+	if apply {
 		// Write the updated remote back to the local issue file.
 		if err := writeUpdatedLocalIssue(localPath, result.Remote); err != nil {
 			fmt.Fprintf(syncStderr, "jirafs sync: cannot write updated local issue: %v\n", err)
@@ -174,10 +176,10 @@ func writeUpdatedLocalIssue(localPath string, issue *schema.Issue) error {
 	return os.WriteFile(localPath, []byte(content), 0o644)
 }
 
-// resolveSyncContext resolves the project context for the sync command.
-func resolveSyncContext(settings *config.Settings, project, cwd string) (*context.Context, bool) {
-	res := context.NewResolver(settings, project)
-	ctx, err := res.Resolve(cwd)
+// resolveSyncContext resolves the project context using the given resolver.
+func resolveSyncContext(settings *config.Settings, resolver *context.Resolver) (*context.Context, bool) {
+	cwd := "."
+	ctx, err := resolver.Resolve(cwd)
 	if err != nil {
 		var ce *context.Error
 		if context.IsContextError(err, &ce) {
@@ -213,16 +215,162 @@ func buildSyncClient(settings *config.Settings, ctx *context.Context, cwd string
 // printSyncHelp prints usage information for the sync subcommand.
 func printSyncHelp() {
 	fmt.Fprintln(syncStderr, `Usage:
+  jirafs sync [flags]
   jirafs sync <issue-key> [flags]
 
-Fetches the remote issue from Jira, reads the local copy from the file
-system, builds and validates a plan, applies the plan, and pushes the
-updated remote back to Jira through the real service path.
+When called without an issue key, resolves the project context and lists all
+local issues with their pending sync operations, allowing preview of what
+would be synced.
+
+When called with an issue key, fetches the remote issue from Jira, reads
+the local copy from the file system, builds and validates a plan, applies
+the plan, and pushes the updated remote back to Jira through the real
+service path.
 
 Flags:
   --project KEY   project key or name to use
   --cwd DIR       working directory for project resolution
   --apply         write the updated remote to the local issue file
 
-Run "jirafs sync <issue-key> --help" for more information about flags.`)
+Run "jirafs sync --help" for more information about flags.`)
+}
+
+// runSyncAll resolves the project context and lists all local issues with
+// their pending sync operations. It resolves the project using the same
+// resolution order as runSyncIssue (explicit --project, cwd mapping,
+// remembered state), then iterates over all local directories to find
+// issue files, compares each against the remote, and reports what would
+// be synced.
+func runSyncAll(settings *config.Settings, project, cwd string) int {
+	// Resolve the project context.
+	if cwd == "" {
+		cwd = "."
+	}
+	resolver := context.NewResolver(settings, project)
+	ctx, err := resolver.Resolve(cwd)
+	if err != nil {
+		var ce *context.Error
+		if context.IsContextError(err, &ce) {
+			if ce.Code == config.ErrNoProjectResolved {
+				fmt.Fprintf(syncStderr, "jirafs sync: no project resolved for cwd %q\n", cwd)
+				if len(ce.Candidates) > 0 {
+					fmt.Fprintln(syncStderr, "Available projects:")
+					for _, name := range ce.Candidates {
+						fmt.Fprintf(syncStderr, "  - %s\n", name)
+					}
+				}
+				return 1
+			}
+			fmt.Fprintf(syncStderr, "jirafs sync: %v\n", err)
+			return 1
+		}
+		fmt.Fprintf(syncStderr, "jirafs sync: %v\n", err)
+		return 1
+	}
+
+	// Get the project from settings.
+	proj, ok := settings.Projects[ctx.Name]
+	if !ok {
+		fmt.Fprintf(syncStderr, "jirafs sync: project %q not found in settings\n", ctx.Name)
+		return 1
+	}
+
+	if len(proj.LocalDirs) == 0 {
+		fmt.Fprintf(syncStderr, "jirafs sync: project %q has no local directories configured\n", ctx.Name)
+		return 1
+	}
+
+	// Collect all issue files from local directories.
+	type issueInfo struct {
+		key     string
+		path    string
+		hasDiff bool
+		ops     []schema.PlanOperation
+	}
+
+	var issues []issueInfo
+
+	for _, localDir := range proj.LocalDirs {
+		entries, err := os.ReadDir(localDir)
+		if err != nil {
+			continue
+		}
+		for _, entry := range entries {
+			if entry.IsDir() {
+				continue
+			}
+			if !strings.HasSuffix(entry.Name(), ".md") {
+				continue
+			}
+			filePath := filepath.Join(localDir, entry.Name())
+			data, err := os.ReadFile(filePath)
+			if err != nil {
+				continue
+			}
+			issue, pe := schema.ParseIssue(string(data))
+			if pe != nil {
+				continue
+			}
+			key := string(issue.Identity.Key)
+			if key == "" {
+				continue
+			}
+
+			// Fetch the remote issue to compare.
+			client, err := syncBuildClient(settings, ctx, cwd)
+			if err != nil {
+				fmt.Fprintf(syncStderr, "DEBUG: buildSyncClient error: %v\n", err)
+				// Skip issues we can't fetch remotely.
+				continue
+			}
+			remote, err := client.FetchIssue(nil, key)
+			if err != nil {
+				// Remote not found — still report it as needing attention.
+				issues = append(issues, issueInfo{
+					key:     key,
+					path:    entry.Name(),
+					hasDiff: true,
+				})
+				continue
+			}
+
+			// Build the plan by comparing local and remote.
+			ops, _, err := plan.BuildPlan(issue, *remote)
+			if err != nil {
+				// Unparseable plan — skip.
+				continue
+			}
+
+			issues = append(issues, issueInfo{
+				key:     key,
+				path:    entry.Name(),
+				hasDiff: len(ops) > 0,
+				ops:     ops,
+			})
+		}
+	}
+
+	if len(issues) == 0 {
+		fmt.Fprintf(syncStdout, "jirafs sync: project %s: no local issues found\n", ctx.Name)
+		return 0
+	}
+
+	// Report each issue.
+	var needsSync int
+	for _, info := range issues {
+		if info.hasDiff {
+			needsSync++
+		}
+		if len(info.ops) > 0 {
+			fmt.Fprintf(syncStdout, "  %s (%s): %d operation(s) pending\n",
+				info.key, info.path, len(info.ops))
+		} else {
+			fmt.Fprintf(syncStdout, "  %s (%s): up to date\n",
+				info.key, info.path)
+		}
+	}
+
+	fmt.Fprintf(syncStdout, "jirafs sync: project %s: %d of %d issue(s) have pending operations\n",
+		ctx.Name, needsSync, len(issues))
+	return 0
 }
