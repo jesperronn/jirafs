@@ -1,5 +1,5 @@
 ---
-agent: pi
+agent: pi --verbose
 commands:
   - name: init
     run: git reset --hard main
