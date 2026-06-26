@@ -4,6 +4,7 @@ import (
 	"context"
 	"sync"
 
+	"github.com/jirafs/jirafs/internal/config"
 	"github.com/jirafs/jirafs/internal/schema"
 )
 
@@ -198,6 +199,9 @@ func (f *FakeTransport) UpdateIssue(_ context.Context, key string, issue *schema
 	f.issues[key] = &updated
 	return &updated, nil
 }
+
+// SetCredentials is a no-op for the fake transport.
+func (f *FakeTransport) SetCredentials(creds config.ResolvedInstanceCredentials) {}
 
 // generateScopeIssues returns deterministic issues for known scopes.
 // It is not thread-safe and must be called outside of locks.

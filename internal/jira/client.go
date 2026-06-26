@@ -78,6 +78,11 @@ type Client interface {
 	// issue from Jira. It is used by the sync command to push changes back
 	// to Jira after validating and applying a plan.
 	UpdateIssue(ctx context.Context, key string, issue *schema.Issue) (*schema.Issue, error)
+
+	// SetCredentials configures the credentials used for authenticating
+	// requests made by this client. It is called after client creation
+	// to inject resolved credentials before making API calls.
+	SetCredentials(creds config.ResolvedInstanceCredentials)
 }
 
 // jiraErrorDetails captures the structured error response from Jira.

@@ -43,6 +43,8 @@ func main() {
 		os.Exit(cli.RunPlan(os.Args[2:]))
 	case "status":
 		os.Exit(cli.RunStatus(os.Args[2:]))
+	case "doctor":
+		os.Exit(cli.RunDoctor(os.Args[2:]))
 	case "--help", "-h":
 		printHelp()
 	default:
@@ -364,6 +366,7 @@ Commands:
   plan       show a sync plan without applying changes
   setup      record Jira instance and project settings
   status     show workspace status and next-step hints
+  doctor     run health checks on config, credentials, and live connectivity
   sync       apply a sync plan and push changes to Jira (real service path)
   new        create a new issue from a template
   registry   manage local registry files for typed references
