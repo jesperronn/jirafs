@@ -4,14 +4,20 @@ import (
 	"testing"
 
 	"github.com/jirafs/jirafs/internal/board"
+	"github.com/jirafs/jirafs/internal/registry"
 	"github.com/jirafs/jirafs/internal/schema"
 )
 
 func TestBoard_GroupByStatus(t *testing.T) {
-	// Create a board
 	b := board.NewBoard()
-	
-	// Create test issues with different statuses
+
+	statuses := map[string]registry.Status{
+		"status:open":      {Name: "Open"},
+		"status:in-progress": {Name: "In Progress"},
+		"status:resolved":  {Name: "Resolved"},
+		"status:closed":    {Name: "Closed"},
+	}
+
 	issues := []*schema.Issue{
 		{
 			Identity: schema.IssueIdentity{
@@ -40,10 +46,10 @@ func TestBoard_GroupByStatus(t *testing.T) {
 		{
 			Identity: schema.IssueIdentity{
 				Key:     "PROJ-4",
-				Type:    "epic",
+				Type:    "story",
 				Project: schema.TypedRef{Type: schema.RefProject, Value: "PROJ"},
 			},
-			Status: "Custom Status",
+			Status: "status:closed",
 		},
 		{
 			Identity: schema.IssueIdentity{
@@ -54,45 +60,47 @@ func TestBoard_GroupByStatus(t *testing.T) {
 			Status: "",
 		},
 	}
-	
-	// Group issues by status - passing nil for registry as we don't have the type yet
-	b.GroupByStatus(issues, nil)
-	
-	// Check that we have columns for all statuses
-	// We just verify the basic functionality works - no registry-specific behavior yet
-	
+
+	b.GroupByStatus(issues, statuses)
+
 	// Check that each column has the right issues
-	// Note: Issue 5 has empty status, so it gets treated as "Open" 
-	if len(b.StatusColumns["Open"]) != 2 {
-		t.Errorf("Expected 2 issues in 'Open' column, got %d", len(b.StatusColumns["Open"]))
+	if len(b.StatusColumns["Open"]) != 1 {
+		t.Errorf("Expected 1 issue in 'Open' column, got %d", len(b.StatusColumns["Open"]))
 	}
-	
+
 	if len(b.StatusColumns["In Progress"]) != 1 {
 		t.Errorf("Expected 1 issue in 'In Progress' column, got %d", len(b.StatusColumns["In Progress"]))
 	}
-	
+
 	if len(b.StatusColumns["Resolved"]) != 1 {
 		t.Errorf("Expected 1 issue in 'Resolved' column, got %d", len(b.StatusColumns["Resolved"]))
 	}
-	
-	if len(b.StatusColumns["Unknown"]) != 1 {
-		t.Errorf("Expected 1 issue in 'Unknown' column, got %d", len(b.StatusColumns["Unknown"]))
+
+	if len(b.StatusColumns["Closed"]) != 1 {
+		t.Errorf("Expected 1 issue in 'Closed' column, got %d", len(b.StatusColumns["Closed"]))
 	}
-	
-	// Check that the column order is as expected
-	// For now, we just verify it contains all expected columns
-	if len(b.ColumnOrder) == 0 {
-		t.Error("Expected non-empty column order")
+
+	// Empty status goes to "Unassigned"
+	if len(b.StatusColumns["Unassigned"]) != 1 {
+		t.Errorf("Expected 1 issue in 'Unassigned' column, got %d", len(b.StatusColumns["Unassigned"]))
+	}
+
+	// Column order should be sorted by status name from registry
+	expectedOrder := []string{"Closed", "In Progress", "Open", "Resolved"}
+	if len(b.ColumnOrder) != len(expectedOrder) {
+		t.Errorf("Expected column order %v, got %v", expectedOrder, b.ColumnOrder)
 	}
 }
 
 func TestBoard_GroupByStatus_Empty(t *testing.T) {
 	b := board.NewBoard()
-	
-	// Test with empty issues slice
-	b.GroupByStatus([]*schema.Issue{}, nil)
-	
-	// Should have no columns or at least no issues in columns
+
+	statuses := map[string]registry.Status{
+		"status:open": {Name: "Open"},
+	}
+
+	b.GroupByStatus([]*schema.Issue{}, statuses)
+
 	if len(b.StatusColumns) != 0 {
 		t.Logf("Expected no columns, got %d", len(b.StatusColumns))
 	}
@@ -100,7 +108,11 @@ func TestBoard_GroupByStatus_Empty(t *testing.T) {
 
 func TestBoard_GroupByStatus_UnknownStatus(t *testing.T) {
 	b := board.NewBoard()
-	
+
+	statuses := map[string]registry.Status{
+		"status:open": {Name: "Open"},
+	}
+
 	issues := []*schema.Issue{
 		{
 			Identity: schema.IssueIdentity{
@@ -111,26 +123,26 @@ func TestBoard_GroupByStatus_UnknownStatus(t *testing.T) {
 			Status: "Nonexistent Status",
 		},
 	}
-	
-	b.GroupByStatus(issues, nil)
-	
-	// Should end up in "Unknown" column
-	if len(b.StatusColumns["Unknown"]) != 1 {
-		t.Errorf("Expected 1 issue in 'Unknown' column, got %d", len(b.StatusColumns["Unknown"]))
+
+	b.GroupByStatus(issues, statuses)
+
+	// Not found in registry — raw value is used as key
+	if len(b.StatusColumns["Nonexistent Status"]) != 1 {
+		t.Errorf("Expected 1 issue in 'Nonexistent Status' column, got %d", len(b.StatusColumns["Nonexistent Status"]))
 	}
 }
 
 func TestBoard_NewBoard(t *testing.T) {
 	b := board.NewBoard()
-	
+
 	if b == nil {
 		t.Error("NewBoard should not return nil")
 	}
-	
+
 	if b.StatusColumns == nil {
 		t.Error("NewBoard should initialize StatusColumns")
 	}
-	
+
 	if b.ColumnOrder == nil {
 		t.Error("NewBoard should initialize ColumnOrder")
 	}

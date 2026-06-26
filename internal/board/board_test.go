@@ -3,15 +3,21 @@ package board
 import (
 	"testing"
 
+	"github.com/jirafs/jirafs/internal/registry"
 	"github.com/jirafs/jirafs/internal/schema"
 	"github.com/stretchr/testify/assert"
 )
 
 func TestBoard_GroupByStatus(t *testing.T) {
-	// Create a board
 	board := NewBoard()
-	
-	// Create test issues with different statuses
+
+	statuses := map[string]registry.Status{
+		"status:open":          {Name: "Open"},
+		"status:in-progress":   {Name: "In Progress"},
+		"status:resolved":      {Name: "Resolved"},
+		"status:closed":        {Name: "Closed"},
+	}
+
 	issues := []*schema.Issue{
 		{
 			Identity: schema.IssueIdentity{
@@ -40,10 +46,10 @@ func TestBoard_GroupByStatus(t *testing.T) {
 		{
 			Identity: schema.IssueIdentity{
 				Key:     "PROJ-4",
-				Type:    "epic",
+				Type:    "story",
 				Project: schema.TypedRef{Type: schema.RefProject, Value: "PROJ"},
 			},
-			Status: "Custom Status",
+			Status: "status:closed",
 		},
 		{
 			Identity: schema.IssueIdentity{
@@ -54,40 +60,48 @@ func TestBoard_GroupByStatus(t *testing.T) {
 			Status: "",
 		},
 	}
-	
-	// Group issues by status - using dummy registry parameter for now to make tests pass
-	board.GroupByStatus(issues, nil)
-	
-	// Check that we have columns for all statuses - this is a simple check
-	// that Open and In Progress are properly grouped, and the rest goes to Unknown
-	assert.Len(t, board.StatusColumns["Open"], 2)
+
+	board.GroupByStatus(issues, statuses)
+
+	// "Open" should have PROJ-1 (status is a raw name matching registry)
+	assert.Len(t, board.StatusColumns["Open"], 1)
+
+	// "In Progress" should have PROJ-2
 	assert.Len(t, board.StatusColumns["In Progress"], 1)
+
+	// "Resolved" should have PROJ-3
 	assert.Len(t, board.StatusColumns["Resolved"], 1)
-	
-	// Check that the column order is as expected
-	assert.NotEmpty(t, board.ColumnOrder)
-	
-	// Make sure all our default columns are in the order
-	expectedColumns := []string{"Open", "In Progress", "Resolved", "Unknown"}
-	assert.Len(t, board.ColumnOrder, len(expectedColumns))
-	for i, col := range expectedColumns {
-		assert.Equal(t, col, board.ColumnOrder[i])
-	}
+
+	// "Closed" should have PROJ-4 (resolved via typed ref)
+	assert.Len(t, board.StatusColumns["Closed"], 1)
+
+	// Empty status goes to "Unassigned"
+	assert.Len(t, board.StatusColumns["Unassigned"], 1)
+
+	// Column order should be sorted by status name from registry
+	assert.Equal(t, []string{"Closed", "In Progress", "Open", "Resolved"}, board.ColumnOrder)
 }
 
 func TestBoard_GroupByStatus_Empty(t *testing.T) {
 	b := NewBoard()
-	
-	// Test with empty issues slice
-	b.GroupByStatus([]*schema.Issue{}, nil)
-	
-	// Should have no columns or at least no issues in columns
+
+	statuses := map[string]registry.Status{
+		"status:open": {Name: "Open"},
+	}
+
+	b.GroupByStatus([]*schema.Issue{}, statuses)
+
 	assert.Empty(t, b.StatusColumns)
+	assert.Equal(t, []string{"Open"}, b.ColumnOrder)
 }
 
 func TestBoard_GroupByStatus_UnknownStatus(t *testing.T) {
 	b := NewBoard()
-	
+
+	statuses := map[string]registry.Status{
+		"status:open": {Name: "Open"},
+	}
+
 	issues := []*schema.Issue{
 		{
 			Identity: schema.IssueIdentity{
@@ -98,80 +112,36 @@ func TestBoard_GroupByStatus_UnknownStatus(t *testing.T) {
 			Status: "Nonexistent Status",
 		},
 	}
-	
-	// Using dummy registry parameter for now to make tests pass
-	b.GroupByStatus(issues, nil)
-	
-	// Should end up in "Unknown" column
-	assert.Len(t, b.StatusColumns["Unknown"], 1)
+
+	b.GroupByStatus(issues, statuses)
+
+	// Not found in registry — raw value is used as key
+	assert.Len(t, b.StatusColumns["Nonexistent Status"], 1)
 }
 
 func TestBoard_NewBoard(t *testing.T) {
 	board := NewBoard()
-	
+
 	assert.NotNil(t, board)
 	assert.NotNil(t, board.StatusColumns)
 	assert.NotNil(t, board.ColumnOrder)
 }
 
-func TestBoard_GroupByAssignee(t *testing.T) {
-	b := NewBoard()
-	
-	issues := []*schema.Issue{
-		{
-			Identity: schema.IssueIdentity{
-				Key:     "PROJ-1",
-				Type:    "story",
-				Project: schema.TypedRef{Type: schema.RefProject, Value: "PROJ"},
-			},
-			Assignee: stringPtr("john.doe"),
-		},
-		{
-			Identity: schema.IssueIdentity{
-				Key:     "PROJ-2",
-				Type:    "bug",
-				Project: schema.TypedRef{Type: schema.RefProject, Value: "PROJ"},
-			},
-			Assignee: stringPtr("jane.smith"),
-		},
-		{
-			Identity: schema.IssueIdentity{
-				Key:     "PROJ-3",
-				Type:    "task",
-				Project: schema.TypedRef{Type: schema.RefProject, Value: "PROJ"},
-			},
-			Assignee: nil,
-		},
+func TestResolveStatusName(t *testing.T) {
+	statuses := map[string]registry.Status{
+		"status:in-progress": {Name: "In Progress"},
+		"status:done":        {Name: "Done"},
 	}
-	
-	// Test the GroupByAssignee method exists and works (at least doesn't panic)
-	b.GroupByAssignee(issues)
-	
-	// This is a basic test that the method doesn't crash
-	assert.NotNil(t, b)
-}
 
-func TestBoard_GroupByEpic(t *testing.T) {
-	b := NewBoard()
-	
-	issues := []*schema.Issue{
-		{
-			Identity: schema.IssueIdentity{
-				Key:     "PROJ-1",
-				Type:    "story",
-				Project: schema.TypedRef{Type: schema.RefProject, Value: "PROJ"},
-			},
-		},
-	}
-	
-	// Test the GroupByEpic method exists and works (at least doesn't panic)
-	b.GroupByEpic(issues)
-	
-	// This is a basic test that the method doesn't crash
-	assert.NotNil(t, b)
-}
+	// Empty status → "Unassigned"
+	assert.Equal(t, "Unassigned", resolveStatusName("", statuses))
 
-// Helper function to create a string pointer for tests
-func stringPtr(s string) *string {
-	return &s
+	// Typed ref resolves to name
+	assert.Equal(t, "In Progress", resolveStatusName("status:in-progress", statuses))
+
+	// Typed ref not in registry → raw value
+	assert.Equal(t, "status:unknown", resolveStatusName("status:unknown", statuses))
+
+	// Raw name not in registry → raw value
+	assert.Equal(t, "Raw Status", resolveStatusName("Raw Status", statuses))
 }

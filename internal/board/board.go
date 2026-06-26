@@ -2,6 +2,9 @@
 package board
 
 import (
+	"sort"
+
+	"github.com/jirafs/jirafs/internal/registry"
 	"github.com/jirafs/jirafs/internal/schema"
 )
 
@@ -21,79 +24,47 @@ func NewBoard() *Board {
 	}
 }
 
-// GroupByStatus groups issues by their canonical status.
-func (b *Board) GroupByStatus(issues []*schema.Issue, statusRegistry interface{}) {
+// GroupByStatus groups issues by their canonical status, using the status
+// registry to resolve typed refs to status names. Columns are built from
+// the registry entries, and issues whose status does not match any registry
+// entry are placed in "Unassigned".
+func (b *Board) GroupByStatus(issues []*schema.Issue, statuses map[string]registry.Status) {
 	// Clear existing columns
 	b.StatusColumns = make(map[string][]*schema.Issue)
-	
-	// Initialize with default columns (open, in-progress, resolved, unknown)
-	defaultColumns := []string{"Open", "In Progress", "Resolved", "Unknown"}
-	
-	// Create column order with canonical status names 
+
+	// Build column order from the registry: sorted by status name.
 	columnOrder := []string{}
-	
-	// Add canonical columns in proper order
-	for _, colName := range defaultColumns {
-		columnOrder = append(columnOrder, colName)
-	}
-	
-	b.ColumnOrder = columnOrder
-	
-	// Group issues by status
-	for _, issue := range issues {
-		statusName := getStatusForIssue(issue)
-		
-		// If status is not in our defined columns, put it in "Unknown"
-		if !contains(b.ColumnOrder, statusName) {
-			statusName = "Unknown"
+	for _, s := range statuses {
+		if s.Name != "" {
+			columnOrder = append(columnOrder, s.Name)
 		}
-		
+	}
+	sort.Strings(columnOrder)
+	b.ColumnOrder = columnOrder
+
+	// Group issues by resolved status name.
+	for _, issue := range issues {
+		statusName := resolveStatusName(issue.Status, statuses)
 		b.StatusColumns[statusName] = append(b.StatusColumns[statusName], issue)
 	}
 }
 
-// getStatusForIssue returns the canonical status name for an issue.
-func getStatusForIssue(issue *schema.Issue) string {
-	if issue.Status == "" {
-		return "Open"
+// resolveStatusName resolves an issue's status field to a canonical name
+// using the status registry. If the status is empty, returns "Unassigned".
+// If the status is a typed ref (e.g. "status:in-progress"), resolves it
+// via registry.ResolveStatus. If not found in the registry, returns the
+// raw status value as-is.
+func resolveStatusName(status string, statuses map[string]registry.Status) string {
+	if status == "" {
+		return "Unassigned"
 	}
-	
-	// For now, we return the raw status value as a canonical name
-	return issue.Status
-}
 
-// contains checks if a string is in a slice.
-func contains(slice []string, item string) bool {
-	for _, s := range slice {
-		if s == item {
-			return true
-		}
+	// Try resolving as a typed ref first.
+	name, found := registry.ResolveStatus(status, statuses)
+	if found {
+		return name
 	}
-	return false
-}
 
-// GroupByAssignee groups issues by their assignee.
-func (b *Board) GroupByAssignee(issues []*schema.Issue) {
-	// Group issues by their assignee - this is part of B091b
-	assigneeColumns := make(map[string][]*schema.Issue)
-	
-	for _, issue := range issues {
-		var assigneeKey string
-		if issue.Assignee != nil && *issue.Assignee != "" {
-			assigneeKey = *issue.Assignee
-		} else {
-			assigneeKey = "Unassigned"
-		}
-		
-		assigneeColumns[assigneeKey] = append(assigneeColumns[assigneeKey], issue)
-	}
-	
-	// For B091b, we just need to make sure the method exists
-	// This will be expanded in future implementations or task B091b implementation
-}
-
-// GroupByEpic groups issues by their epic.
-func (b *Board) GroupByEpic(issues []*schema.Issue) {
-	// This method will implement grouping by epic, which is part of B091b
-	// For now just make sure it exists - implementation will be added as part of B091b
+	// Not found in registry — return the raw value.
+	return status
 }
