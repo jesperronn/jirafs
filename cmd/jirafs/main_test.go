@@ -459,6 +459,57 @@ mirror_dir = "` + jirafsDir + `/jira/platform"
 	}
 }
 
+// TestUseWithOtherProjectsShowsChoices verifies that when a project
+// is set and other projects exist, the output includes "other projects:"
+func TestUseWithOtherProjectsShowsChoices(t *testing.T) {
+	tmpDir := t.TempDir()
+	homeDir := filepath.Join(tmpDir, "home")
+	jirafsDir := filepath.Join(homeDir, settingsDir)
+	if err := os.MkdirAll(jirafsDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	settings := `
+version = 1
+
+[instances.work]
+base_url = "https://jira.example.com"
+auth_type = "atlassian_api_token"
+
+[projects.platform]
+key = "PLAT"
+instance = "work"
+mirror_dir = "` + jirafsDir + `/jira/platform"
+
+[projects.growth]
+key = "GROW"
+instance = "work"
+mirror_dir = "` + jirafsDir + `/jira/growth"
+
+[state]
+current_project = "platform"
+`
+	if err := os.WriteFile(filepath.Join(jirafsDir, settingsFile), []byte(settings), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	output := runMainHelperWithHome(t, homeDir, "use")
+	if output.exitCode != 0 {
+		t.Fatalf("exitCode = %d, want 0, stderr = %q", output.exitCode, output.stderr)
+	}
+	// Should show current project.
+	if !strings.Contains(output.stderr, `current project is "platform"`) {
+		t.Fatalf("stderr = %q, want 'current project is \"platform\"'", output.stderr)
+	}
+	// Should list other projects as choices.
+	if !strings.Contains(output.stderr, "other projects:") {
+		t.Fatalf("stderr = %q, expected 'other projects:'", output.stderr)
+	}
+	if !strings.Contains(output.stderr, "growth") {
+		t.Fatalf("stderr = %q, expected 'growth' in choices", output.stderr)
+	}
+}
+
 func TestUseUpdatesState(t *testing.T) {
 	tmpDir := t.TempDir()
 	homeDir := filepath.Join(tmpDir, "home")

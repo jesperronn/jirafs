@@ -103,7 +103,8 @@ func runUse(args []string) int {
 		return 1
 	}
 
-	// No project given → show current state.
+	// No project given → show current state and list other
+	// available projects as next-step choices.
 	if key == "" {
 		s, err := config.Load()
 		if err != nil {
@@ -112,8 +113,23 @@ func runUse(args []string) int {
 		}
 		if s.State.CurrentProject == "" {
 			fmt.Println("jirafs: no current project set")
+			if len(s.Projects) > 0 {
+				fmt.Fprintln(os.Stderr, "jirafs: available projects:")
+				for name := range s.Projects {
+					fmt.Fprintf(os.Stderr, "  - %s\n", name)
+				}
+			}
 		} else {
 			fmt.Printf("jirafs: current project is %q\n", s.State.CurrentProject)
+			if len(s.Projects) > 1 {
+				fmt.Fprintln(os.Stderr, "jirafs: other projects:")
+				for name, proj := range s.Projects {
+					if name == s.State.CurrentProject {
+						continue
+					}
+					fmt.Fprintf(os.Stderr, "  - %s (key: %s)\n", name, proj.Key)
+				}
+			}
 		}
 		return 0
 	}

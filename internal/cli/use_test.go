@@ -490,6 +490,242 @@ local_dirs = ["` + filepath.Join(tmpDir, "local") + `"]
 	}
 }
 
+// TestRunUse_ShowChoices verifies that when a project is resolved and
+// other projects exist, RunUse lists them as next-step choices.
+func TestRunUse_ShowChoices(t *testing.T) {
+	tmpDir := t.TempDir()
+	homeDir := filepath.Join(tmpDir, "home")
+	jirafsDir := filepath.Join(homeDir, ".jirafs")
+	if err := os.MkdirAll(jirafsDir, 0o755); err != nil {
+		t.Fatalf("MkdirAll: %v", err)
+	}
+	credsPath := filepath.Join(tmpDir, "creds.toml")
+	if err := os.WriteFile(credsPath, []byte("email = \"user@example.com\"\napi_token = \"token\"\n"), 0o644); err != nil {
+		t.Fatalf("WriteFile creds: %v", err)
+	}
+	// Create directories first, then resolve symlinks.
+	mirrorDir := filepath.Join(tmpDir, "mirror")
+	localDir := filepath.Join(tmpDir, "local")
+	otherMirrorDir := filepath.Join(tmpDir, "other-mirror")
+	otherLocalDir := filepath.Join(tmpDir, "other-local")
+	for _, dir := range []string{mirrorDir, localDir, otherMirrorDir, otherLocalDir} {
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			t.Fatalf("MkdirAll %s: %v", dir, err)
+		}
+	}
+	resolvedMirror, err := filepath.EvalSymlinks(mirrorDir)
+	if err != nil {
+		t.Fatalf("EvalSymlinks mirror: %v", err)
+	}
+	resolvedLocal, err := filepath.EvalSymlinks(localDir)
+	if err != nil {
+		t.Fatalf("EvalSymlinks local: %v", err)
+	}
+	resolvedOtherMirror, err := filepath.EvalSymlinks(otherMirrorDir)
+	if err != nil {
+		t.Fatalf("EvalSymlinks other-mirror: %v", err)
+	}
+	resolvedOtherLocal, err := filepath.EvalSymlinks(otherLocalDir)
+	if err != nil {
+		t.Fatalf("EvalSymlinks other-local: %v", err)
+	}
+	// Write settings with resolved paths.
+	resolvedSettingsTOML := strings.ReplaceAll(`version = 1
+
+[instances.default]
+base_url = "https://example.atlassian.net"
+auth_type = "atlassian_api_token"
+credential_refs = ["file://REPLACED_CREDS"]
+
+[projects.test]
+key = "TEST"
+instance = "default"
+mirror_dir = "REPLACED_MIRROR"
+local_dirs = ["REPLACED_LOCAL"]
+
+[projects.other]
+key = "OTHER"
+instance = "default"
+mirror_dir = "REPLACED_OTHER_MIRROR"
+local_dirs = ["REPLACED_OTHER_LOCAL"]
+`, "REPLACED_CREDS", credsPath)
+	resolvedSettingsTOML = strings.ReplaceAll(resolvedSettingsTOML, "REPLACED_MIRROR", resolvedMirror)
+	resolvedSettingsTOML = strings.ReplaceAll(resolvedSettingsTOML, "REPLACED_LOCAL", resolvedLocal)
+	resolvedSettingsTOML = strings.ReplaceAll(resolvedSettingsTOML, "REPLACED_OTHER_MIRROR", resolvedOtherMirror)
+	resolvedSettingsTOML = strings.ReplaceAll(resolvedSettingsTOML, "REPLACED_OTHER_LOCAL", resolvedOtherLocal)
+	if err := os.WriteFile(filepath.Join(jirafsDir, "settings.toml"), []byte(resolvedSettingsTOML), 0o644); err != nil {
+		t.Fatalf("WriteFile settings: %v", err)
+	}
+
+	oldHome := os.Getenv("HOME")
+	os.Setenv("HOME", homeDir)
+	defer os.Setenv("HOME", oldHome)
+
+	oldCwd, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("Getwd: %v", err)
+	}
+	if err := os.Chdir(resolvedMirror); err != nil {
+		t.Fatalf("Chdir: %v", err)
+	}
+	defer os.Chdir(oldCwd)
+
+	stdout, stderr := withUseTestIO(t)
+	exit := RunUse([]string{})
+	if exit != 0 {
+		t.Fatalf("RunUse([]) = %d, want 0, stderr = %q", exit, stderr.String())
+	}
+	output := stdout.String()
+	// Should show current project.
+	if !strings.Contains(output, "current project is") {
+		t.Fatalf("expected 'current project is' in output, got stdout=%q", output)
+	}
+	// Should list other project as a choice.
+	if !strings.Contains(output, "other projects:") {
+		t.Fatalf("expected 'other projects:' in output, got stdout=%q", output)
+	}
+	if !strings.Contains(output, "other") {
+		t.Fatalf("expected 'other' project name in choices, got stdout=%q", output)
+	}
+}
+
+// TestRunUse_NoChoicesWhenSingleProject verifies that when only one
+// project exists, no choices section is printed.
+func TestRunUse_NoChoicesWhenSingleProject(t *testing.T) {
+	tmpDir := t.TempDir()
+	homeDir := filepath.Join(tmpDir, "home")
+	jirafsDir := filepath.Join(homeDir, ".jirafs")
+	if err := os.MkdirAll(jirafsDir, 0o755); err != nil {
+		t.Fatalf("MkdirAll: %v", err)
+	}
+	credsPath := filepath.Join(tmpDir, "creds.toml")
+	if err := os.WriteFile(credsPath, []byte("email = \"user@example.com\"\napi_token = \"token\"\n"), 0o644); err != nil {
+		t.Fatalf("WriteFile creds: %v", err)
+	}
+	// Create directories first, then resolve symlinks.
+	mirrorDir := filepath.Join(tmpDir, "mirror")
+	localDir := filepath.Join(tmpDir, "local")
+	for _, dir := range []string{mirrorDir, localDir} {
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			t.Fatalf("MkdirAll %s: %v", dir, err)
+		}
+	}
+	resolvedMirror, err := filepath.EvalSymlinks(mirrorDir)
+	if err != nil {
+		t.Fatalf("EvalSymlinks mirror: %v", err)
+	}
+	resolvedLocal, err := filepath.EvalSymlinks(localDir)
+	if err != nil {
+		t.Fatalf("EvalSymlinks local: %v", err)
+	}
+	resolvedSettingsTOML := strings.ReplaceAll(`version = 1
+
+[instances.default]
+base_url = "https://example.atlassian.net"
+auth_type = "atlassian_api_token"
+credential_refs = ["file://REPLACED_CREDS"]
+
+[projects.test]
+key = "TEST"
+instance = "default"
+mirror_dir = "REPLACED_MIRROR"
+local_dirs = ["REPLACED_LOCAL"]
+`, "REPLACED_CREDS", credsPath)
+	resolvedSettingsTOML = strings.ReplaceAll(resolvedSettingsTOML, "REPLACED_MIRROR", resolvedMirror)
+	resolvedSettingsTOML = strings.ReplaceAll(resolvedSettingsTOML, "REPLACED_LOCAL", resolvedLocal)
+	if err := os.WriteFile(filepath.Join(jirafsDir, "settings.toml"), []byte(resolvedSettingsTOML), 0o644); err != nil {
+		t.Fatalf("WriteFile settings: %v", err)
+	}
+
+	oldHome := os.Getenv("HOME")
+	os.Setenv("HOME", homeDir)
+	defer os.Setenv("HOME", oldHome)
+
+	oldCwd, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("Getwd: %v", err)
+	}
+	if err := os.Chdir(resolvedMirror); err != nil {
+		t.Fatalf("Chdir: %v", err)
+	}
+	defer os.Chdir(oldCwd)
+
+	stdout, stderr := withUseTestIO(t)
+	exit := RunUse([]string{})
+	if exit != 0 {
+		t.Fatalf("RunUse([]) = %d, want 0, stderr = %q", exit, stderr.String())
+	}
+	output := stdout.String()
+	// Should show current project but NOT other projects.
+	if !strings.Contains(output, "current project is") {
+		t.Fatalf("expected 'current project is' in output, got stdout=%q", output)
+	}
+	if strings.Contains(output, "other projects:") {
+		t.Fatalf("expected no 'other projects:' when only one project exists, got stdout=%q", output)
+	}
+}
+
+// TestRunUse_AvailableProjectsWhenNoProjectSet verifies that when no
+// project is resolved but projects exist in settings, available
+// projects are listed.
+func TestRunUse_AvailableProjectsWhenNoProjectSet(t *testing.T) {
+	tmpDir := t.TempDir()
+	homeDir := filepath.Join(tmpDir, "home")
+	jirafsDir := filepath.Join(homeDir, ".jirafs")
+	if err := os.MkdirAll(jirafsDir, 0o755); err != nil {
+		t.Fatalf("MkdirAll: %v", err)
+	}
+	credsPath := filepath.Join(tmpDir, "creds.toml")
+	if err := os.WriteFile(credsPath, []byte("email = \"user@example.com\"\napi_token = \"token\"\n"), 0o644); err != nil {
+		t.Fatalf("WriteFile creds: %v", err)
+	}
+	settingsTOML := `version = 1
+
+[instances.default]
+base_url = "https://example.atlassian.net"
+auth_type = "atlassian_api_token"
+credential_refs = ["file://` + credsPath + `"]
+
+[projects.test]
+key = "TEST"
+instance = "default"
+mirror_dir = "` + filepath.Join(tmpDir, "mirror") + `"
+local_dirs = ["` + filepath.Join(tmpDir, "local") + `"]
+
+[projects.other]
+key = "OTHER"
+instance = "default"
+mirror_dir = "` + filepath.Join(tmpDir, "other-mirror") + `"
+local_dirs = ["` + filepath.Join(tmpDir, "other-local") + `"]
+`
+	if err := os.WriteFile(filepath.Join(jirafsDir, "settings.toml"), []byte(settingsTOML), 0o644); err != nil {
+		t.Fatalf("WriteFile settings: %v", err)
+	}
+
+	oldHome := os.Getenv("HOME")
+	os.Setenv("HOME", homeDir)
+	defer os.Setenv("HOME", oldHome)
+
+	// Don't create mirror directories — project won't resolve.
+	stdout, stderr := withUseTestIO(t)
+	exit := RunUse([]string{})
+	if exit != 0 {
+		t.Fatalf("RunUse([]) = %d, want 0, stderr = %q", exit, stderr.String())
+	}
+	output := stdout.String()
+	// Should show "no current project set".
+	if !strings.Contains(output, "no current project") {
+		t.Fatalf("expected 'no current project' in output, got stdout=%q", output)
+	}
+	// Should list available projects.
+	if !strings.Contains(output, "available projects:") {
+		t.Fatalf("expected 'available projects:' in output, got stdout=%q", output)
+	}
+	if !strings.Contains(output, "test") {
+		t.Fatalf("expected 'test' project in available list, got stdout=%q", output)
+	}
+}
+
 // withUseTestIO captures stdout and stderr for the use command.
 func withUseTestIO(t *testing.T) (*bytes.Buffer, *bytes.Buffer) {
 	t.Helper()

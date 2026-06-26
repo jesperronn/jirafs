@@ -113,7 +113,8 @@ func RunUse(args []string) int {
 		return 1
 	}
 
-	// No project given → show current state via snapshot.
+	// No project given → show current state via snapshot and list
+	// other available projects as next-step choices.
 	if key == "" {
 		s, err := config.Load()
 		if err != nil {
@@ -128,9 +129,25 @@ func RunUse(args []string) int {
 		snap := BuildUseSnapshot(s, cwd)
 		if !snap.Resolved {
 			fmt.Fprintln(useStdout, "jirafs: no current project set")
+			if len(s.Projects) > 0 {
+				fmt.Fprintln(useStdout, "jirafs: available projects:")
+				for name := range s.Projects {
+					fmt.Fprintf(useStdout, "  - %s\n", name)
+				}
+			}
 			return 0
 		}
 		fmt.Fprintf(useStdout, "jirafs: current project is %q (key: %s)\n", snap.ProjectName, snap.ProjectKey)
+		// Show other projects as next-step choices.
+		if len(s.Projects) > 1 {
+			fmt.Fprintln(useStdout, "jirafs: other projects:")
+			for name, proj := range s.Projects {
+				if name == snap.ProjectName {
+					continue
+				}
+				fmt.Fprintf(useStdout, "  - %s (key: %s)\n", name, proj.Key)
+			}
+		}
 		return 0
 	}
 
