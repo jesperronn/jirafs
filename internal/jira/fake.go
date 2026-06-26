@@ -12,15 +12,15 @@ import (
 // Callers set Issues and Err before invoking FetchIssue or SearchIssues.
 type FakeTransport struct {
 	mu            sync.RWMutex
-	issues        map[string]*schema.Issue // key -> issue
-	currentUser   *User                    // set by SetCurrentUser
-	err           error                    // returned when ErrOn is set
-	errOn         string                   // "fetch", "search", or "user"
+	issues        map[string]*schema.Issue   // key -> issue
+	currentUser   *User                      // set by SetCurrentUser
+	err           error                      // returned when ErrOn is set
+	errOn         string                     // "fetch", "search", or "user"
 	issuesByScope map[string][]*schema.Issue // scope -> issues
 	// Registry data for registry refresh tests.
-	statuses      []StatusEntry
-	sprints       map[string][]SprintEntry // projectKey -> sprints
-	fixVersions   map[string][]FixVersionEntry // projectKey -> versions
+	statuses    []StatusEntry
+	sprints     map[string][]SprintEntry     // projectKey -> sprints
+	fixVersions map[string][]FixVersionEntry // projectKey -> versions
 }
 
 // NewFakeTransport creates a fake transport with empty state.
@@ -79,20 +79,20 @@ func (f *FakeTransport) FetchIssue(_ context.Context, key string) (*schema.Issue
 // SearchIssues returns the issues registered for the given scope, or the
 // configured error if ErrOn == "search". When no explicit issues are set
 // for the scope, it falls back to GenerateScopeIssues for known scopes.
-func (f *FakeTransport) SearchIssues(_ context.Context, scope string) ([]*schema.Issue, error) {
+func (f *FakeTransport) SearchIssues(_ context.Context, scope string) ([]*schema.Issue, int, error) {
 	f.mu.RLock()
 	defer f.mu.RUnlock()
 	if f.errOn == "search" {
-		return nil, f.err
+		return nil, 0, f.err
 	}
 	issues := f.issuesByScope[scope]
 	if issues == nil {
 		issues = generateScopeIssues(scope)
 		if issues == nil {
-			return nil, NewNotFoundError("scope:" + scope)
+			return nil, 0, NewNotFoundError("scope:" + scope)
 		}
 	}
-	return issues, nil
+	return issues, len(issues), nil
 }
 
 // SetCurrentUser registers a user that CurrentUser will return.
@@ -116,10 +116,10 @@ func (f *FakeTransport) CurrentUser(_ context.Context) (*User, error) {
 		return f.currentUser, nil
 	}
 	return &User{
-		Name:        "jirafs-test",
-		DisplayName: "Jirafs Test User",
+		Name:         "jirafs-test",
+		DisplayName:  "Jirafs Test User",
 		EmailAddress: "jirafs-test@example.com",
-		Active:      true,
+		Active:       true,
 	}, nil
 }
 

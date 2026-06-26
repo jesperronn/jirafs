@@ -43,6 +43,47 @@ func TestRunMirror_Help(t *testing.T) {
 	}
 }
 
+// TestRunMirror_HelpFlags verifies that top-level help flags are accepted.
+func TestRunMirror_HelpFlags(t *testing.T) {
+	for _, args := range [][]string{{"--help"}, {"-h"}} {
+		exit := RunMirror(args)
+		if exit != 0 {
+			t.Fatalf("RunMirror(%v) = %d, want 0", args, exit)
+		}
+	}
+}
+
+// TestRunMirror_ScopeShortcut verifies that a scope name can be used as a
+// shorthand for refresh.
+func TestRunMirror_ScopeShortcut(t *testing.T) {
+	tmpDir := t.TempDir()
+	homeDir := writeSettings(t, tmpDir)
+	writeMirrorWithScopes(t, tmpDir, `
+scopes:
+  - name: my-issues
+    type: jql
+    target: assignee = currentUser()
+`)
+	oldHome := os.Getenv("HOME")
+	os.Setenv("HOME", homeDir)
+	defer os.Setenv("HOME", oldHome)
+
+	fake := jira.NewFakeTransport()
+	fake.SetIssuesByScope("my-issues", []*schema.Issue{})
+	withMirrorClientFactory(t, func(*config.Settings, *context.Context, string) (jira.Client, error) {
+		return fake, nil
+	})
+	stdout, stderr := withMirrorTestIO(t)
+
+	exit := RunMirror([]string{"my-issues", "--project", "test"})
+	if exit != 0 {
+		t.Fatalf("RunMirror([\"my-issues\", \"--project\", \"test\"]) = %d, stderr = %q", exit, stderr.String())
+	}
+	if !strings.Contains(stdout.String(), `no changed issue keys for scope "my-issues"`) {
+		t.Fatalf("stdout = %q, want refresh summary", stdout.String())
+	}
+}
+
 func withMirrorTestIO(t *testing.T) (*bytes.Buffer, *bytes.Buffer) {
 	t.Helper()
 	stdout := &bytes.Buffer{}
@@ -163,6 +204,13 @@ func TestRunMirrorRefresh_MissingScope(t *testing.T) {
 	}
 }
 
+func TestRunMirrorRefresh_Help(t *testing.T) {
+	exit := RunMirror([]string{"refresh", "--help"})
+	if exit != 0 {
+		t.Fatalf("RunMirror([\"refresh\", \"--help\"]) = %d, want 0", exit)
+	}
+}
+
 func TestRunMirrorRefresh_ResolvesProjectAndRefreshesScope(t *testing.T) {
 	tmpDir := t.TempDir()
 	homeDir := writeSettings(t, tmpDir)
@@ -220,6 +268,9 @@ scopes:
 	}
 	if !strings.Contains(stdout.String(), `2 changed issue key(s) for scope "my-issues"`) {
 		t.Fatalf("stdout = %q, want refresh summary", stdout.String())
+	}
+	if !strings.Contains(stdout.String(), "fetching 0/2") || !strings.Contains(stdout.String(), "fetched 2/2") {
+		t.Fatalf("stdout = %q, want progress output", stdout.String())
 	}
 	first := strings.Index(stdout.String(), "TEST-1")
 	second := strings.Index(stdout.String(), "TEST-2")

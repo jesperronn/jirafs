@@ -59,9 +59,12 @@ func TestFakeTransportSearchIssues(t *testing.T) {
 	}
 	fake.SetIssuesByScope("my-issues", issues)
 
-	got, err := fake.SearchIssues(context.Background(), "my-issues")
+	got, total, err := fake.SearchIssues(context.Background(), "my-issues")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
+	}
+	if total != 2 {
+		t.Fatalf("expected total 2, got %d", total)
 	}
 	if len(got) != 2 {
 		t.Fatalf("expected 2 issues, got %d", len(got))
@@ -74,7 +77,7 @@ func TestFakeTransportSearchIssues(t *testing.T) {
 func TestFakeTransportSearchIssuesNotFound(t *testing.T) {
 	fake := NewFakeTransport()
 
-	_, err := fake.SearchIssues(context.Background(), "unknown-scope")
+	_, _, err := fake.SearchIssues(context.Background(), "unknown-scope")
 	if !IsClientError(err, ErrNotFound) {
 		t.Errorf("expected not_found error, got %v", err)
 	}
@@ -85,7 +88,7 @@ func TestFakeTransportSearchIssuesWithError(t *testing.T) {
 	wantErr := errors.New("timeout")
 	fake.SetErr("search", wantErr)
 
-	_, err := fake.SearchIssues(context.Background(), "my-issues")
+	_, _, err := fake.SearchIssues(context.Background(), "my-issues")
 	if err != wantErr {
 		t.Errorf("expected %v, got %v", wantErr, err)
 	}
@@ -99,9 +102,12 @@ func TestFakeTransportSearchMyIssuesDeterministic(t *testing.T) {
 	fake := NewFakeTransport()
 
 	// First call should return deterministic keys.
-	got, err := fake.SearchIssues(context.Background(), "my-issues")
+	got, total, err := fake.SearchIssues(context.Background(), "my-issues")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
+	}
+	if total != 3 {
+		t.Fatalf("expected total 3, got %d", total)
 	}
 	if len(got) != 3 {
 		t.Fatalf("expected 3 issues, got %d", len(got))
@@ -118,9 +124,12 @@ func TestFakeTransportSearchMyIssuesDeterministic(t *testing.T) {
 	}
 
 	// Second call should return the same deterministic keys.
-	got2, err := fake.SearchIssues(context.Background(), "my-issues")
+	got2, total2, err := fake.SearchIssues(context.Background(), "my-issues")
 	if err != nil {
 		t.Fatalf("unexpected error on second call: %v", err)
+	}
+	if total2 != 3 {
+		t.Fatalf("expected total 3 on second call, got %d", total2)
 	}
 	if len(got2) != 3 {
 		t.Fatalf("expected 3 issues on second call, got %d", len(got2))
@@ -142,9 +151,12 @@ func TestFakeTransportSearchMyIssuesOverride(t *testing.T) {
 	fake.SetIssuesByScope("my-issues", customIssues)
 
 	// Should return the explicit issues, not the deterministic ones.
-	got, err := fake.SearchIssues(context.Background(), "my-issues")
+	got, total, err := fake.SearchIssues(context.Background(), "my-issues")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
+	}
+	if total != 1 {
+		t.Fatalf("expected total 1, got %d", total)
 	}
 	if len(got) != 1 {
 		t.Fatalf("expected 1 issue, got %d", len(got))
@@ -157,9 +169,12 @@ func TestFakeTransportSearchMyIssuesOverride(t *testing.T) {
 func TestFakeTransportSearchCurrentSprintDeterministic(t *testing.T) {
 	fake := NewFakeTransport()
 
-	got, err := fake.SearchIssues(context.Background(), "current-sprint")
+	got, total, err := fake.SearchIssues(context.Background(), "current-sprint")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
+	}
+	if total != 2 {
+		t.Fatalf("expected total 2, got %d", total)
 	}
 	if len(got) != 2 {
 		t.Fatalf("expected 2 issues, got %d", len(got))
@@ -175,9 +190,12 @@ func TestFakeTransportSearchCurrentSprintDeterministic(t *testing.T) {
 		}
 	}
 
-	got2, err := fake.SearchIssues(context.Background(), "current-sprint")
+	got2, total2, err := fake.SearchIssues(context.Background(), "current-sprint")
 	if err != nil {
 		t.Fatalf("unexpected error on second call: %v", err)
+	}
+	if total2 != 2 {
+		t.Fatalf("expected total 2 on second call, got %d", total2)
 	}
 	if len(got2) != 2 {
 		t.Fatalf("expected 2 issues on second call, got %d", len(got2))
@@ -197,9 +215,12 @@ func TestFakeTransportSearchCurrentSprintOverride(t *testing.T) {
 	}
 	fake.SetIssuesByScope("current-sprint", customIssues)
 
-	got, err := fake.SearchIssues(context.Background(), "current-sprint")
+	got, total, err := fake.SearchIssues(context.Background(), "current-sprint")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
+	}
+	if total != 1 {
+		t.Fatalf("expected total 1, got %d", total)
 	}
 	if len(got) != 1 {
 		t.Fatalf("expected 1 issue, got %d", len(got))
@@ -255,12 +276,12 @@ func TestFakeTransportCurrentUserDefault(t *testing.T) {
 func TestFakeTransportCurrentUserSet(t *testing.T) {
 	fake := NewFakeTransport()
 	fake.SetCurrentUser(&User{
-		Name:        "jdoe",
-		DisplayName: "Jane Doe",
+		Name:         "jdoe",
+		DisplayName:  "Jane Doe",
 		EmailAddress: "jdoe@example.com",
-		Active:      true,
-		Timezone:    "Europe/Copenhagen",
-		AccountType: "atlassian",
+		Active:       true,
+		Timezone:     "Europe/Copenhagen",
+		AccountType:  "atlassian",
 	})
 
 	user, err := fake.CurrentUser(context.Background())

@@ -32,10 +32,10 @@ type MirrorHandler struct {
 }
 
 var (
-	mirrorStdout io.Writer = os.Stdout
-	mirrorStderr io.Writer = os.Stderr
-	mirrorClientFactory     = buildMirrorClient
-	archiveServiceFactory   = buildArchiveService
+	mirrorStdout          io.Writer = os.Stdout
+	mirrorStderr          io.Writer = os.Stderr
+	mirrorClientFactory             = buildMirrorClient
+	archiveServiceFactory           = buildArchiveService
 )
 
 // RunMirror dispatches the `jirafs mirror` subcommand to the appropriate
@@ -47,7 +47,7 @@ func RunMirror(args []string) int {
 	}
 
 	// Check for help before loading settings.
-	if args[0] == "help" {
+	if args[0] == "help" || args[0] == "--help" || args[0] == "-h" {
 		printMirrorHelp()
 		return 0
 	}
@@ -65,6 +65,8 @@ func RunMirror(args []string) int {
 		return runMirrorRefresh(args[1:], settings, resolver)
 	case "archive-sweep":
 		return runMirrorArchiveSweep(args[1:], settings, resolver)
+	case "current-sprint", "my-issues", "backlog", "next-sprint":
+		return runMirrorRefresh(append(args[1:], args[0]), settings, resolver)
 	default:
 		fmt.Fprintf(mirrorStderr, "jirafs mirror: unknown subcommand %q. Use --help for usage.\n", args[0])
 		return 1
@@ -72,7 +74,15 @@ func RunMirror(args []string) int {
 }
 
 func runMirrorRefresh(args []string, settings *config.Settings, resolver *context.Resolver) int {
-	fs := flag.NewFlagSet("mirror refresh", flag.ExitOnError)
+	for _, arg := range args {
+		if arg == "--help" || arg == "-h" {
+			printMirrorRefreshHelp()
+			return 0
+		}
+	}
+
+	fs := flag.NewFlagSet("mirror refresh", flag.ContinueOnError)
+	fs.SetOutput(mirrorStderr)
 	projectFlag := fs.String("project", "", "project key or name to refresh")
 	cwdFlag := fs.String("cwd", "", "working directory to use for project resolution")
 	if err := fs.Parse(args); err != nil {
@@ -161,10 +171,20 @@ func materializeScopeIssues(ctx stdcontext.Context, client jira.Client, settings
 		return fmt.Errorf("create local directory %s: %w", proj.LocalDirs[0], err)
 	}
 
-	issues, err := client.SearchIssues(ctx, scopeName)
+	issues, total, err := client.SearchIssues(ctx, scopeName)
 	if err != nil {
 		return err
 	}
+	if total < len(issues) {
+		total = len(issues)
+	}
+	writeMirrorProgress(mirrorStdout, "fetching", 0, total)
+	if len(issues) == 0 {
+		writeMirrorProgress(mirrorStdout, "fetched", 0, total)
+		fmt.Fprintln(mirrorStdout)
+		return nil
+	}
+	completed := 0
 	for _, issue := range issues {
 		if issue == nil || issue.Identity.Key == "" {
 			continue
@@ -179,8 +199,16 @@ func materializeScopeIssues(ctx stdcontext.Context, client jira.Client, settings
 		if err := os.WriteFile(dest, []byte(output), 0o644); err != nil {
 			return fmt.Errorf("write issue file %s: %w", dest, err)
 		}
+		completed++
+		writeMirrorProgress(mirrorStdout, "fetching", completed, total)
 	}
+	writeMirrorProgress(mirrorStdout, "fetched", total, total)
+	fmt.Fprintln(mirrorStdout)
 	return nil
+}
+
+func writeMirrorProgress(w io.Writer, label string, current, total int) {
+	fmt.Fprintf(w, "\r%s %d/%d", label, current, total)
 }
 
 // runMirrorArchiveSweep handles `jirafs mirror archive-sweep`.
@@ -472,9 +500,19 @@ func printMirrorHelp() {
   jirafs mirror <subcommand> [flags]
 
 Subcommands:
+  current-sprint  shorthand for "refresh current-sprint"
+  my-issues       shorthand for "refresh my-issues"
+  backlog         shorthand for "refresh backlog"
+  next-sprint     shorthand for "refresh next-sprint"
   refresh         refresh one named live mirror scope
   archive-sweep   report archive-eligible issues without mutation
   help            show this help message
+
+Live mirror scopes:
+  current-sprint  active sprint issues
+  my-issues       issues assigned to the current user
+  backlog         bounded backlog window
+  next-sprint     next planned sprint when configured
 
 Flags:
   --project KEY   project key or name to use
@@ -482,4 +520,29 @@ Flags:
   --apply         actually archive eligible issues
 
 Run "jirafs mirror <subcommand> --help" for more information about a subcommand.`)
+}
+
+func printMirrorRefreshHelp() {
+	fmt.Fprintln(mirrorStderr, `Usage:
+  jirafs mirror refresh [flags] <scope>
+  jirafs mirror <scope> [flags]
+
+Refreshes one named live mirror scope.
+
+Live mirror scopes:
+  current-sprint
+  my-issues
+  backlog
+  next-sprint
+
+Examples:
+  jirafs mirror my-issues
+  jirafs mirror refresh my-issues
+  jirafs mirror next-sprint
+  jirafs mirror refresh current-sprint
+
+Flags:
+  --project KEY   project key or name to use
+  --cwd DIR       working directory for project resolution
+  --help          show this help message`)
 }

@@ -825,9 +825,12 @@ func TestSearchIssuesMyIssues(t *testing.T) {
 		},
 	})
 
-	issues, err := client.SearchIssues(context.Background(), "my-issues")
+	issues, total, err := client.SearchIssues(context.Background(), "my-issues")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
+	}
+	if total != 2 {
+		t.Fatalf("expected total 2, got %d", total)
 	}
 	if len(issues) != 2 {
 		t.Fatalf("expected 2 issues, got %d", len(issues))
@@ -907,9 +910,12 @@ func TestSearchIssuesCurrentSprint(t *testing.T) {
 		},
 	})
 
-	issues, err := client.SearchIssues(context.Background(), "current-sprint")
+	issues, total, err := client.SearchIssues(context.Background(), "current-sprint")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
+	}
+	if total != 2 {
+		t.Fatalf("expected total 2, got %d", total)
 	}
 	if len(issues) != 2 {
 		t.Fatalf("expected 2 issues, got %d", len(issues))
@@ -934,7 +940,7 @@ func TestSearchIssuesCurrentSprint(t *testing.T) {
 
 func TestSearchIssuesUnknownScope(t *testing.T) {
 	client := NewJiraClient("https://jira.example.com")
-	_, err := client.SearchIssues(context.Background(), "unknown-scope")
+	_, _, err := client.SearchIssues(context.Background(), "unknown-scope")
 	if !IsClientError(err, ErrNotFound) {
 		t.Errorf("expected not_found error, got %v", err)
 	}
@@ -958,7 +964,7 @@ func TestSearchIssuesAuthError(t *testing.T) {
 		},
 	})
 
-	_, err := client.SearchIssues(context.Background(), "my-issues")
+	_, _, err := client.SearchIssues(context.Background(), "my-issues")
 	if !IsClientError(err, ErrAuth) {
 		t.Errorf("expected auth error, got %v", err)
 	}
@@ -972,7 +978,7 @@ func TestSearchIssuesHTTPError(t *testing.T) {
 	defer server.Close()
 
 	client := NewJiraClient(server.URL)
-	_, err := client.SearchIssues(context.Background(), "my-issues")
+	_, _, err := client.SearchIssues(context.Background(), "my-issues")
 	if !IsClientError(err, ErrHTTP) {
 		t.Errorf("expected http error, got %v", err)
 	}
@@ -982,7 +988,7 @@ func TestSearchIssuesTransportError(t *testing.T) {
 	client := NewJiraClient("http://localhost:1")
 	ctx, cancel := context.WithTimeout(context.Background(), 100*1000000)
 	defer cancel()
-	_, err := client.SearchIssues(ctx, "my-issues")
+	_, _, err := client.SearchIssues(ctx, "my-issues")
 	if err == nil {
 		t.Fatal("expected error for connection refused")
 	}
@@ -1006,7 +1012,7 @@ func TestSearchIssuesInvalidJSON(t *testing.T) {
 		},
 	})
 
-	_, err := client.SearchIssues(context.Background(), "my-issues")
+	_, _, err := client.SearchIssues(context.Background(), "my-issues")
 	if !IsClientError(err, ErrUnknown) {
 		t.Errorf("expected unknown error, got %v", err)
 	}
@@ -1030,7 +1036,7 @@ func TestSearchIssuesEmptyBody(t *testing.T) {
 		},
 	})
 
-	_, err := client.SearchIssues(context.Background(), "my-issues")
+	_, _, err := client.SearchIssues(context.Background(), "my-issues")
 	if !IsClientError(err, ErrUnknown) {
 		t.Errorf("expected unknown error, got %v", err)
 	}
@@ -1060,9 +1066,12 @@ func TestSearchIssuesNoIssuesReturned(t *testing.T) {
 		},
 	})
 
-	issues, err := client.SearchIssues(context.Background(), "my-issues")
+	issues, total, err := client.SearchIssues(context.Background(), "my-issues")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
+	}
+	if total != 0 {
+		t.Fatalf("expected total 0, got %d", total)
 	}
 	if issues == nil {
 		t.Fatal("expected non-nil empty slice")
@@ -1539,9 +1548,12 @@ func TestSearchIssuesNoCredentials(t *testing.T) {
 	client := NewJiraClient(server.URL)
 	// Intentionally NOT calling SetCredentials.
 
-	issues, err := client.SearchIssues(context.Background(), "my-issues")
+	issues, total, err := client.SearchIssues(context.Background(), "my-issues")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
+	}
+	if total != 1 {
+		t.Fatalf("expected total 1, got %d", total)
 	}
 	if len(issues) != 1 {
 		t.Fatalf("expected 1 issue, got %d", len(issues))
@@ -1569,7 +1581,7 @@ func TestSearchIssuesForbidden(t *testing.T) {
 		},
 	})
 
-	_, err := client.SearchIssues(context.Background(), "my-issues")
+	_, _, err := client.SearchIssues(context.Background(), "my-issues")
 	if !IsClientError(err, ErrAuth) {
 		t.Errorf("expected auth error for 403, got %v", err)
 	}
@@ -1598,7 +1610,7 @@ func TestSearchIssuesNoCredentialsAuthError(t *testing.T) {
 		},
 	})
 
-	_, err := client.SearchIssues(context.Background(), "my-issues")
+	_, _, err := client.SearchIssues(context.Background(), "my-issues")
 	if !IsClientError(err, ErrUnknown) {
 		t.Errorf("expected unknown error for auth construction failure, got %v", err)
 	}

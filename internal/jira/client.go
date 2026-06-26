@@ -61,8 +61,9 @@ type Client interface {
 	// FetchIssue retrieves a single issue by its key.
 	FetchIssue(ctx context.Context, key string) (*schema.Issue, error)
 
-	// SearchIssues returns issues matching the given scope.
-	SearchIssues(ctx context.Context, scope string) ([]*schema.Issue, error)
+	// SearchIssues returns issues matching the given scope and the total
+	// number of matching issues reported by Jira.
+	SearchIssues(ctx context.Context, scope string) ([]*schema.Issue, int, error)
 
 	// CurrentUser returns the authenticated user identity from the Jira API.
 	CurrentUser(ctx context.Context) (*User, error)
@@ -105,8 +106,10 @@ type jiraIssueResponse struct {
 // searchResponse is the JSON structure returned by the Jira REST API
 // for a search (JQL) request.
 type searchResponse struct {
-	Total  int                 `json:"total"`
-	Issues []jiraIssueResponse `json:"issues"`
+	StartAt    int                 `json:"startAt"`
+	MaxResults int                 `json:"maxResults"`
+	Total      int                 `json:"total"`
+	Issues     []jiraIssueResponse `json:"issues"`
 }
 
 // statusesResponse is the JSON structure returned by the status API.
@@ -235,7 +238,7 @@ func (c *JiraClient) FetchIssue(ctx context.Context, key string) (*schema.Issue,
 
 	if resp.StatusCode >= 400 && resp.StatusCode < 500 {
 		if resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden {
-			return nil, NewAuthError("HTTP " + fmt.Sprintf("%d", resp.StatusCode))
+			return nil, NewHTTPErrorWithURL(resp.StatusCode, url, "HTTP "+fmt.Sprintf("%d", resp.StatusCode))
 		}
 		return nil, mapHTTPErr(resp)
 	}
@@ -282,7 +285,7 @@ func (c *JiraClient) FetchIssue(ctx context.Context, key string) (*schema.Issue,
 //	"current-sprint"  -> sprint in openSprints()
 //
 // Unsupported scopes return a not_found error.
-func (c *JiraClient) SearchIssues(ctx context.Context, scope string) ([]*schema.Issue, error) {
+func (c *JiraClient) SearchIssues(ctx context.Context, scope string) ([]*schema.Issue, int, error) {
 	if ctx == nil {
 		ctx = context.Background()
 	}
@@ -293,89 +296,98 @@ func (c *JiraClient) SearchIssues(ctx context.Context, scope string) ([]*schema.
 	case "current-sprint":
 		jql = "sprint in openSprints()"
 	default:
-		return nil, NewNotFoundError("scope:" + scope)
-	}
-
-	body := map[string]interface{}{
-		"jql":        jql,
-		"maxResults": 50,
-		"fields":     []string{"summary", "description", "labels", "assignee", "status", "issuetype"},
-		"startAt":    0,
-		"expand":     "schema,names",
-		"properties": []string{},
-	}
-
-	payload, err := json.Marshal(body)
-	if err != nil {
-		return nil, NewUnknownErr("cannot marshal search request: " + err.Error())
+		return nil, 0, NewNotFoundError("scope:" + scope)
 	}
 
 	url := c.baseURL + "/rest/api/2/search"
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(payload))
-	if err != nil {
-		return nil, NewTransportError("cannot create search request: " + err.Error())
-	}
-
-	req.Header.Set("Content-Type", "application/json")
-
-	req, err = BuildAuthenticatedRequest(req, c.credential)
-	if err != nil {
-		return nil, NewUnknownErr("cannot authenticate search request: " + err.Error())
-	}
-
-	resp, err := c.httpClient.Do(req)
-	if err != nil {
-		return nil, NewTransportError("search request failed: " + err.Error())
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode == http.StatusNotFound {
-		return nil, NewNotFoundError("search:" + scope)
-	}
-
-	if resp.StatusCode >= 400 && resp.StatusCode < 500 {
-		if resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden {
-			return nil, NewAuthError("HTTP " + fmt.Sprintf("%d", resp.StatusCode))
+	fields := []string{"summary", "description", "labels", "assignee", "status", "issuetype"}
+	const pageSize = 50
+	startAt := 0
+	issues := make([]*schema.Issue, 0)
+	total := 0
+	for {
+		body := map[string]interface{}{
+			"jql":        jql,
+			"maxResults": pageSize,
+			"fields":     fields,
+			"startAt":    startAt,
 		}
-		return nil, mapHTTPErr(resp)
-	}
-
-	if resp.StatusCode >= 500 {
-		return nil, mapHTTPErr(resp)
-	}
-
-	var sr searchResponse
-	if err := json.NewDecoder(resp.Body).Decode(&sr); err != nil {
-		return nil, NewUnknownErr("cannot parse search response: " + err.Error())
-	}
-
-	issues := make([]*schema.Issue, 0, len(sr.Issues))
-	for _, ir := range sr.Issues {
-		issue := &schema.Issue{
-			Identity: schema.IssueIdentity{
-				Key:  schema.IssueKey(ir.Key),
-				Type: schema.IssueType(""),
-			},
+		payload, err := json.Marshal(body)
+		if err != nil {
+			return nil, 0, NewUnknownErr("cannot marshal search request: " + err.Error())
 		}
 
-		if ir.Fields != nil {
-			if issuetype, ok := ir.Fields["issuetype"]; ok {
-				if mt, ok := issuetype.(map[string]interface{}); ok {
-					if name, ok := mt["name"]; ok {
-						if s, ok := name.(string); ok {
-							issue.Identity.Type = schema.IssueType(s)
+		req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(payload))
+		if err != nil {
+			return nil, 0, NewTransportError("cannot create search request: " + err.Error())
+		}
+		req.Header.Set("Content-Type", "application/json")
+		req, err = BuildAuthenticatedRequest(req, c.credential)
+		if err != nil {
+			return nil, 0, NewUnknownErr("cannot authenticate search request: " + err.Error())
+		}
+
+		resp, err := c.httpClient.Do(req)
+		if err != nil {
+			return nil, 0, NewTransportError("search request failed: " + err.Error())
+		}
+
+		if resp.StatusCode == http.StatusNotFound {
+			resp.Body.Close()
+			return nil, 0, NewNotFoundError("search:" + scope)
+		}
+		if resp.StatusCode >= 400 && resp.StatusCode < 500 {
+			if resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden {
+				resp.Body.Close()
+				return nil, 0, NewAuthError("HTTP " + fmt.Sprintf("%d", resp.StatusCode))
+			}
+			defer resp.Body.Close()
+			return nil, 0, mapHTTPErr(resp)
+		}
+		if resp.StatusCode >= 500 {
+			defer resp.Body.Close()
+			return nil, 0, mapHTTPErr(resp)
+		}
+
+		var sr searchResponse
+		if err := json.NewDecoder(resp.Body).Decode(&sr); err != nil {
+			resp.Body.Close()
+			return nil, 0, NewUnknownErr("cannot parse search response: " + err.Error())
+		}
+		resp.Body.Close()
+
+		if sr.Total > 0 {
+			total = sr.Total
+		}
+		for _, ir := range sr.Issues {
+			issue := &schema.Issue{
+				Identity: schema.IssueIdentity{
+					Key:  schema.IssueKey(ir.Key),
+					Type: schema.IssueType(""),
+				},
+			}
+			if ir.Fields != nil {
+				if issuetype, ok := ir.Fields["issuetype"]; ok {
+					if mt, ok := issuetype.(map[string]interface{}); ok {
+						if name, ok := mt["name"]; ok {
+							if s, ok := name.(string); ok {
+								issue.Identity.Type = schema.IssueType(s)
+							}
 						}
 					}
 				}
+				export.NormalizeIssue(issue, ir.Fields)
+				export.NormalizeLinkedIssues(issue, ir.Fields)
 			}
-			export.NormalizeIssue(issue, ir.Fields)
-			export.NormalizeLinkedIssues(issue, ir.Fields)
+			issues = append(issues, issue)
 		}
-
-		issues = append(issues, issue)
+		if len(sr.Issues) == 0 || len(issues) >= total {
+			break
+		}
+		startAt += len(sr.Issues)
 	}
 
-	return issues, nil
+	return issues, total, nil
 }
 
 // CurrentUser calls the Jira /rest/api/2/myself endpoint to retrieve
@@ -389,6 +401,10 @@ func (c *JiraClient) CurrentUser(ctx context.Context) (*User, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
 		return nil, NewTransportError("cannot create request: " + err.Error())
+	}
+	req, err = BuildAuthenticatedRequest(req, c.credential)
+	if err != nil {
+		return nil, NewUnknownErr("cannot authenticate user request: " + err.Error())
 	}
 
 	resp, err := c.httpClient.Do(req)

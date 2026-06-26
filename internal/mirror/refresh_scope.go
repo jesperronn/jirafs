@@ -19,7 +19,7 @@ func RefreshScope(ctx context.Context, c jira.Client, scope Scope, mirror *Mirro
 		return nil, nil
 	}
 
-	issues, err := c.SearchIssues(ctx, scope.Name)
+	issues, _, err := c.SearchIssues(ctx, scope.Name)
 	if err != nil {
 		return nil, err
 	}
