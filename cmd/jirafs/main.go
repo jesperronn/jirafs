@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/jirafs/jirafs/internal/cli"
+	"github.com/jirafs/jirafs/internal/color"
 	"github.com/jirafs/jirafs/internal/config"
 )
 
@@ -373,24 +374,29 @@ func isNotADirectory(err error) bool {
 }
 
 func printHelp() {
-	fmt.Fprintln(os.Stderr, `Usage:
-  jirafs <command> [arguments]
+	fmt.Fprintf(os.Stderr, "%s\n", color.BoldBlue(os.Stderr, "Usage:"))
+	fmt.Fprintf(os.Stderr, "  %s <command> [arguments]\n\n", color.Bold(os.Stderr, "jirafs"))
 
-Commands:
-  init       initialize a new jirafs project in the current directory
-  export     export Jira issues into local Markdown files
-  plan       show a sync plan without applying changes
-  setup      record Jira instance and project settings
-  status     show workspace status and next-step hints
-  doctor     run health checks on config, credentials, and live connectivity
-  sync       apply a sync plan and push changes to Jira (real service path)
-  new        create a new issue from a template
-  registry   manage local registry files for typed references
-  board      show a local kanban-style board view
-  archive    manage archived issue files
-  mirror     manage live mirror scopes and archive candidates
-  use        update remembered project context
-  help       show this help message
+	fmt.Fprintf(os.Stderr, "%s:\n", color.BoldGreen(os.Stderr, "Commands"))
+	commands := [][2]string{
+		{"init", "initialize a new jirafs project in the current directory"},
+		{"export", "export Jira issues into local Markdown files"},
+		{"plan", "show a sync plan without applying changes"},
+		{"setup", "record Jira instance and project settings"},
+		{"status", "show workspace status and next-step hints"},
+		{"doctor", "run health checks on config, credentials, and live connectivity"},
+		{"sync", "apply a sync plan and push changes to Jira (real service path)"},
+		{"new", "create a new issue from a template"},
+		{"registry", "manage local registry files for typed references"},
+		{"board", "show a local kanban-style board view"},
+		{"archive", "manage archived issue files"},
+		{"mirror", "manage live mirror scopes and archive candidates"},
+		{"use", "update remembered project context"},
+		{"help", "show this help message"},
+	}
+	for _, cmd := range commands {
+		fmt.Fprintf(os.Stderr, "  %s  %s\n", color.Blue(os.Stderr, cmd[0]), color.Dim(os.Stderr, cmd[1]))
+	}
 
-Run "jirafs <command> --help" for more information about a command.`)
+	fmt.Fprintf(os.Stderr, "\n%s\n", color.Cyan(os.Stderr, `Run "jirafs <command> --help" for more information about a command.`))
 }

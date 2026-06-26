@@ -10,6 +10,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/jirafs/jirafs/internal/color"
 	"github.com/jirafs/jirafs/internal/config"
 	"github.com/jirafs/jirafs/internal/context"
 	"github.com/jirafs/jirafs/internal/jira"
@@ -34,7 +35,7 @@ var (
 // operations, allowing the user to preview what would be synced.
 func RunSync(args []string) int {
 	// Check for help before loading settings.
-	if len(args) > 0 && args[0] == "help" {
+	if len(args) > 0 && (args[0] == "help" || args[0] == "--help" || args[0] == "-h") {
 		printSyncHelp()
 		return 0
 	}
@@ -214,25 +215,25 @@ func buildSyncClient(settings *config.Settings, ctx *context.Context, cwd string
 
 // printSyncHelp prints usage information for the sync subcommand.
 func printSyncHelp() {
-	fmt.Fprintln(syncStderr, `Usage:
-  jirafs sync [flags]
-  jirafs sync <issue-key> [flags]
+	fmt.Fprintf(syncStderr, "%s\n", color.BoldBlue(syncStderr, "Usage:"))
+	fmt.Fprintf(syncStderr, "  jirafs %s [flags]\n", color.Blue(syncStderr, "sync"))
+	fmt.Fprintf(syncStderr, "  jirafs %s <%s> [flags]\n\n", color.Blue(syncStderr, "sync"), color.Yellow(syncStderr, "issue-key"))
 
-When called without an issue key, resolves the project context and lists all
-local issues with their pending sync operations, allowing preview of what
-would be synced.
+	fmt.Fprintf(syncStderr, "%s\n", color.Dim(syncStderr, "When called without an issue key, resolves the project context and lists all"))
+	fmt.Fprintf(syncStderr, "%s\n", color.Dim(syncStderr, "local issues with their pending sync operations, allowing preview of what"))
+	fmt.Fprintf(syncStderr, "%s\n\n", color.Dim(syncStderr, "would be synced."))
 
-When called with an issue key, fetches the remote issue from Jira, reads
-the local copy from the file system, builds and validates a plan, applies
-the plan, and pushes the updated remote back to Jira through the real
-service path.
+	fmt.Fprintf(syncStderr, "%s\n", color.Dim(syncStderr, "When called with an issue key, fetches the remote issue from Jira, reads"))
+	fmt.Fprintf(syncStderr, "%s\n", color.Dim(syncStderr, "the local copy from the file system, builds and validates a plan, applies"))
+	fmt.Fprintf(syncStderr, "%s\n\n", color.Dim(syncStderr, "the plan, and pushes the updated remote back to Jira through the real"))
+	fmt.Fprintf(syncStderr, "%s\n\n", color.Dim(syncStderr, "service path."))
 
-Flags:
-  --project KEY   project key or name to use
-  --cwd DIR       working directory for project resolution
-  --apply         write the updated remote to the local issue file
+	fmt.Fprintf(syncStderr, "%s:\n", color.BoldGreen(syncStderr, "Flags"))
+	fmt.Fprintf(syncStderr, "  %s KEY    %s\n", color.Yellow(syncStderr, "--project"), color.Dim(syncStderr, "project key or name to use"))
+	fmt.Fprintf(syncStderr, "  %s DIR    %s\n", color.Yellow(syncStderr, "--cwd"), color.Dim(syncStderr, "working directory for project resolution"))
+	fmt.Fprintf(syncStderr, "  %s        %s\n\n", color.Yellow(syncStderr, "--apply"), color.Dim(syncStderr, "write the updated remote to the local issue file"))
 
-Run "jirafs sync --help" for more information about flags.`)
+	fmt.Fprintf(syncStderr, "%s\n", color.Cyan(syncStderr, `Run "jirafs sync --help" for more information about flags.`))
 }
 
 // runSyncAll resolves the project context and lists all local issues with

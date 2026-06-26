@@ -9,6 +9,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/jirafs/jirafs/internal/color"
 	"github.com/jirafs/jirafs/internal/config"
 	"github.com/jirafs/jirafs/internal/context"
 	"github.com/jirafs/jirafs/internal/mirror"
@@ -276,12 +277,12 @@ func RunStatus(args []string) int {
 
 // printStatusHelp prints usage information for the status subcommand.
 func printStatusHelp() {
-	fmt.Fprintln(statusStderr, `Usage:
-  jirafs status [flags]
+	fmt.Fprintf(statusStderr, "%s\n", color.BoldBlue(statusStderr, "Usage:"))
+	fmt.Fprintf(statusStderr, "  jirafs %s [flags]\n\n", color.Blue(statusStderr, "status"))
 
-Reports the current state of a jirafs workspace: config, mirror files,
-scopes, and a next-step hint for onboarding.
+	fmt.Fprintf(statusStderr, "%s\n", color.Dim(statusStderr, "Reports the current state of a jirafs workspace: config, mirror files,"))
+	fmt.Fprintf(statusStderr, "%s\n\n", color.Dim(statusStderr, "scopes, and a next-step hint for onboarding."))
 
-Flags:
-  --help, -h   show this help message`)
+	fmt.Fprintf(statusStderr, "%s:\n", color.BoldGreen(statusStderr, "Flags"))
+	fmt.Fprintf(statusStderr, "  %s   %s\n", color.Yellow(statusStderr, "--help, -h"), color.Dim(statusStderr, "show this help message"))
 }

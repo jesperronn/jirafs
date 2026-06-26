@@ -12,6 +12,7 @@ import (
 	"strings"
 
 	"github.com/jirafs/jirafs/internal/archive"
+	"github.com/jirafs/jirafs/internal/color"
 	"github.com/jirafs/jirafs/internal/config"
 	"github.com/jirafs/jirafs/internal/context"
 	"github.com/jirafs/jirafs/internal/export"
@@ -496,53 +497,53 @@ func scanLocalDir(dir string, m *mirror.Mirror) ([]mirror.ArchiveEligible, error
 
 // printMirrorHelp prints usage information for the mirror subcommand.
 func printMirrorHelp() {
-	fmt.Fprintln(mirrorStderr, `Usage:
-  jirafs mirror <subcommand> [flags]
+	fmt.Fprintf(mirrorStderr, "%s\n", color.BoldBlue(mirrorStderr, "Usage:"))
+	fmt.Fprintf(mirrorStderr, "  jirafs %s <%s> [flags]\n\n", color.Blue(mirrorStderr, "mirror"), color.Yellow(mirrorStderr, "subcommand"))
 
-Subcommands:
-  current-sprint  shorthand for "refresh current-sprint"
-  my-issues       shorthand for "refresh my-issues"
-  backlog         shorthand for "refresh backlog"
-  next-sprint     shorthand for "refresh next-sprint"
-  refresh         refresh one named live mirror scope
-  archive-sweep   report archive-eligible issues without mutation
-  help            show this help message
+	fmt.Fprintf(mirrorStderr, "%s:\n", color.BoldGreen(mirrorStderr, "Subcommands"))
+	fmt.Fprintf(mirrorStderr, "  %s  %s\n", color.Blue(mirrorStderr, "current-sprint"), color.Dim(mirrorStderr, "shorthand for \"refresh current-sprint\""))
+	fmt.Fprintf(mirrorStderr, "  %s       %s\n", color.Blue(mirrorStderr, "my-issues"), color.Dim(mirrorStderr, "shorthand for \"refresh my-issues\""))
+	fmt.Fprintf(mirrorStderr, "  %s         %s\n", color.Blue(mirrorStderr, "backlog"), color.Dim(mirrorStderr, "shorthand for \"refresh backlog\""))
+	fmt.Fprintf(mirrorStderr, "  %s     %s\n", color.Blue(mirrorStderr, "next-sprint"), color.Dim(mirrorStderr, "shorthand for \"refresh next-sprint\""))
+	fmt.Fprintf(mirrorStderr, "  %s         %s\n", color.Blue(mirrorStderr, "refresh"), color.Dim(mirrorStderr, "refresh one named live mirror scope"))
+	fmt.Fprintf(mirrorStderr, "  %s   %s\n", color.Blue(mirrorStderr, "archive-sweep"), color.Dim(mirrorStderr, "report archive-eligible issues without mutation"))
+	fmt.Fprintf(mirrorStderr, "  %s            %s\n\n", color.Blue(mirrorStderr, "help"), color.Dim(mirrorStderr, "show this help message"))
 
-Live mirror scopes:
-  current-sprint  active sprint issues
-  my-issues       issues assigned to the current user
-  backlog         bounded backlog window
-  next-sprint     next planned sprint when configured
+	fmt.Fprintf(mirrorStderr, "%s:\n", color.BoldGreen(mirrorStderr, "Live mirror scopes"))
+	fmt.Fprintf(mirrorStderr, "  %s  %s\n", color.Magenta(mirrorStderr, "current-sprint"), color.Dim(mirrorStderr, "active sprint issues"))
+	fmt.Fprintf(mirrorStderr, "  %s       %s\n", color.Magenta(mirrorStderr, "my-issues"), color.Dim(mirrorStderr, "issues assigned to the current user"))
+	fmt.Fprintf(mirrorStderr, "  %s         %s\n", color.Magenta(mirrorStderr, "backlog"), color.Dim(mirrorStderr, "bounded backlog window"))
+	fmt.Fprintf(mirrorStderr, "  %s     %s\n\n", color.Magenta(mirrorStderr, "next-sprint"), color.Dim(mirrorStderr, "next planned sprint when configured"))
 
-Flags:
-  --project KEY   project key or name to use
-  --cwd DIR       working directory for project resolution
-  --apply         actually archive eligible issues
+	fmt.Fprintf(mirrorStderr, "%s:\n", color.BoldGreen(mirrorStderr, "Flags"))
+	fmt.Fprintf(mirrorStderr, "  %s KEY   %s\n", color.Yellow(mirrorStderr, "--project"), color.Dim(mirrorStderr, "project key or name to use"))
+	fmt.Fprintf(mirrorStderr, "  %s DIR   %s\n", color.Yellow(mirrorStderr, "--cwd"), color.Dim(mirrorStderr, "working directory for project resolution"))
+	fmt.Fprintf(mirrorStderr, "  %s         %s\n\n", color.Yellow(mirrorStderr, "--apply"), color.Dim(mirrorStderr, "actually archive eligible issues"))
 
-Run "jirafs mirror <subcommand> --help" for more information about a subcommand.`)
+	fmt.Fprintf(mirrorStderr, "%s\n", color.Cyan(mirrorStderr, `Run "jirafs mirror <subcommand> --help" for more information about a subcommand.`))
 }
 
 func printMirrorRefreshHelp() {
-	fmt.Fprintln(mirrorStderr, `Usage:
-  jirafs mirror refresh [flags] <scope>
-  jirafs mirror <scope> [flags]
+	fmt.Fprintf(mirrorStderr, "%s\n", color.BoldBlue(mirrorStderr, "Usage:"))
+	fmt.Fprintf(mirrorStderr, "  jirafs %s %s [flags] <%s>\n", color.Blue(mirrorStderr, "mirror"), color.Blue(mirrorStderr, "refresh"), color.Yellow(mirrorStderr, "scope"))
+	fmt.Fprintf(mirrorStderr, "  jirafs %s <%s> [flags]\n\n", color.Blue(mirrorStderr, "mirror"), color.Yellow(mirrorStderr, "scope"))
 
-Refreshes one named live mirror scope.
+	fmt.Fprintf(mirrorStderr, "%s\n\n", color.Dim(mirrorStderr, "Refreshes one named live mirror scope."))
 
-Live mirror scopes:
-  current-sprint
-  my-issues
-  backlog
-  next-sprint
+	fmt.Fprintf(mirrorStderr, "%s:\n", color.BoldGreen(mirrorStderr, "Live mirror scopes"))
+	fmt.Fprintf(mirrorStderr, "  %s\n", color.Magenta(mirrorStderr, "current-sprint"))
+	fmt.Fprintf(mirrorStderr, "  %s\n", color.Magenta(mirrorStderr, "my-issues"))
+	fmt.Fprintf(mirrorStderr, "  %s\n", color.Magenta(mirrorStderr, "backlog"))
+	fmt.Fprintf(mirrorStderr, "  %s\n\n", color.Magenta(mirrorStderr, "next-sprint"))
 
-Examples:
-  jirafs mirror my-issues
-  jirafs mirror refresh my-issues
-  jirafs mirror next-sprint
-  jirafs mirror refresh current-sprint
+	fmt.Fprintf(mirrorStderr, "%s:\n", color.BoldGreen(mirrorStderr, "Examples"))
+	fmt.Fprintf(mirrorStderr, "  %s\n", color.Cyan(mirrorStderr, "jirafs mirror my-issues"))
+	fmt.Fprintf(mirrorStderr, "  %s\n", color.Cyan(mirrorStderr, "jirafs mirror refresh my-issues"))
+	fmt.Fprintf(mirrorStderr, "  %s\n", color.Cyan(mirrorStderr, "jirafs mirror next-sprint"))
+	fmt.Fprintf(mirrorStderr, "  %s\n\n", color.Cyan(mirrorStderr, "jirafs mirror refresh current-sprint"))
 
-Flags:
-  --project KEY   project key or name to use
-  --cwd DIR       working directory for project resolution
-  --help          show this help message`)
+	fmt.Fprintf(mirrorStderr, "%s:\n", color.BoldGreen(mirrorStderr, "Flags"))
+	fmt.Fprintf(mirrorStderr, "  %s KEY   %s\n", color.Yellow(mirrorStderr, "--project"), color.Dim(mirrorStderr, "project key or name to use"))
+	fmt.Fprintf(mirrorStderr, "  %s DIR   %s\n", color.Yellow(mirrorStderr, "--cwd"), color.Dim(mirrorStderr, "working directory for project resolution"))
+	fmt.Fprintf(mirrorStderr, "  %s          %s\n", color.Yellow(mirrorStderr, "--help"), color.Dim(mirrorStderr, "show this help message"))
 }

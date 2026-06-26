@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"sort"
 
+	"github.com/jirafs/jirafs/internal/color"
 	"github.com/jirafs/jirafs/internal/config"
 	"github.com/jirafs/jirafs/internal/context"
 	"github.com/jirafs/jirafs/internal/jira"
@@ -33,7 +34,7 @@ func RunPlan(args []string) int {
 	}
 
 	// Check for help before loading settings.
-	if args[0] == "help" {
+	if args[0] == "help" || args[0] == "--help" || args[0] == "-h" {
 		printPlanHelp()
 		return 0
 	}
@@ -198,16 +199,16 @@ func buildPlanClient(settings *config.Settings, ctx *context.Context, cwd string
 
 // printPlanHelp prints usage information for the plan subcommand.
 func printPlanHelp() {
-	fmt.Fprintln(planStderr, `Usage:
-  jirafs plan <issue-key> [flags]
+	fmt.Fprintf(planStderr, "%s\n", color.BoldBlue(planStderr, "Usage:"))
+	fmt.Fprintf(planStderr, "  jirafs %s <%s> [flags]\n\n", color.Blue(planStderr, "plan"), color.Yellow(planStderr, "issue-key"))
 
-Fetches the remote issue from Jira, reads the local copy from the file
-system, and displays the plan of operations needed to bring the remote
-in line with the local copy.
+	fmt.Fprintf(planStderr, "%s\n", color.Dim(planStderr, "Fetches the remote issue from Jira, reads the local copy from the file"))
+	fmt.Fprintf(planStderr, "%s\n", color.Dim(planStderr, "system, and displays the plan of operations needed to bring the remote"))
+	fmt.Fprintf(planStderr, "%s\n\n", color.Dim(planStderr, "in line with the local copy."))
 
-Flags:
-  --project KEY   project key or name to use
-  --cwd DIR       working directory for project resolution
+	fmt.Fprintf(planStderr, "%s:\n", color.BoldGreen(planStderr, "Flags"))
+	fmt.Fprintf(planStderr, "  %s KEY   %s\n", color.Yellow(planStderr, "--project"), color.Dim(planStderr, "project key or name to use"))
+	fmt.Fprintf(planStderr, "  %s DIR   %s\n\n", color.Yellow(planStderr, "--cwd"), color.Dim(planStderr, "working directory for project resolution"))
 
-Run "jirafs plan <issue-key> --help" for more information about flags.`)
+	fmt.Fprintf(planStderr, "%s\n", color.Cyan(planStderr, `Run "jirafs plan <issue-key> --help" for more information about flags.`))
 }

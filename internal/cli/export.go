@@ -7,6 +7,7 @@ import (
 	"io"
 	"os"
 
+	"github.com/jirafs/jirafs/internal/color"
 	"github.com/jirafs/jirafs/internal/config"
 	"github.com/jirafs/jirafs/internal/context"
 	"github.com/jirafs/jirafs/internal/export"
@@ -30,7 +31,7 @@ func RunExport(args []string) int {
 	}
 
 	// Check for help before loading settings.
-	if args[0] == "help" {
+	if args[0] == "help" || args[0] == "--help" || args[0] == "-h" {
 		printExportHelp()
 		return 0
 	}
@@ -144,16 +145,16 @@ func buildExportClient(settings *config.Settings, ctx *context.Context, cwd stri
 
 // printExportHelp prints usage information for the export subcommand.
 func printExportHelp() {
-	fmt.Fprintln(exportStderr, `Usage:
-  jirafs export <subcommand> [flags]
+	fmt.Fprintf(exportStderr, "%s\n", color.BoldBlue(exportStderr, "Usage:"))
+	fmt.Fprintf(exportStderr, "  jirafs %s <%s> [flags]\n\n", color.Blue(exportStderr, "export"), color.Yellow(exportStderr, "subcommand"))
 
-Subcommands:
-  issue       export one issue through the real service path
-  help        show this help message
+	fmt.Fprintf(exportStderr, "%s:\n", color.BoldGreen(exportStderr, "Subcommands"))
+	fmt.Fprintf(exportStderr, "  %s    %s\n", color.Blue(exportStderr, "issue"), color.Dim(exportStderr, "export one issue through the real service path"))
+	fmt.Fprintf(exportStderr, "  %s    %s\n\n", color.Blue(exportStderr, "help"), color.Dim(exportStderr, "show this help message"))
 
-Flags:
-  --project KEY   project key or name to use
-  --cwd DIR       working directory for project resolution
+	fmt.Fprintf(exportStderr, "%s:\n", color.BoldGreen(exportStderr, "Flags"))
+	fmt.Fprintf(exportStderr, "  %s KEY   %s\n", color.Yellow(exportStderr, "--project"), color.Dim(exportStderr, "project key or name to use"))
+	fmt.Fprintf(exportStderr, "  %s DIR   %s\n\n", color.Yellow(exportStderr, "--cwd"), color.Dim(exportStderr, "working directory for project resolution"))
 
-Run "jirafs export <subcommand> --help" for more information about a subcommand.`)
+	fmt.Fprintf(exportStderr, "%s\n", color.Cyan(exportStderr, `Run "jirafs export <subcommand> --help" for more information about a subcommand.`))
 }

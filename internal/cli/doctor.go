@@ -9,6 +9,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/jirafs/jirafs/internal/color"
 	"github.com/jirafs/jirafs/internal/config"
 	jcontext "github.com/jirafs/jirafs/internal/context"
 	"github.com/jirafs/jirafs/internal/jira"
@@ -306,15 +307,15 @@ func RunDoctor(args []string) int {
 
 // printDoctorHelp prints usage information for the doctor subcommand.
 func printDoctorHelp() {
-	fmt.Fprintln(doctorStderr, `Usage:
-  jirafs doctor [flags]
+	fmt.Fprintf(doctorStderr, "%s\n", color.BoldBlue(doctorStderr, "Usage:"))
+	fmt.Fprintf(doctorStderr, "  jirafs %s [flags]\n\n", color.Blue(doctorStderr, "doctor"))
 
-Reports the health of a jirafs workspace: config, credential resolution,
-and live-probe connectivity for each configured Jira instance.
+	fmt.Fprintf(doctorStderr, "%s\n", color.Dim(doctorStderr, "Reports the health of a jirafs workspace: config, credential resolution,"))
+	fmt.Fprintf(doctorStderr, "%s\n\n", color.Dim(doctorStderr, "and live-probe connectivity for each configured Jira instance."))
 
-Flags:
-  --verbose    print request URLs during checks
-  --help, -h   show this help message`)
+	fmt.Fprintf(doctorStderr, "%s:\n", color.BoldGreen(doctorStderr, "Flags"))
+	fmt.Fprintf(doctorStderr, "  %s    %s\n", color.Yellow(doctorStderr, "--verbose"), color.Dim(doctorStderr, "print request URLs during checks"))
+	fmt.Fprintf(doctorStderr, "  %s   %s\n", color.Yellow(doctorStderr, "--help, -h"), color.Dim(doctorStderr, "show this help message"))
 }
 
 func onboardingCommands(snap DoctorSnapshot) []string {
