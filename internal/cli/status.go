@@ -2,14 +2,22 @@
 package cli
 
 import (
+	"fmt"
+	"io"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 
 	"github.com/jirafs/jirafs/internal/config"
 	"github.com/jirafs/jirafs/internal/context"
 	"github.com/jirafs/jirafs/internal/mirror"
 	"github.com/jirafs/jirafs/internal/schema"
+)
+
+var (
+	statusStdout io.Writer = os.Stdout
+	statusStderr io.Writer = os.Stderr
 )
 
 // StatusSnapshot represents the current status of a project, mirror, and
@@ -190,3 +198,90 @@ func (s StatusSnapshot) NextStep() string {
 
 // IssueKey is a type alias for issue keys used in status reporting.
 type IssueKey = schema.IssueKey
+
+// RunStatus dispatches the `jirafs status` subcommand. It loads the user's
+// settings, builds a status snapshot, and reports config, mirror files,
+// scopes, and a next-step hint.
+func RunStatus(args []string) int {
+	// Check for help before loading settings.
+	for _, arg := range args {
+		if arg == "--help" || arg == "-h" {
+			printStatusHelp()
+			return 0
+		}
+	}
+
+	// Load settings.
+	settings, err := config.Load()
+	if err != nil {
+		fmt.Fprintf(statusStderr, "jirafs status: cannot load settings: %v\n", err)
+		return 1
+	}
+
+	// Build the status snapshot.
+	cwd, err := os.Getwd()
+	if err != nil {
+		fmt.Fprintf(statusStderr, "jirafs status: cannot determine working directory: %v\n", err)
+		return 1
+	}
+	snap := BuildStatusSnapshot(settings, cwd)
+
+	// Report config.
+	fmt.Fprintln(statusStdout, "jirafs status:")
+	fmt.Fprintln(statusStdout)
+
+	// Project info.
+	fmt.Fprintln(statusStdout, "Config:")
+	fmt.Fprintf(statusStdout, "  project: %s\n", snap.ProjectName)
+	fmt.Fprintf(statusStdout, "  key:     %s\n", snap.ProjectKey)
+	fmt.Fprintf(statusStdout, "  instance: %s\n", snap.Instance)
+	fmt.Fprintf(statusStdout, "  resolved: %v\n", snap.Resolved)
+	fmt.Fprintln(statusStdout)
+
+	// Mirror info.
+	fmt.Fprintln(statusStdout, "Mirror:")
+	fmt.Fprintf(statusStdout, "  dir: %s\n", snap.MirrorDir)
+	fmt.Fprintf(statusStdout, "  exists: %v\n", snap.MirrorExists)
+	if snap.MirrorExists {
+		fmt.Fprintf(statusStdout, "  scopes:   %d\n", len(snap.MirrorScopes))
+		fmt.Fprintf(statusStdout, "  issues:   %d\n", snap.MirrorIssueCount)
+		fmt.Fprintf(statusStdout, "  scope members: %d\n", snap.MirrorScopeMemberCount)
+		if len(snap.MirrorScopes) > 0 {
+			fmt.Fprintln(statusStdout, "  scope names:")
+			sortedScopes := make([]string, len(snap.MirrorScopes))
+			copy(sortedScopes, snap.MirrorScopes)
+			sort.Strings(sortedScopes)
+			for _, name := range sortedScopes {
+				fmt.Fprintf(statusStdout, "    - %s\n", name)
+			}
+		}
+	}
+	fmt.Fprintln(statusStdout)
+
+	// Onboarding / next-step hint.
+	fmt.Fprintln(statusStdout, "Onboarding:")
+	fmt.Fprintf(statusStdout, "  complete: %v\n", snap.OnboardingComplete)
+	if len(snap.MissingSteps) > 0 {
+		fmt.Fprintln(statusStdout, "  missing steps:")
+		for _, step := range snap.MissingSteps {
+			fmt.Fprintf(statusStdout, "    - %s\n", step)
+		}
+		fmt.Fprintf(statusStdout, "  next step: %s\n", snap.NextStep())
+	} else {
+		fmt.Fprintln(statusStdout, "  next step: (none — all setup complete)")
+	}
+
+	return 0
+}
+
+// printStatusHelp prints usage information for the status subcommand.
+func printStatusHelp() {
+	fmt.Fprintln(statusStderr, `Usage:
+  jirafs status [flags]
+
+Reports the current state of a jirafs workspace: config, mirror files,
+scopes, and a next-step hint for onboarding.
+
+Flags:
+  --help, -h   show this help message`)
+}

@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"bytes"
 	"os"
 	"path/filepath"
 	"testing"
@@ -498,4 +499,193 @@ local_dirs = ["` + filepath.Join(tmpDir, "local") + `"]
 	if snap.HasStep("no credentials") {
 		t.Fatal("expected no credential step when credentials exist")
 	}
+}
+
+// TestRunStatus_NoArgs verifies that calling RunStatus with no arguments
+// runs the status report (not help) and returns exit code 0.
+func TestRunStatus_NoArgs(t *testing.T) {
+	stdout, stderr := withStatusTestIO(t)
+	exit := RunStatus([]string{})
+	if exit != 0 {
+		t.Fatalf("RunStatus([]) = %d, want 0", exit)
+	}
+	output := stdout.String()
+	// Should show status info, not help.
+	if !bytes.Contains([]byte(output), []byte("Config:")) {
+		t.Fatalf("expected 'Config:' in status output, got stdout=%q stderr=%q", output, stderr.String())
+	}
+}
+
+// TestRunStatus_Help verifies that "--help" returns exit code 0 and prints help.
+func TestRunStatus_Help(t *testing.T) {
+	stdout, stderr := withStatusTestIO(t)
+	exit := RunStatus([]string{"--help"})
+	if exit != 0 {
+		t.Fatalf("RunStatus([\"--help\"]) = %d, want 0", exit)
+	}
+	output := stdout.String() + stderr.String()
+	if !bytes.Contains([]byte(output), []byte("status")) {
+		t.Fatalf("expected 'status' in output, got stdout=%q stderr=%q", stdout.String(), stderr.String())
+	}
+}
+
+// TestRunStatus_NoSettings verifies that RunStatus with no settings file
+// reports missing steps and returns exit code 0 (status is informational).
+func TestRunStatus_NoSettings(t *testing.T) {
+	exit := RunStatus([]string{})
+	if exit != 0 {
+		t.Fatalf("RunStatus([]) = %d, want 0", exit)
+	}
+}
+
+// TestRunStatus_FullReport verifies that RunStatus outputs a full status
+// report when settings, a project, and a mirror.yml are all configured.
+func TestRunStatus_FullReport(t *testing.T) {
+	// Note: this test runs against the real user's settings (config.Load()
+	// uses os.UserHomeDir(), not the HOME env var). We verify the output
+	// structure rather than specific values.
+	tmpDir := t.TempDir()
+	homeDir := filepath.Join(tmpDir, "home")
+	jirafsDir := filepath.Join(homeDir, ".jirafs")
+	if err := os.MkdirAll(jirafsDir, 0o755); err != nil {
+		t.Fatalf("MkdirAll: %v", err)
+	}
+	// Write settings with credentials.
+	credsPath := filepath.Join(tmpDir, "creds.toml")
+	if err := os.WriteFile(credsPath, []byte("email = \"user@example.com\"\napi_token = \"token\"\n"), 0o644); err != nil {
+		t.Fatalf("WriteFile creds: %v", err)
+	}
+	settingsTOML := `version = 1
+
+[instances.default]
+base_url = "https://example.atlassian.net"
+auth_type = "atlassian_api_token"
+credential_refs = ["file://` + credsPath + `"]
+
+[projects.test]
+key = "TEST"
+instance = "default"
+mirror_dir = "` + filepath.Join(tmpDir, "mirror") + `"
+local_dirs = ["` + filepath.Join(tmpDir, "local") + `"]
+`
+	if err := os.WriteFile(filepath.Join(jirafsDir, "settings.toml"), []byte(settingsTOML), 0o644); err != nil {
+		t.Fatalf("WriteFile settings: %v", err)
+	}
+
+	oldHome := os.Getenv("HOME")
+	os.Setenv("HOME", homeDir)
+	defer os.Setenv("HOME", oldHome)
+
+	// Write a mirror.yml with scopes and issues.
+	mirrorDir := filepath.Join(tmpDir, "mirror")
+	mirrorYAML := `project:
+  type: project
+  value: TEST
+scopes:
+  - name: sprint-1
+    type: project
+    target: TEST
+issues:
+  - key: TEST-1
+    reason: manual
+scope_members:
+  - key: TEST-3
+    scope: sprint-1
+`
+	if err := os.MkdirAll(mirrorDir, 0o755); err != nil {
+		t.Fatalf("MkdirAll: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(mirrorDir, "mirror.yml"), []byte(mirrorYAML), 0o644); err != nil {
+		t.Fatalf("WriteFile mirror.yml: %v", err)
+	}
+
+	stdout, stderr := withStatusTestIO(t)
+	exit := RunStatus([]string{})
+	if exit != 0 {
+		t.Fatalf("RunStatus([]) = %d, stderr = %q", exit, stderr.String())
+	}
+
+	output := stdout.String()
+	// Verify output structure: should contain Config, Mirror, and Onboarding sections.
+	if !bytes.Contains([]byte(output), []byte("Config:")) {
+		t.Fatalf("expected 'Config:' in output, got: %s", output)
+	}
+	if !bytes.Contains([]byte(output), []byte("Mirror:")) {
+		t.Fatalf("expected 'Mirror:' in output, got: %s", output)
+	}
+	if !bytes.Contains([]byte(output), []byte("Onboarding:")) {
+		t.Fatalf("expected 'Onboarding:' in output, got: %s", output)
+	}
+	if !bytes.Contains([]byte(output), []byte("resolved:")) {
+		t.Fatalf("expected 'resolved:' in output, got: %s", output)
+	}
+	if !bytes.Contains([]byte(output), []byte("exists:")) {
+		t.Fatalf("expected 'exists:' in output, got: %s", output)
+	}
+	if !bytes.Contains([]byte(output), []byte("complete:")) {
+		t.Fatalf("expected 'complete:' in output, got: %s", output)
+	}
+	if !bytes.Contains([]byte(output), []byte("next step:")) {
+		t.Fatalf("expected 'next step:' in output, got: %s", output)
+	}
+}
+
+// TestRunStatus_IncompleteReport verifies that RunStatus outputs missing
+// steps and a next-step hint when onboarding is incomplete.
+func TestRunStatus_IncompleteReport(t *testing.T) {
+	tmpDir := t.TempDir()
+	homeDir := writeSettings(t, tmpDir)
+	oldHome := os.Getenv("HOME")
+	os.Setenv("HOME", homeDir)
+	defer os.Setenv("HOME", oldHome)
+
+	// Change to tmpDir/mirror so BuildStatusSnapshot resolves the project.
+	mirrorDir := filepath.Join(tmpDir, "mirror")
+	if err := os.MkdirAll(mirrorDir, 0o755); err != nil {
+		t.Fatalf("MkdirAll mirror: %v", err)
+	}
+	oldCwd, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("Getwd: %v", err)
+	}
+	if err := os.Chdir(mirrorDir); err != nil {
+		t.Fatalf("Chdir: %v", err)
+	}
+	defer os.Chdir(oldCwd)
+
+	stdout, stderr := withStatusTestIO(t)
+	exit := RunStatus([]string{})
+	if exit != 0 {
+		t.Fatalf("RunStatus([]) = %d, stderr = %q", exit, stderr.String())
+	}
+
+	output := stdout.String()
+	// Verify missing steps are reported.
+	if !bytes.Contains([]byte(output), []byte("missing steps:")) {
+		t.Fatalf("expected 'missing steps:' in output, got: %s", output)
+	}
+	// Verify next-step hint is present.
+	if !bytes.Contains([]byte(output), []byte("next step:")) {
+		t.Fatalf("expected 'next step:' in output, got: %s", output)
+	}
+	// Verify onboarding is incomplete.
+	if !bytes.Contains([]byte(output), []byte("complete: false")) {
+		t.Fatalf("expected 'complete: false' in output, got: %s", output)
+	}
+}
+
+// withStatusTestIO captures stdout and stderr for the status command.
+func withStatusTestIO(t *testing.T) (*bytes.Buffer, *bytes.Buffer) {
+	t.Helper()
+	stdout := &bytes.Buffer{}
+	stderr := &bytes.Buffer{}
+	oldStdout := statusStdout
+	oldStderr := statusStderr
+	statusStdout = stdout
+	statusStderr = stderr
+	t.Cleanup(func() {
+		statusStdout = oldStdout
+		statusStderr = oldStderr
+	})
+	return stdout, stderr
 }

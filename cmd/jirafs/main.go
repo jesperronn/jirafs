@@ -41,6 +41,8 @@ func main() {
 		os.Exit(cli.RunExport(os.Args[2:]))
 	case "plan":
 		os.Exit(cli.RunPlan(os.Args[2:]))
+	case "status":
+		os.Exit(cli.RunStatus(os.Args[2:]))
 	case "--help", "-h":
 		printHelp()
 	default:
@@ -361,6 +363,7 @@ Commands:
   export     export Jira issues into local Markdown files
   plan       show a sync plan without applying changes
   setup      record Jira instance and project settings
+  status     show workspace status and next-step hints
   sync       apply a sync plan and push changes to Jira (real service path)
   new        create a new issue from a template
   registry   manage local registry files for typed references
