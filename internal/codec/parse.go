@@ -3,6 +3,7 @@ package codec
 import (
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/jirafs/jirafs/internal/schema"
 	"gopkg.in/yaml.v3"
@@ -101,6 +102,11 @@ func parseFrontmatter(frontmatter string) (*schema.Issue, error) {
 	if stateFile, ok := raw["state"]; ok {
 		issue.RemoteMetadata.StateFile = stateFile.(string)
 	}
+	if syncTime, ok := raw["sync_time"]; ok {
+		if t, err := time.Parse(time.RFC3339, syncTime.(string)); err == nil {
+			issue.RemoteMetadata.SyncTime = t
+		}
+	}
 	if resolvedStatus, ok := raw["resolved_status"]; ok {
 		issue.RemoteMetadata.ResolvedStatus = resolvedStatus.(string)
 	}
@@ -168,23 +174,28 @@ func parseTypedRef(ref interface{}) schema.TypedRef {
 
 // parseLinkedIssues parses linked issue references from YAML.
 func parseLinkedIssues(linkedIssues interface{}) []schema.LinkedIssue {
-	// This is a simplified parser for now - in a real implementation,
-	// this would parse the more complex structure
 	if linkedIssues == nil {
 		return []schema.LinkedIssue{}
 	}
 
-	// Handle the case where it's already a list of maps
-	issuesList := linkedIssues.([]interface{})
-	result := make([]schema.LinkedIssue, len(issuesList))
+	issuesList, ok := linkedIssues.([]interface{})
+	if !ok {
+		return []schema.LinkedIssue{}
+	}
 
-	for i, item := range issuesList {
-		if issueMap, ok := item.(map[string]interface{}); ok {
-			result[i] = schema.LinkedIssue{
-				Key:  schema.IssueKey(issueMap["key"].(string)),
-				Type: issueMap["type"].(string),
-			}
+	result := make([]schema.LinkedIssue, 0, len(issuesList))
+
+	for _, item := range issuesList {
+		issueMap, ok := item.(map[string]interface{})
+		if !ok {
+			continue
 		}
+		key, _ := issueMap["key"].(string)
+		liType, _ := issueMap["type"].(string)
+		result = append(result, schema.LinkedIssue{
+			Key:  schema.IssueKey(key),
+			Type: liType,
+		})
 	}
 
 	return result
