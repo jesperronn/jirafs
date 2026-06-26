@@ -238,7 +238,7 @@ func (c *JiraClient) FetchIssue(ctx context.Context, key string) (*schema.Issue,
 
 	if resp.StatusCode >= 400 && resp.StatusCode < 500 {
 		if resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden {
-			return nil, NewHTTPErrorWithURL(resp.StatusCode, url, "HTTP "+fmt.Sprintf("%d", resp.StatusCode))
+			return nil, NewAuthError("HTTP " + fmt.Sprintf("%d", resp.StatusCode))
 		}
 		return nil, mapHTTPErr(resp)
 	}
@@ -478,7 +478,7 @@ func (c *JiraClient) FetchStatuses(ctx context.Context) ([]StatusEntry, error) {
 }
 
 // FetchSprints calls the Jira /rest/api/2/project/{projectKey}/versions
-// endpoint to retrieve all fix versions for the given project.
+// endpoint to retrieve all sprints for the given project.
 func (c *JiraClient) FetchSprints(ctx context.Context, projectKey string) ([]SprintEntry, error) {
 	if ctx == nil {
 		ctx = context.Background()
@@ -487,7 +487,7 @@ func (c *JiraClient) FetchSprints(ctx context.Context, projectKey string) ([]Spr
 		return nil, NewNotFoundError("empty project key for sprints")
 	}
 
-	url := fmt.Sprintf("%s/rest/api/2/project/%s/versions", c.baseURL, projectKey)
+	url := fmt.Sprintf("%s/rest/api/2/project/%s/versions?project=%s", c.baseURL, projectKey, projectKey)
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
 		return nil, NewTransportError("cannot create sprint request: " + err.Error())
@@ -514,28 +514,12 @@ func (c *JiraClient) FetchSprints(ctx context.Context, projectKey string) ([]Spr
 		return nil, mapHTTPErr(resp)
 	}
 
-	var sr fixVersionsResponse
-	if err := decodeJSONResponse(resp, &sr, "versions"); err != nil {
+	var sr sprintsResponse
+	if err := decodeJSONResponse(resp, &sr, "sprints"); err != nil {
 		return nil, err
 	}
 
-	sprints := make([]SprintEntry, 0, len(sr.Values))
-	for _, v := range sr.Values {
-		sprints = append(sprints, SprintEntry{
-			ID:   0,
-			Name: v.Name,
-			State: func() string {
-				if v.Released {
-					return "released"
-				}
-				if v.Archived {
-					return "archived"
-				}
-				return "unreleased"
-			}(),
-		})
-	}
-	return sprints, nil
+	return sr.Values, nil
 }
 
 // UpdateIssue updates a single issue by its key via the Jira REST API.

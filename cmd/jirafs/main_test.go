@@ -132,6 +132,42 @@ current_project = "platform"
 	}
 }
 
+func TestVersionFlag(t *testing.T) {
+	output := runMainHelper(t, "--version")
+	if !strings.Contains(output.stderr, "jirafs") {
+		t.Fatalf("stderr = %q, want 'jirafs'", output.stderr)
+	}
+	if output.exitCode != 0 {
+		t.Fatalf("exitCode = %d, want 0", output.exitCode)
+	}
+}
+
+func TestShortVersionFlag(t *testing.T) {
+	output := runMainHelper(t, "-v")
+	if !strings.Contains(output.stderr, "jirafs") {
+		t.Fatalf("stderr = %q, want 'jirafs'", output.stderr)
+	}
+	if output.exitCode != 0 {
+		t.Fatalf("exitCode = %d, want 0", output.exitCode)
+	}
+}
+
+func TestDoctorCommand(t *testing.T) {
+	output := runMainHelper(t, "doctor")
+	// Doctor returns 0 when no settings exist (it reports health issues but doesn't fail).
+	if output.exitCode != 0 {
+		t.Fatalf("exitCode = %d, want 0", output.exitCode)
+	}
+}
+
+func TestStatusCommand(t *testing.T) {
+	output := runMainHelper(t, "status")
+	// Status returns 0 when no settings exist (it reports status but doesn't fail).
+	if output.exitCode != 0 {
+		t.Fatalf("exitCode = %d, want 0", output.exitCode)
+	}
+}
+
 func TestUnimplementedCommands(t *testing.T) {
 	cmds := []string{"init", "new", "registry", "board", "archive"}
 	for _, cmd := range cmds {
