@@ -12,6 +12,9 @@ FIXTURES_DIR="${REPO_ROOT}/tests/fixtures"
 PASS=0
 FAIL=0
 
+# Top-level fixtures only — harness self-tests live in fixtures/harness/
+# and are run by bin/verify-harness, not by the dev loop's bin/test.
+shopt -s nullglob
 for test_file in "${FIXTURES_DIR}"/*.sh; do
     [ -f "${test_file}" ] || continue
     if bash "${test_file}"; then

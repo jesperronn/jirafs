@@ -3,7 +3,7 @@
 set -euo pipefail
 
 # Test bin/lint argument handling: default, --help, invalid args.
-REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
 
 BIN_LINT="${REPO_ROOT}/bin/lint"
 

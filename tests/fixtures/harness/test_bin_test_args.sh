@@ -3,7 +3,7 @@
 set -euo pipefail
 
 # Test bin/test argument handling: default, --help, --package, invalid args.
-REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
 
 BIN_TEST="${REPO_ROOT}/bin/test"
 

@@ -1,0 +1,36 @@
+#!/usr/bin/env bash
+
+set -euo pipefail
+
+# Run the harness self-tests: shell fixtures that test bin/* scripts
+# (bin/lint, bin/test, bin/integrate_stream_commit).
+#
+# These are NOT run by bin/verify / bin/test inside the ralph dev loop,
+# because they fork sub-shells that drive git/bin/test and have historically
+# masked recursion bugs as runaway processes. CI should run this script
+# in addition to bin/verify.
+
+REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+cd "${REPO_ROOT}"
+
+HARNESS_DIR="${REPO_ROOT}/tests/fixtures/harness"
+PASS=0
+FAIL=0
+
+shopt -s nullglob
+for test_file in "${HARNESS_DIR}"/*.sh; do
+    if bash "${test_file}"; then
+        echo "[PASS] harness/$(basename "${test_file}")"
+        PASS=$((PASS + 1))
+    else
+        echo "[FAIL] harness/$(basename "${test_file}")"
+        FAIL=$((FAIL + 1))
+    fi
+done
+
+if [ "${FAIL}" -gt 0 ]; then
+    echo "harness tests: ${PASS} passed, ${FAIL} failed" >&2
+    exit 1
+fi
+
+echo "harness tests: all ${PASS} passed"

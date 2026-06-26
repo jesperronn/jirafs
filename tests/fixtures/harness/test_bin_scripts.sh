@@ -3,7 +3,7 @@
 set -euo pipefail
 
 # Verify that required bin scripts exist and are executable.
-REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
 
 for script in bin/lint bin/test bin/integrate_stream_commit; do
     path="${REPO_ROOT}/${script}"
