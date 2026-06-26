@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/jirafs/jirafs/internal/mirror"
 	"github.com/jirafs/jirafs/internal/schema"
 )
 
@@ -36,6 +37,8 @@ type FileService struct {
 
 // Archive rewrites the issue into archived state, writes it into the archive
 // directory, and removes the live copy only after the snapshot write succeeds.
+// It respects live membership rules: issues that are pinned, unsynced,
+// explicitly imported into the mirror, or scope members are not archived.
 func (s FileService) Archive(eligible string, mirrorDir, localDir, issuePath string) error {
 	if s.ArchiveDir == "" {
 		return fmt.Errorf("archive directory is empty")
@@ -54,6 +57,16 @@ func (s FileService) Archive(eligible string, mirrorDir, localDir, issuePath str
 		return fmt.Errorf("parse issue file: %w", parseErr)
 	}
 
+	// Check live membership rules before archiving.
+	m, _, loadErr := loadMirrorYAML(mirrorDir)
+	if loadErr != nil {
+		return fmt.Errorf("load mirror file: %w", loadErr)
+	}
+
+	if !m.IsArchiveEligible(issue.Identity.Key, mirror.ResolvedStatus(issue.RemoteMetadata.ResolvedStatus), issue.RemoteMetadata) {
+		return fmt.Errorf("issue %s is not archive-eligible: live membership rules prevent archiving", eligible)
+	}
+
 	issue.RemoteMetadata.StateFile = string(schema.StateArchived)
 	snapshot := schema.RenderIssue(issue)
 	dest := filepath.Join(s.ArchiveDir, filepath.Base(issuePath))
@@ -64,4 +77,26 @@ func (s FileService) Archive(eligible string, mirrorDir, localDir, issuePath str
 		return fmt.Errorf("remove original file: %w", err)
 	}
 	return nil
+}
+
+// loadMirrorYAML reads the mirror file from the mirror directory.
+// It looks for mirror.yml or mirror.yaml in the mirror directory.
+// If no mirror file is found, it returns an empty mirror (all issues are eligible).
+func loadMirrorYAML(mirrorDir string) (*mirror.Mirror, string, error) {
+	for _, name := range []string{"mirror.yml", "mirror.yaml"} {
+		path := filepath.Join(mirrorDir, name)
+		if _, err := os.Stat(path); err == nil {
+			data, err := os.ReadFile(path)
+			if err != nil {
+				return nil, "", fmt.Errorf("cannot read mirror file %s: %w", path, err)
+			}
+			m, err := mirror.UnmarshalMirror(data)
+			if err != nil {
+				return nil, "", fmt.Errorf("cannot parse mirror file %s: %w", path, err)
+			}
+			return m, path, nil
+		}
+	}
+	// No mirror file found: return an empty mirror (all issues are eligible).
+	return &mirror.Mirror{}, filepath.Join(mirrorDir, "mirror.yml"), nil
 }

@@ -40,8 +40,12 @@ func TestFileService_Archive_movesSnapshotAndMarksArchived(t *testing.T) {
 	tmpDir := t.TempDir()
 	localDir := filepath.Join(tmpDir, "live")
 	archiveDir := filepath.Join(localDir, "_archive")
+	mirrorDir := filepath.Join(tmpDir, "mirror")
 	if err := os.MkdirAll(localDir, 0o755); err != nil {
 		t.Fatalf("MkdirAll local: %v", err)
+	}
+	if err := os.MkdirAll(mirrorDir, 0o755); err != nil {
+		t.Fatalf("MkdirAll mirror: %v", err)
 	}
 
 	issuePath := filepath.Join(localDir, "PROJ-123.md")
@@ -53,6 +57,7 @@ schema_version: '1'
 remote_version: '42'
 content_hash: 'hash123'
 sync_time: '2026-06-22T10:00:00Z'
+resolved_status: 'resolved'
 summary: 'Keep my snapshot'
 labels:
 - 'release'
@@ -81,8 +86,14 @@ Preserve this note.
 		t.Fatalf("WriteFile issue: %v", err)
 	}
 
+	// Write an empty mirror file so the archive service can load it.
+	mirrorPath := filepath.Join(mirrorDir, "mirror.yml")
+	if err := os.WriteFile(mirrorPath, []byte("project:\n  type: project\n  value: PROJ\n"), 0o644); err != nil {
+		t.Fatalf("WriteFile mirror: %v", err)
+	}
+
 	svc := FileService{ArchiveDir: archiveDir}
-	if err := svc.Archive("PROJ-123", filepath.Join(tmpDir, "mirror"), localDir, issuePath); err != nil {
+	if err := svc.Archive("PROJ-123", mirrorDir, localDir, issuePath); err != nil {
 		t.Fatalf("Archive returned error: %v", err)
 	}
 
@@ -124,8 +135,12 @@ Preserve this note.
 func TestFileService_Archive_keepsLiveFileWhenSnapshotWriteFails(t *testing.T) {
 	tmpDir := t.TempDir()
 	localDir := filepath.Join(tmpDir, "live")
+	mirrorDir := filepath.Join(tmpDir, "mirror")
 	if err := os.MkdirAll(localDir, 0o755); err != nil {
 		t.Fatalf("MkdirAll local: %v", err)
+	}
+	if err := os.MkdirAll(mirrorDir, 0o755); err != nil {
+		t.Fatalf("MkdirAll mirror: %v", err)
 	}
 
 	issuePath := filepath.Join(localDir, "PROJ-124.md")
@@ -136,6 +151,7 @@ project: 'project:PROJ'
 remote_version: '1'
 content_hash: 'hash'
 sync_time: '2026-06-22T10:00:00Z'
+resolved_status: 'resolved'
 ---
 ## Description
 Body.
@@ -155,13 +171,19 @@ Body.
 		t.Fatalf("WriteFile issue: %v", err)
 	}
 
+	// Write an empty mirror file so the archive service can load it.
+	mirrorPath := filepath.Join(mirrorDir, "mirror.yml")
+	if err := os.WriteFile(mirrorPath, []byte("project:\n  type: project\n  value: PROJ\n"), 0o644); err != nil {
+		t.Fatalf("WriteFile mirror: %v", err)
+	}
+
 	blocker := filepath.Join(tmpDir, "not-a-dir")
 	if err := os.WriteFile(blocker, []byte("x"), 0o644); err != nil {
 		t.Fatalf("WriteFile blocker: %v", err)
 	}
 
 	svc := FileService{ArchiveDir: blocker}
-	err := svc.Archive("PROJ-124", filepath.Join(tmpDir, "mirror"), localDir, issuePath)
+	err := svc.Archive("PROJ-124", mirrorDir, localDir, issuePath)
 	if err == nil {
 		t.Fatal("expected archive error for file archive path")
 	}
@@ -221,5 +243,313 @@ Body.
 	}
 	if !strings.Contains(err.Error(), "parse issue file") {
 		t.Fatalf("error = %q, want 'parse issue file'", err.Error())
+	}
+}
+
+func TestFileService_Archive_rejectsPinnedIssue(t *testing.T) {
+	tmpDir := t.TempDir()
+	localDir := filepath.Join(tmpDir, "live")
+	archiveDir := filepath.Join(localDir, "_archive")
+	mirrorDir := filepath.Join(tmpDir, "mirror")
+	for _, dir := range []string{localDir, archiveDir, mirrorDir} {
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			t.Fatalf("MkdirAll %s: %v", dir, err)
+		}
+	}
+
+	issuePath := filepath.Join(localDir, "PROJ-200.md")
+	content := `---
+key: PROJ-200
+type: story
+project: 'project:PROJ'
+remote_version: '42'
+content_hash: 'hash123'
+sync_time: '2026-06-22T10:00:00Z'
+pinned: true
+---
+## Description
+This issue is pinned.
+
+## Acceptance Criteria
+
+## Definition of Ready
+
+## Notes
+
+## Comments To Add
+
+## Remote Comments
+
+`
+	if err := os.WriteFile(issuePath, []byte(content), 0o644); err != nil {
+		t.Fatalf("WriteFile issue: %v", err)
+	}
+
+	// Write an empty mirror file.
+	if err := os.WriteFile(filepath.Join(mirrorDir, "mirror.yml"), []byte("project:\n  type: project\n  value: PROJ\n"), 0o644); err != nil {
+		t.Fatalf("WriteFile mirror: %v", err)
+	}
+
+	svc := FileService{ArchiveDir: archiveDir}
+	err := svc.Archive("PROJ-200", mirrorDir, localDir, issuePath)
+	if err == nil {
+		t.Fatal("expected archive error for pinned issue")
+	}
+	if !strings.Contains(err.Error(), "not archive-eligible") {
+		t.Fatalf("error = %q, want 'not archive-eligible'", err.Error())
+	}
+
+	// Live file should still exist.
+	if _, statErr := os.Stat(issuePath); statErr != nil {
+		t.Fatalf("live issue should still exist: %v", statErr)
+	}
+}
+
+func TestFileService_Archive_rejectsUnsyncedIssue(t *testing.T) {
+	tmpDir := t.TempDir()
+	localDir := filepath.Join(tmpDir, "live")
+	archiveDir := filepath.Join(localDir, "_archive")
+	mirrorDir := filepath.Join(tmpDir, "mirror")
+	for _, dir := range []string{localDir, archiveDir, mirrorDir} {
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			t.Fatalf("MkdirAll %s: %v", dir, err)
+		}
+	}
+
+	issuePath := filepath.Join(localDir, "PROJ-201.md")
+	content := `---
+key: PROJ-201
+type: story
+project: 'project:PROJ'
+summary: 'Unsynced issue'
+---
+## Description
+This issue has no remote metadata.
+
+## Acceptance Criteria
+
+## Definition of Ready
+
+## Notes
+
+## Comments To Add
+
+## Remote Comments
+
+`
+	if err := os.WriteFile(issuePath, []byte(content), 0o644); err != nil {
+		t.Fatalf("WriteFile issue: %v", err)
+	}
+
+	// Write an empty mirror file.
+	if err := os.WriteFile(filepath.Join(mirrorDir, "mirror.yml"), []byte("project:\n  type: project\n  value: PROJ\n"), 0o644); err != nil {
+		t.Fatalf("WriteFile mirror: %v", err)
+	}
+
+	svc := FileService{ArchiveDir: archiveDir}
+	err := svc.Archive("PROJ-201", mirrorDir, localDir, issuePath)
+	if err == nil {
+		t.Fatal("expected archive error for unsynced issue")
+	}
+	if !strings.Contains(err.Error(), "not archive-eligible") {
+		t.Fatalf("error = %q, want 'not archive-eligible'", err.Error())
+	}
+
+	// Live file should still exist.
+	if _, statErr := os.Stat(issuePath); statErr != nil {
+		t.Fatalf("live issue should still exist: %v", statErr)
+	}
+}
+
+func TestFileService_Archive_rejectsExplicitlyImportedIssue(t *testing.T) {
+	tmpDir := t.TempDir()
+	localDir := filepath.Join(tmpDir, "live")
+	archiveDir := filepath.Join(localDir, "_archive")
+	mirrorDir := filepath.Join(tmpDir, "mirror")
+	for _, dir := range []string{localDir, archiveDir, mirrorDir} {
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			t.Fatalf("MkdirAll %s: %v", dir, err)
+		}
+	}
+
+	issuePath := filepath.Join(localDir, "PROJ-202.md")
+	content := `---
+key: PROJ-202
+type: story
+project: 'project:PROJ'
+remote_version: '42'
+content_hash: 'hash123'
+sync_time: '2026-06-22T10:00:00Z'
+---
+## Description
+This issue is explicitly imported.
+
+## Acceptance Criteria
+
+## Definition of Ready
+
+## Notes
+
+## Comments To Add
+
+## Remote Comments
+
+`
+	if err := os.WriteFile(issuePath, []byte(content), 0o644); err != nil {
+		t.Fatalf("WriteFile issue: %v", err)
+	}
+
+	// Write a mirror file with PROJ-202 explicitly imported.
+	mirrorContent := `project:
+  type: project
+  value: PROJ
+issues:
+- key: PROJ-202
+  reason: manual
+`
+	if err := os.WriteFile(filepath.Join(mirrorDir, "mirror.yml"), []byte(mirrorContent), 0o644); err != nil {
+		t.Fatalf("WriteFile mirror: %v", err)
+	}
+
+	svc := FileService{ArchiveDir: archiveDir}
+	err := svc.Archive("PROJ-202", mirrorDir, localDir, issuePath)
+	if err == nil {
+		t.Fatal("expected archive error for explicitly imported issue")
+	}
+	if !strings.Contains(err.Error(), "not archive-eligible") {
+		t.Fatalf("error = %q, want 'not archive-eligible'", err.Error())
+	}
+
+	// Live file should still exist.
+	if _, statErr := os.Stat(issuePath); statErr != nil {
+		t.Fatalf("live issue should still exist: %v", statErr)
+	}
+}
+
+func TestFileService_Archive_rejectsScopeMember(t *testing.T) {
+	tmpDir := t.TempDir()
+	localDir := filepath.Join(tmpDir, "live")
+	archiveDir := filepath.Join(localDir, "_archive")
+	mirrorDir := filepath.Join(tmpDir, "mirror")
+	for _, dir := range []string{localDir, archiveDir, mirrorDir} {
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			t.Fatalf("MkdirAll %s: %v", dir, err)
+		}
+	}
+
+	issuePath := filepath.Join(localDir, "PROJ-203.md")
+	content := `---
+key: PROJ-203
+type: story
+project: 'project:PROJ'
+remote_version: '42'
+content_hash: 'hash123'
+sync_time: '2026-06-22T10:00:00Z'
+---
+## Description
+This issue is a scope member.
+
+## Acceptance Criteria
+
+## Definition of Ready
+
+## Notes
+
+## Comments To Add
+
+## Remote Comments
+
+`
+	if err := os.WriteFile(issuePath, []byte(content), 0o644); err != nil {
+		t.Fatalf("WriteFile issue: %v", err)
+	}
+
+	// Write a mirror file with PROJ-203 as a scope member.
+	mirrorContent := `project:
+  type: project
+  value: PROJ
+scopes:
+- name: 'current-sprint'
+  type: 'sprint'
+  target: 'Sprint-42'
+scope_members:
+- key: PROJ-203
+  scope: 'current-sprint'
+`
+	if err := os.WriteFile(filepath.Join(mirrorDir, "mirror.yml"), []byte(mirrorContent), 0o644); err != nil {
+		t.Fatalf("WriteFile mirror: %v", err)
+	}
+
+	svc := FileService{ArchiveDir: archiveDir}
+	err := svc.Archive("PROJ-203", mirrorDir, localDir, issuePath)
+	if err == nil {
+		t.Fatal("expected archive error for scope member")
+	}
+	if !strings.Contains(err.Error(), "not archive-eligible") {
+		t.Fatalf("error = %q, want 'not archive-eligible'", err.Error())
+	}
+
+	// Live file should still exist.
+	if _, statErr := os.Stat(issuePath); statErr != nil {
+		t.Fatalf("live issue should still exist: %v", statErr)
+	}
+}
+
+func TestFileService_Archive_allowsArchivingWhenNoMirrorFile(t *testing.T) {
+	// When there is no mirror file, all issues are eligible (empty mirror).
+	tmpDir := t.TempDir()
+	localDir := filepath.Join(tmpDir, "live")
+	archiveDir := filepath.Join(localDir, "_archive")
+	mirrorDir := filepath.Join(tmpDir, "mirror")
+	for _, dir := range []string{localDir, archiveDir, mirrorDir} {
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			t.Fatalf("MkdirAll %s: %v", dir, err)
+		}
+	}
+
+	issuePath := filepath.Join(localDir, "PROJ-300.md")
+	content := `---
+key: PROJ-300
+type: story
+project: 'project:PROJ'
+remote_version: '42'
+content_hash: 'hash123'
+sync_time: '2026-06-22T10:00:00Z'
+resolved_status: 'resolved'
+---
+## Description
+Archivable issue with no mirror file.
+
+## Acceptance Criteria
+
+## Definition of Ready
+
+## Notes
+
+## Comments To Add
+
+## Remote Comments
+
+`
+	if err := os.WriteFile(issuePath, []byte(content), 0o644); err != nil {
+		t.Fatalf("WriteFile issue: %v", err)
+	}
+
+	// No mirror file exists - archive should succeed.
+	svc := FileService{ArchiveDir: archiveDir}
+	err := svc.Archive("PROJ-300", mirrorDir, localDir, issuePath)
+	if err != nil {
+		t.Fatalf("Archive should succeed when no mirror file: %v", err)
+	}
+
+	// Live file should be removed.
+	if _, statErr := os.Stat(issuePath); !os.IsNotExist(statErr) {
+		t.Fatalf("live issue should be removed")
+	}
+
+	// Archived file should exist.
+	archivedPath := filepath.Join(archiveDir, "PROJ-300.md")
+	if _, statErr := os.Stat(archivedPath); statErr != nil {
+		t.Fatalf("archived file should exist: %v", statErr)
 	}
 }
