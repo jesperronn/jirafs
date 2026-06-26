@@ -49,6 +49,13 @@ jirafs use --clear
 
 Refreshes and manages named live mirror scopes.
 
+The primary live mirror scopes are:
+
+- `current-sprint`
+- `my-issues`
+- `backlog`
+- `next-sprint`
+
 Examples:
 
 ```text

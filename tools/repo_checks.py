@@ -28,16 +28,13 @@ DOC_FILES = [
     "docs/project-selection-cli.md",
     "docs/implementation-packets.md",
     "docs/ralph-task-archive.md",
-    "docs/ralph-stream-ws1-schema-codec.md",
-    "docs/ralph-stream-ws2-settings-references.md",
-    "docs/ralph-stream-ws3-jira-export.md",
-    "docs/ralph-parallel-workflow.md",
 ]
 
 SCRIPT_FILES = [
-    "bin/integrate_stream_commit",
     "bin/lint",
     "bin/test",
+    "bin/verify",
+    "bin/handoff",
     "tools/repo_checks.py",
     "tools/lint_repo.py",
     "tools/coverage_gate.py",

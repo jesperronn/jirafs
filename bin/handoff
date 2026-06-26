@@ -2,20 +2,84 @@
 
 set -euo pipefail
 
+# Hand off the current branch to `main` by fast-forwarding the main ref.
+# Called at the end of one ralph iteration in `ralphs/execute-tasks/`.
+#
+# Flow:
+#   1. Refuse on dirty worktree, on main itself, or on detached HEAD.
+#   2. Short-circuit if HEAD == main (no work to merge).
+#   3. Acquire a repo-wide lock so parallel worktrees serialize.
+#   4. Try ff-merge via `git update-ref` (no checkout of main needed).
+#   5. On non-ff: rebase main into HEAD; re-run bin/verify; ff-merge again.
+#   6. On rebase conflict: abort the rebase so the worktree returns to a
+#      clean state, then exit with `blocked:`.
+#
+# Output line is the loop's status signal:
+#   clean: no new commits
+#   done: <reason>
+#   blocked: <reason>
+
+LOCK_TIMEOUT_SECS=300
+
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "${REPO_ROOT}"
 
-MAIN_SHA=$(git rev-parse main)
-HEAD_SHA=$(git rev-parse HEAD)
+# --- Pre-flight ---------------------------------------------------------
 
-# Nothing to merge — worker did no commits
-if [ "$HEAD_SHA" = "$MAIN_SHA" ]; then
+if ! git diff --quiet || ! git diff --cached --quiet; then
+  echo "blocked: worktree has uncommitted changes"
+  exit 1
+fi
+
+current_branch="$(git symbolic-ref --quiet --short HEAD || true)"
+if [ -z "${current_branch}" ]; then
+  echo "blocked: HEAD is detached"
+  exit 1
+fi
+if [ "${current_branch}" = "main" ]; then
+  echo "blocked: refusing to hand off main to itself"
+  exit 1
+fi
+
+MAIN_SHA="$(git rev-parse main)"
+HEAD_SHA="$(git rev-parse HEAD)"
+
+if [ "${HEAD_SHA}" = "${MAIN_SHA}" ]; then
   echo "clean: no new commits"
   exit 0
 fi
 
+# --- Repo-wide lock -----------------------------------------------------
+#
+# Parallel worktrees share one main ref via the common .git dir, so a
+# mkdir-based lock serializes all handoffs across worktrees.
+
+common_git="$(git rev-parse --git-common-dir)"
+case "${common_git}" in
+  /*) ;;
+  *)  common_git="$(cd "${common_git}" && pwd)" ;;
+esac
+lock_dir="${common_git}/handoff.lock"
+
+waited=0
+while ! mkdir "${lock_dir}" 2>/dev/null; do
+  if [ "${waited}" -ge "${LOCK_TIMEOUT_SECS}" ]; then
+    echo "blocked: timed out after ${LOCK_TIMEOUT_SECS}s waiting for ${lock_dir}"
+    echo "blocked: if no other handoff is running, remove the directory manually" >&2
+    exit 1
+  fi
+  if [ "${waited}" -eq 0 ]; then
+    echo "handoff: another handoff is running — waiting on ${lock_dir}" >&2
+  fi
+  sleep 1
+  waited=$((waited + 1))
+done
+trap 'rmdir "${lock_dir}" 2>/dev/null || true' EXIT
+
+# --- Try ff-merge -------------------------------------------------------
+
 merge_ff() {
-  # Move main to HEAD without checking it out, only if it is a fast-forward
+  # Move main to HEAD without checking it out, only if it's a fast-forward.
   if git merge-base --is-ancestor main HEAD; then
     git update-ref refs/heads/main HEAD
     return 0
@@ -28,9 +92,18 @@ if merge_ff; then
   exit 0
 fi
 
-# main has moved ahead — rebase, re-verify, retry
-git rebase main || { echo "blocked: rebase conflict"; exit 1; }
-bin/verify   || { echo "blocked: verify failed after rebase"; exit 1; }
+# --- Main moved ahead: rebase, re-verify, retry -------------------------
+
+if ! git rebase main; then
+  git rebase --abort >/dev/null 2>&1 || true
+  echo "blocked: rebase conflict"
+  exit 1
+fi
+
+if ! bin/verify; then
+  echo "blocked: bin/verify failed after rebase"
+  exit 1
+fi
 
 if merge_ff; then
   echo "done: fast-forward merged to main after rebase"

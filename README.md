@@ -54,7 +54,8 @@ What is still rough:
 - the README has historically assumed the deeper docs carry most of the
   operator story
 - the CLI does not yet present one obvious “show me status” command
-- the CLI does not yet present one obvious “next step” hint after each command
+- troubleshooting output should keep "useful next step" hints as concrete
+  copy-pasteable commands, not just descriptive text
 - live Jira behavior still needs real-instance shakeout and better diagnostics
 
 ## Obvious Next Steps
@@ -74,6 +75,8 @@ If something fails:
 - scope issue: inspect `<mirror_dir>/mirror.yml`
 - project resolution issue: run `jirafs use --project <name>`
 - live Jira issue: retry with a single issue export before a whole-scope refresh
+- empty sync scope: run `jirafs mirror refresh current-sprint` or
+  `jirafs mirror refresh my-issues` before `jirafs sync`
 
 ## Testing Policy
 
@@ -138,9 +141,7 @@ The most important commands right now are:
 - [Project Selection CLI](docs/project-selection-cli.md)
 - [Implementation Packets](docs/implementation-packets.md)
 - [Ralph Task Archive](docs/ralph-task-archive.md)
-- [Ralph Parallel Workflow](docs/ralph-parallel-workflow.md)
 - [Pre-Live Parallel Plan](docs/pre-live-parallel-plan.md)
-- [Ralph Stream WS4: Plan And Sync](docs/ralph-stream-ws4-plan-sync.md)
 
 Read these after the README:
 
@@ -178,9 +179,7 @@ The execution plan for that work now lives in:
 - [Project Selection CLI](docs/project-selection-cli.md)
 - [Implementation Packets](docs/implementation-packets.md)
 - [Ralph Task Archive](docs/ralph-task-archive.md)
-- [Ralph Parallel Workflow](docs/ralph-parallel-workflow.md)
 - [Pre-Live Parallel Plan](docs/pre-live-parallel-plan.md)
-- [Ralph Stream WS4: Plan And Sync](docs/ralph-stream-ws4-plan-sync.md)
 
 ## Language Direction
 
