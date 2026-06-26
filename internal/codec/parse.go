@@ -12,24 +12,29 @@ import (
 // ParseIssue parses an issue Markdown document into a structured model.
 // It handles both synced and draft issues, parsing the frontmatter and
 // splitting the body into sections.
-func ParseIssue(content string) (*schema.Issue, error) {
+//
+// On failure, ParseIssue returns a *schema.ParseError whose Kind identifies
+// the failure category (ErrKindNoClosingDelimiter, ErrKindInvalidYAML,
+// ErrKindUnknownSection). Callers can inspect Pe.Kind to determine the
+// specific error condition without string matching.
+func ParseIssue(content string) (*schema.Issue, *schema.ParseError) {
 	// Split the content into frontmatter and body
-	frontmatter, body, err := splitFrontmatter(content)
-	if err != nil {
-		return nil, fmt.Errorf("failed to parse frontmatter: %w", err)
+	frontmatter, body, pe := splitFrontmatter(content)
+	if pe != nil {
+		return nil, pe
 	}
 
 	// Parse the frontmatter into a schema model
-	issue, err := parseFrontmatter(frontmatter)
-	if err != nil {
-		return nil, fmt.Errorf("failed to parse frontmatter: %w", err)
+	issue, pe := parseFrontmatter(frontmatter)
+	if pe != nil {
+		return nil, pe
 	}
 
 	// Parse body into sections if needed
 	if body != "" {
-		sections, err := parseSections(body)
-		if err != nil {
-			return nil, fmt.Errorf("failed to parse sections: %w", err)
+		sections, pe := parseSections(body)
+		if pe != nil {
+			return nil, pe
 		}
 		issue.Sections = sections
 	}
@@ -38,7 +43,9 @@ func ParseIssue(content string) (*schema.Issue, error) {
 }
 
 // splitFrontmatter separates the YAML frontmatter from the rest of the document.
-func splitFrontmatter(content string) (string, string, error) {
+// Returns the frontmatter string, the body string, and a *schema.ParseError
+// if the frontmatter is malformed (missing closing delimiter).
+func splitFrontmatter(content string) (string, string, *schema.ParseError) {
 	content = strings.TrimSpace(content)
 	if !strings.HasPrefix(content, "---") {
 		return "", content, nil
@@ -47,7 +54,10 @@ func splitFrontmatter(content string) (string, string, error) {
 	// Find the end of the frontmatter (second ---)
 	endFrontmatter := strings.Index(content[3:], "---")
 	if endFrontmatter == -1 {
-		return "", content, fmt.Errorf("malformed frontmatter: missing closing ---")
+		return "", content, &schema.ParseError{
+			Kind: schema.ErrKindNoClosingDelimiter,
+			Msg:  "malformed frontmatter: missing closing ---",
+		}
 	}
 
 	endFrontmatter += 3 // Adjust for the offset
@@ -58,7 +68,9 @@ func splitFrontmatter(content string) (string, string, error) {
 }
 
 // parseFrontmatter parses the YAML frontmatter into a schema.Issue.
-func parseFrontmatter(frontmatter string) (*schema.Issue, error) {
+// On YAML parse failure, returns a *schema.ParseError with Kind
+// ErrKindInvalidYAML.
+func parseFrontmatter(frontmatter string) (*schema.Issue, *schema.ParseError) {
 	// Remove the opening and closing --- markers
 	frontmatter = strings.TrimPrefix(frontmatter, "---")
 	frontmatter = strings.TrimSuffix(frontmatter, "---")
@@ -67,7 +79,10 @@ func parseFrontmatter(frontmatter string) (*schema.Issue, error) {
 	// Parse YAML into a map
 	var raw map[string]interface{}
 	if err := yaml.Unmarshal([]byte(frontmatter), &raw); err != nil {
-		return nil, fmt.Errorf("failed to parse YAML: %w", err)
+		return nil, &schema.ParseError{
+			Kind: schema.ErrKindInvalidYAML,
+			Msg:  err.Error(),
+		}
 	}
 
 	// Create a new issue instance
@@ -202,35 +217,40 @@ func parseLinkedIssues(linkedIssues interface{}) []schema.LinkedIssue {
 }
 
 // parseSections splits the body into sections by ## headers.
-func parseSections(body string) (map[schema.FixedSectionName]string, error) {
+// On unknown section name, returns a *schema.ParseError with Kind
+// ErrKindUnknownSection.
+func parseSections(body string) (map[schema.FixedSectionName]string, *schema.ParseError) {
 	sections := make(map[schema.FixedSectionName]string)
 
 	// Normalize line endings and split into lines
 	lines := strings.Split(strings.ReplaceAll(body, "\r\n", "\n"), "\n")
-	
+
 	// Keep track of current section name and content
 	var currentSectionName schema.FixedSectionName
 	var currentSectionContent strings.Builder
-	
+
 	for i, line := range lines {
 		line = strings.TrimSpace(line)
-		
+
 		// Check if this is a new section header (## Something)
 		if strings.HasPrefix(line, "## ") {
 			// Save the previous section if we had one
 			if currentSectionName != "" {
 				sections[currentSectionName] = strings.TrimSpace(currentSectionContent.String())
 			}
-			
+
 			// Start new section
 			sectionName := strings.TrimSpace(line[3:]) // Remove "## "
-			
+
 			// Check if it's a known fixed section name
 			fixedSectionName := schema.FixedSectionName(sectionName)
 			if !fixedSectionName.IsKnown() {
-				return nil, fmt.Errorf("unknown section name: %s", sectionName)
+				return nil, &schema.ParseError{
+					Kind: schema.ErrKindUnknownSection,
+					Msg:  fmt.Sprintf("unknown section name: %s", sectionName),
+				}
 			}
-			
+
 			currentSectionName = fixedSectionName
 			currentSectionContent.Reset()
 		} else if currentSectionName != "" {
@@ -241,11 +261,11 @@ func parseSections(body string) (map[schema.FixedSectionName]string, error) {
 			currentSectionContent.WriteString(line)
 		}
 	}
-	
+
 	// Save the last section if there was one
 	if currentSectionName != "" {
 		sections[currentSectionName] = strings.TrimSpace(currentSectionContent.String())
 	}
-	
+
 	return sections, nil
 }

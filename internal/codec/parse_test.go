@@ -44,8 +44,8 @@ This is the acceptance criteria content.
 This is the definition of ready content.
 `
 
-		issue, err := ParseIssue(content)
-		assert.NoError(t, err)
+		issue, pe := ParseIssue(content)
+		assert.Nil(t, pe)
 		assert.NotNil(t, issue)
 
 		// Check identity fields
@@ -95,8 +95,8 @@ schema_version: "1.0"
 This is a draft issue description.
 `
 
-		issue, err := ParseIssue(content)
-		assert.NoError(t, err)
+		issue, pe := ParseIssue(content)
+		assert.Nil(t, pe)
 		assert.NotNil(t, issue)
 
 		// Check identity fields
@@ -130,8 +130,8 @@ This is the description content.
 This is the acceptance criteria content.
 `
 
-		issue, err := ParseIssue(content)
-		assert.NoError(t, err)
+		issue, pe := ParseIssue(content)
+		assert.Nil(t, pe)
 		assert.NotNil(t, issue)
 
 		// Should parse sections even without frontmatter
@@ -154,8 +154,50 @@ This is the description content.
 This should cause an error.
 `
 
-		_, err := ParseIssue(content)
-		assert.Error(t, err)
-		assert.Contains(t, err.Error(), "unknown section name: Unknown Section")
+		_, pe := ParseIssue(content)
+		assert.Error(t, pe)
+		assert.Equal(t, schema.ErrKindUnknownSection, pe.Kind)
+		assert.Contains(t, pe.Error(), "unknown section name: Unknown Section")
+	})
+
+	t.Run("parse issue with missing closing delimiter returns structured error", func(t *testing.T) {
+		content := `---
+key: "ABC-999"
+type: "bug"
+project: "project://PROJ"
+schema_version: "1.0"
+summary: "Missing closing delimiter"
+## Description
+No closing delimiter here.
+`
+
+		_, pe := ParseIssue(content)
+		assert.Error(t, pe)
+		assert.Equal(t, schema.ErrKindNoClosingDelimiter, pe.Kind)
+		assert.Contains(t, pe.Error(), "missing closing ---")
+	})
+
+	t.Run("parse issue with invalid YAML returns structured error", func(t *testing.T) {
+		content := `---
+key: "ABC-000"
+  invalid: yaml: [broken
+project: "project://PROJ"
+---
+`
+
+		_, pe := ParseIssue(content)
+		assert.Error(t, pe)
+		assert.Equal(t, schema.ErrKindInvalidYAML, pe.Kind)
+		assert.NotEmpty(t, pe.Msg)
+	})
+
+	t.Run("structured error implements Error() interface", func(t *testing.T) {
+		pe := &schema.ParseError{
+			Kind: schema.ErrKindInvalidYAML,
+			Msg:  "test message",
+		}
+		errStr := pe.Error()
+		assert.Contains(t, errStr, "invalid_yaml")
+		assert.Contains(t, errStr, "test message")
 	})
 }

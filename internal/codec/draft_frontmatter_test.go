@@ -17,8 +17,8 @@ schema_version: "1.0"
 ---
 `
 
-		issue, err := ParseIssue(frontmatter)
-		assert.NoError(t, err)
+		issue, pe := ParseIssue(frontmatter)
+		assert.Nil(t, pe)
 		assert.NotNil(t, issue)
 
 		// Verify the parsed fields match expectations for draft issues
@@ -70,8 +70,8 @@ linked_issues:
 ---
 `
 
-		issue, err := ParseIssue(frontmatter)
-		assert.NoError(t, err)
+		issue, pe := ParseIssue(frontmatter)
+		assert.Nil(t, pe)
 		assert.NotNil(t, issue)
 
 		// Verify identity fields
@@ -119,8 +119,8 @@ The login page crashes when username contains special characters.
 - Proper error message shown for invalid characters
 `
 
-		issue, err := ParseIssue(content)
-		assert.NoError(t, err)
+		issue, pe := ParseIssue(content)
+		assert.Nil(t, pe)
 		assert.NotNil(t, issue)
 
 		assert.Equal(t, schema.IssueKey("ABC-999"), issue.Identity.Key)
@@ -147,8 +147,8 @@ labels:
 ---
 `
 
-		issue, err := ParseIssue(frontmatter)
-		assert.NoError(t, err)
+		issue, pe := ParseIssue(frontmatter)
+		assert.Nil(t, pe)
 		assert.NotNil(t, issue)
 
 		assert.Equal(t, schema.IssueKey("ABC-111"), issue.Identity.Key)
@@ -176,8 +176,8 @@ linked_issues: []
 ---
 `
 
-		issue, err := ParseIssue(frontmatter)
-		assert.NoError(t, err)
+		issue, pe := ParseIssue(frontmatter)
+		assert.Nil(t, pe)
 		assert.NotNil(t, issue)
 
 		assert.Equal(t, schema.IssueKey("ABC-222"), issue.Identity.Key)
@@ -194,8 +194,8 @@ linked_issues: []
 Some description content.
 `
 
-		issue, err := ParseIssue(content)
-		assert.NoError(t, err)
+		issue, pe := ParseIssue(content)
+		assert.Nil(t, pe)
 		assert.NotNil(t, issue)
 
 		// Should parse sections even without frontmatter
@@ -210,8 +210,8 @@ Some description content.
 ---
 `
 
-		issue, err := ParseIssue(frontmatter)
-		assert.NoError(t, err)
+		issue, pe := ParseIssue(frontmatter)
+		assert.Nil(t, pe)
 		assert.NotNil(t, issue)
 		assert.True(t, issue.IsZero())
 	})
@@ -225,8 +225,8 @@ schema_version: "1.0"
 ---
 `
 
-		issue, err := ParseIssue(frontmatter)
-		assert.NoError(t, err)
+		issue, pe := ParseIssue(frontmatter)
+		assert.Nil(t, pe)
 		assert.NotNil(t, issue)
 		assert.False(t, issue.IsZero())
 	})

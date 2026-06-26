@@ -38,8 +38,8 @@ linked_issues:
 
 		// This test verifies that we can parse a valid synced issue frontmatter
 		// into the schema model, which is what task B030a requires.
-		issue, err := ParseIssue(frontmatter)
-		assert.NoError(t, err)
+		issue, pe := ParseIssue(frontmatter)
+		assert.Nil(t, pe)
 		assert.NotNil(t, issue)
 
 		// Verify the parsed fields match expectations for synced issues
@@ -83,8 +83,8 @@ schema_version: "1.0"
 
 		// This test verifies that we can parse a valid draft issue frontmatter
 		// into the schema model, which is what task B030b would require.
-		issue, err := ParseIssue(frontmatter)
-		assert.NoError(t, err)
+		issue, pe := ParseIssue(frontmatter)
+		assert.Nil(t, pe)
 		assert.NotNil(t, issue)
 
 		// Verify the parsed fields match expectations for draft issues
