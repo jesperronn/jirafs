@@ -7,7 +7,11 @@ MIN_BACKOFF=1
 MAX_BACKOFF=3
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-cd "${REPO_ROOT}"
+# Skip cd when INTEGRATE_RETRY_TEST=1 to avoid changing to the actual
+# repo root (which may have uncommitted changes) during retry tests.
+if [ "${INTEGRATE_RETRY_TEST:-}" != "1" ]; then
+  cd "${REPO_ROOT}"
+fi
 
 target="${1:-main}"
 
@@ -17,10 +21,14 @@ if ! git diff --quiet || ! git diff --cached --quiet; then
 fi
 
 attempt=1
-while [ "${attempt}" -le "${MAX_ATTEMPTS}" ]; do
+while true; do
   echo "integrate: attempt ${attempt}/${MAX_ATTEMPTS} for HEAD -> ${target}"
 
-  git rebase "${target}"
+  # Rebase onto target; stop before push on failure.
+  if ! git rebase "${target}"; then
+    echo "integrate: rebase failed — stopping before push" >&2
+    exit 1
+  fi
 
   head_commit="$(git rev-parse HEAD)"
   target_commit="$(git rev-parse "${target}")"
@@ -36,15 +44,27 @@ while [ "${attempt}" -le "${MAX_ATTEMPTS}" ]; do
     exit 0
   fi
 
-  bin/test
-  bin/lint
+  # Gate: test and lint must pass before push.
+  # Skip when INTEGRATE_RETRY_TEST=1 to avoid recursive bin/test loops
+  # in the retry test's own setup.
+  if [ "${INTEGRATE_RETRY_TEST:-}" != "1" ]; then
+    if ! bin/test; then
+      echo "integrate: test failed — stopping before push" >&2
+      exit 1
+    fi
+    if ! bin/lint; then
+      echo "integrate: lint failed — stopping before push" >&2
+      exit 1
+    fi
+  fi
 
   if git push . "${head_commit}:${target}"; then
     echo "integrate: pushed ${head_commit} to ${target}"
     exit 0
   fi
 
-  if [ "${attempt}" -eq "${MAX_ATTEMPTS}" ]; then
+  echo "integrate: push failed after ${attempt}/${MAX_ATTEMPTS} attempt" >&2
+  if [ "${attempt}" -ge "${MAX_ATTEMPTS}" ]; then
     echo "integrate: push failed after ${MAX_ATTEMPTS} attempts" >&2
     exit 1
   fi

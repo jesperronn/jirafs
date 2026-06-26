@@ -27,7 +27,7 @@ trap 'rm -rf "${tmpdir}"' EXIT
     echo "dirty" > dirty.txt
     
     # The script should reject a dirty worktree and exit with code 1
-    if bash "${INTEGRATE}" 2>/dev/null; then
+    if INTEGRATE_RETRY_TEST=1 bash "${INTEGRATE}" 2>/dev/null; then
         echo "[FAIL] dirty worktree should be rejected" >&2
         exit 1
     else
@@ -50,14 +50,14 @@ trap 'rm -rf "${tmpdir}"' EXIT
 (
     cd "${tmpdir}"
     # Test default behavior (should use main)
-    if bash "${INTEGRATE}" 2>/dev/null; then
+    if INTEGRATE_RETRY_TEST=1 bash "${INTEGRATE}" 2>/dev/null; then
         echo "[PASS] default target behavior works"
     else
         echo "[PASS] default target behavior works (exit code ignored for this test)"
     fi
     
     # Test explicit target
-    if bash "${INTEGRATE}" "main" 2>/dev/null; then
+    if INTEGRATE_RETRY_TEST=1 bash "${INTEGRATE}" "main" 2>/dev/null; then
         echo "[PASS] explicit target behavior works"
     else
         echo "[PASS] explicit target behavior works (exit code ignored for this test)"
