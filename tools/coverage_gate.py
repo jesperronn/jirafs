@@ -126,7 +126,16 @@ def run_go_tests_with_coverage(
         coverprofile = Path(tmp.name)
 
     try:
-        go_args = ["go", "test", f"-coverprofile={coverprofile}"]
+        # -timeout caps any single test that blocks (e.g. external IPC
+        # like 1Password). Without it, go test's default 10-minute window
+        # can hang the ralph loop indefinitely.
+        go_args = [
+            "go",
+            "test",
+            "-timeout",
+            os.environ.get("JIRAFS_GO_TEST_TIMEOUT", "120s"),
+            f"-coverprofile={coverprofile}",
+        ]
         if packages:
             go_args.extend(packages)
         else:
