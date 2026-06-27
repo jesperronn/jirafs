@@ -245,12 +245,20 @@ mirror_dir = "` + jirafsDir + `/jira/platform"
 		t.Fatal(err)
 	}
 
-	output := runMainHelperWithHome(t, homeDir, "plan")
-	if output.exitCode != 1 {
-		t.Fatalf("exitCode = %d, want 1", output.exitCode)
+	// Create the mirror directory so the project can be resolved.
+	mirrorDir := filepath.Join(jirafsDir, "jira", "platform")
+	if err := os.MkdirAll(mirrorDir, 0o755); err != nil {
+		t.Fatal(err)
 	}
-	if !strings.Contains(output.stderr, "jirafs plan: missing issue key") {
-		t.Fatalf("stderr = %q, want missing issue key message", output.stderr)
+
+	output := runMainHelperWithHome(t, homeDir, "plan", "--cwd", mirrorDir)
+	// When no issue key is provided, plan resolves the project and lists
+	// local issues (possibly empty). Exit code 0 is expected.
+	if output.exitCode != 0 {
+		t.Fatalf("exitCode = %d, want 0, stderr = %q", output.exitCode, output.stderr)
+	}
+	if !strings.Contains(output.stderr, "no local directories configured") {
+		t.Fatalf("stderr = %q, want no local directories configured", output.stderr)
 	}
 }
 

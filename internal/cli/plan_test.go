@@ -14,11 +14,11 @@ import (
 )
 
 // TestRunPlan_NoArgs verifies that calling RunPlan with no arguments
-// returns exit code 1 and prints a usage hint.
+// returns exit code 0 and lists local issues (possibly empty).
 func TestRunPlan_NoArgs(t *testing.T) {
 	exit := RunPlan([]string{})
-	if exit != 1 {
-		t.Errorf("RunPlan([]) = %d, want 1", exit)
+	if exit != 0 {
+		t.Errorf("RunPlan([]) = %d, want 0", exit)
 	}
 }
 
@@ -28,6 +28,384 @@ func TestRunPlan_UnknownSubcommand(t *testing.T) {
 	exit := RunPlan([]string{"bogus"})
 	if exit != 1 {
 		t.Errorf("RunPlan([\"bogus\"]) = %d, want 1", exit)
+	}
+}
+
+// TestRunPlan_NoKey_NoProject verifies that plan without an issue key
+// and without a resolvable project returns exit code 1.
+func TestRunPlan_NoKey_NoProject(t *testing.T) {
+	tmpDir := t.TempDir()
+	homeDir := writeSettings(t, tmpDir)
+	oldHome := os.Getenv("HOME")
+	os.Setenv("HOME", homeDir)
+	defer os.Setenv("HOME", oldHome)
+
+	_, stderr := withPlanTestIO(t)
+	exit := RunPlan([]string{"--cwd", filepath.Join(tmpDir, "outside")})
+	if exit != 1 {
+		t.Fatalf("RunPlan([\"--cwd\", ...]) = %d, want 1", exit)
+	}
+	if !strings.Contains(stderr.String(), "no project resolved") {
+		t.Fatalf("stderr = %q, want no project resolved", stderr.String())
+	}
+}
+
+// TestRunPlan_NoKey_NoLocalDirs verifies that plan without an issue key
+// but with a project that has no local_dirs returns exit code 0.
+func TestRunPlan_NoKey_NoLocalDirs(t *testing.T) {
+	tmpDir := t.TempDir()
+	homeDir := writeSettings(t, tmpDir)
+
+	// Create settings with a project that has no local_dirs.
+	settingsTOML := `version = 1
+
+[instances.default]
+base_url = "https://example.atlassian.net"
+auth_type = "basic"
+
+[projects.test]
+key = "TEST"
+instance = "default"
+mirror_dir = "` + filepath.Join(tmpDir, "mirror") + `"
+`
+	jirafsDir := filepath.Join(homeDir, ".jirafs")
+	if err := os.MkdirAll(jirafsDir, 0o755); err != nil {
+		t.Fatalf("MkdirAll: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(jirafsDir, "settings.toml"), []byte(settingsTOML), 0o644); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+
+	oldHome := os.Getenv("HOME")
+	os.Setenv("HOME", homeDir)
+	defer os.Setenv("HOME", oldHome)
+
+	stdout, stderr := withPlanTestIO(t)
+	exit := RunPlan([]string{"--project", "test"})
+	if exit != 0 {
+		t.Fatalf("RunPlan([\"--project\", \"test\"]) = %d, stderr = %q, want 0", exit, stderr.String())
+	}
+	output := stdout.String()
+	if !strings.Contains(output, "no local directories configured") {
+		t.Fatalf("stdout = %q, want no local directories configured", output)
+	}
+}
+
+// TestRunPlan_NoKey_NoIssueFiles verifies that plan without an issue key
+// but with local_dirs that contain no issue files returns exit code 0.
+func TestRunPlan_NoKey_NoIssueFiles(t *testing.T) {
+	tmpDir := t.TempDir()
+	homeDir := writeSettings(t, tmpDir)
+
+	// Create an empty local directory.
+	localDir := filepath.Join(tmpDir, "local")
+	if err := os.MkdirAll(localDir, 0o755); err != nil {
+		t.Fatalf("MkdirAll: %v", err)
+	}
+
+	settingsTOML := `version = 1
+
+[instances.default]
+base_url = "https://example.atlassian.net"
+auth_type = "basic"
+
+[projects.test]
+key = "TEST"
+instance = "default"
+mirror_dir = "` + filepath.Join(tmpDir, "mirror") + `"
+local_dirs = ["` + localDir + `"]
+`
+	jirafsDir := filepath.Join(homeDir, ".jirafs")
+	if err := os.MkdirAll(jirafsDir, 0o755); err != nil {
+		t.Fatalf("MkdirAll: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(jirafsDir, "settings.toml"), []byte(settingsTOML), 0o644); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+
+	oldHome := os.Getenv("HOME")
+	os.Setenv("HOME", homeDir)
+	defer os.Setenv("HOME", oldHome)
+
+	stdout, stderr := withPlanTestIO(t)
+	exit := RunPlan([]string{"--project", "test"})
+	if exit != 0 {
+		t.Fatalf("RunPlan([\"--project\", \"test\"]) = %d, stderr = %q, want 0", exit, stderr.String())
+	}
+	output := stdout.String()
+	if !strings.Contains(output, "no issue files found") {
+		t.Fatalf("stdout = %q, want no issue files found", output)
+	}
+}
+
+// TestRunPlan_NoKey_ListIssues verifies that plan without an issue key
+// lists all local issues with their planned operations.
+func TestRunPlan_NoKey_ListIssues(t *testing.T) {
+	tmpDir := t.TempDir()
+	homeDir := writeSettings(t, tmpDir)
+
+	// Create local issue files.
+	localDir := filepath.Join(tmpDir, "local")
+	if err := os.MkdirAll(localDir, 0o755); err != nil {
+		t.Fatalf("MkdirAll: %v", err)
+	}
+
+	issue1Content := `---
+key: PROJ-1
+type: story
+project:
+  type: project
+  value: PROJ
+summary: First issue
+---
+
+Summary: First issue
+`
+	issue2Content := `---
+key: PROJ-2
+type: story
+project:
+  type: project
+  value: PROJ
+summary: Second issue
+---
+
+Summary: Second issue
+`
+	if err := os.WriteFile(filepath.Join(localDir, "PROJ-1.md"), []byte(issue1Content), 0o644); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(localDir, "PROJ-2.md"), []byte(issue2Content), 0o644); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+
+	settingsTOML := `version = 1
+
+[instances.default]
+base_url = "https://example.atlassian.net"
+auth_type = "basic"
+
+[projects.test]
+key = "TEST"
+instance = "default"
+mirror_dir = "` + filepath.Join(tmpDir, "mirror") + `"
+local_dirs = ["` + localDir + `"]
+`
+	jirafsDir := filepath.Join(homeDir, ".jirafs")
+	if err := os.MkdirAll(jirafsDir, 0o755); err != nil {
+		t.Fatalf("MkdirAll: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(jirafsDir, "settings.toml"), []byte(settingsTOML), 0o644); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+
+	oldHome := os.Getenv("HOME")
+	os.Setenv("HOME", homeDir)
+	defer os.Setenv("HOME", oldHome)
+
+	fake := jira.NewFakeTransport()
+	fake.SetIssue("PROJ-1", &schema.Issue{
+		Identity: schema.IssueIdentity{
+			Key:     "PROJ-1",
+			Type:    "story",
+			Project: schema.TypedRef{Type: schema.RefProject, Value: "PROJ"},
+		},
+		Summary: "First issue",
+	})
+	fake.SetIssue("PROJ-2", &schema.Issue{
+		Identity: schema.IssueIdentity{
+			Key:     "PROJ-2",
+			Type:    "story",
+			Project: schema.TypedRef{Type: schema.RefProject, Value: "PROJ"},
+		},
+		Summary: "Second issue",
+	})
+	withPlanClientFactory(t, func(*config.Settings, *context.Context, string) (jira.Client, error) {
+		return fake, nil
+	})
+	stdout, stderr := withPlanTestIO(t)
+
+	exit := RunPlan([]string{"--project", "test"})
+	if exit != 0 {
+		t.Fatalf("RunPlan([\"--project\", \"test\"]) = %d, stderr = %q, want 0", exit, stderr.String())
+	}
+
+	output := stdout.String()
+	if !strings.Contains(output, "PROJ-1") {
+		t.Fatalf("stdout = %q, want PROJ-1", output)
+	}
+	if !strings.Contains(output, "PROJ-2") {
+		t.Fatalf("stdout = %q, want PROJ-2", output)
+	}
+	if !strings.Contains(output, "no changes needed") {
+		t.Fatalf("stdout = %q, want no changes needed", output)
+	}
+	if !strings.Contains(output, "2 issue(s)") {
+		t.Fatalf("stdout = %q, want 2 issue(s)", output)
+	}
+}
+
+// TestRunPlan_NoKey_ListIssues_WithChanges verifies that plan without an
+// issue key lists issues with planned operations when changes exist.
+func TestRunPlan_NoKey_ListIssues_WithChanges(t *testing.T) {
+	tmpDir := t.TempDir()
+	homeDir := writeSettings(t, tmpDir)
+
+	// Create a local issue with a different summary.
+	localDir := filepath.Join(tmpDir, "local")
+	if err := os.MkdirAll(localDir, 0o755); err != nil {
+		t.Fatalf("MkdirAll: %v", err)
+	}
+	issueContent := `---
+key: PROJ-1
+type: story
+project:
+  type: project
+  value: PROJ
+summary: Local modified
+---
+
+Summary: Local modified
+`
+	if err := os.WriteFile(filepath.Join(localDir, "PROJ-1.md"), []byte(issueContent), 0o644); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+
+	settingsTOML := `version = 1
+
+[instances.default]
+base_url = "https://example.atlassian.net"
+auth_type = "basic"
+
+[projects.test]
+key = "TEST"
+instance = "default"
+mirror_dir = "` + filepath.Join(tmpDir, "mirror") + `"
+local_dirs = ["` + localDir + `"]
+`
+	jirafsDir := filepath.Join(homeDir, ".jirafs")
+	if err := os.MkdirAll(jirafsDir, 0o755); err != nil {
+		t.Fatalf("MkdirAll: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(jirafsDir, "settings.toml"), []byte(settingsTOML), 0o644); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+
+	oldHome := os.Getenv("HOME")
+	os.Setenv("HOME", homeDir)
+	defer os.Setenv("HOME", oldHome)
+
+	fake := jira.NewFakeTransport()
+	fake.SetIssue("PROJ-1", &schema.Issue{
+		Identity: schema.IssueIdentity{
+			Key:     "PROJ-1",
+			Type:    "story",
+			Project: schema.TypedRef{Type: schema.RefProject, Value: "PROJ"},
+		},
+		Summary: "Remote original",
+	})
+	withPlanClientFactory(t, func(*config.Settings, *context.Context, string) (jira.Client, error) {
+		return fake, nil
+	})
+	stdout, stderr := withPlanTestIO(t)
+
+	exit := RunPlan([]string{"--project", "test"})
+	if exit != 0 {
+		t.Fatalf("RunPlan([\"--project\", \"test\"]) = %d, stderr = %q, want 0", exit, stderr.String())
+	}
+
+	output := stdout.String()
+	if !strings.Contains(output, "PROJ-1") {
+		t.Fatalf("stdout = %q, want PROJ-1", output)
+	}
+	if !strings.Contains(output, "1 operation(s)") {
+		t.Fatalf("stdout = %q, want 1 operation(s)", output)
+	}
+	if !strings.Contains(output, "summary") {
+		t.Fatalf("stdout = %q, want summary field", output)
+	}
+}
+
+// TestRunPlan_NoKey_SkipsUnparseable verifies that plan without an issue
+// key skips files that cannot be parsed as issues.
+func TestRunPlan_NoKey_SkipsUnparseable(t *testing.T) {
+	tmpDir := t.TempDir()
+	homeDir := writeSettings(t, tmpDir)
+
+	// Create a parseable issue and a non-issue file.
+	localDir := filepath.Join(tmpDir, "local")
+	if err := os.MkdirAll(localDir, 0o755); err != nil {
+		t.Fatalf("MkdirAll: %v", err)
+	}
+	issueContent := `---
+key: PROJ-1
+type: story
+project:
+  type: project
+  value: PROJ
+summary: Valid issue
+---
+
+Summary: Valid issue
+`
+	if err := os.WriteFile(filepath.Join(localDir, "PROJ-1.md"), []byte(issueContent), 0o644); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+	// Non-issue .md file.
+	if err := os.WriteFile(filepath.Join(localDir, "README.md"), []byte("not an issue"), 0o644); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+
+	settingsTOML := `version = 1
+
+[instances.default]
+base_url = "https://example.atlassian.net"
+auth_type = "basic"
+
+[projects.test]
+key = "TEST"
+instance = "default"
+mirror_dir = "` + filepath.Join(tmpDir, "mirror") + `"
+local_dirs = ["` + localDir + `"]
+`
+	jirafsDir := filepath.Join(homeDir, ".jirafs")
+	if err := os.MkdirAll(jirafsDir, 0o755); err != nil {
+		t.Fatalf("MkdirAll: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(jirafsDir, "settings.toml"), []byte(settingsTOML), 0o644); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+
+	oldHome := os.Getenv("HOME")
+	os.Setenv("HOME", homeDir)
+	defer os.Setenv("HOME", oldHome)
+
+	fake := jira.NewFakeTransport()
+	fake.SetIssue("PROJ-1", &schema.Issue{
+		Identity: schema.IssueIdentity{
+			Key:     "PROJ-1",
+			Type:    "story",
+			Project: schema.TypedRef{Type: schema.RefProject, Value: "PROJ"},
+		},
+		Summary: "Valid issue",
+	})
+	withPlanClientFactory(t, func(*config.Settings, *context.Context, string) (jira.Client, error) {
+		return fake, nil
+	})
+	stdout, stderr := withPlanTestIO(t)
+
+	exit := RunPlan([]string{"--project", "test"})
+	if exit != 0 {
+		t.Fatalf("RunPlan([\"--project\", \"test\"]) = %d, stderr = %q, want 0", exit, stderr.String())
+	}
+
+	output := stdout.String()
+	if !strings.Contains(output, "PROJ-1") {
+		t.Fatalf("stdout = %q, want PROJ-1", output)
+	}
+	// README.md should be skipped (not an issue).
+	if strings.Contains(output, "README") {
+		t.Fatalf("stdout = %q, should not contain README", output)
 	}
 }
 
@@ -63,22 +441,122 @@ func withPlanClientFactory(t *testing.T, factory func(*config.Settings, *context
 	})
 }
 
-// TestRunPlan_MissingKey verifies that plan without an issue key
-// returns exit code 1.
-func TestRunPlan_MissingKey(t *testing.T) {
+
+
+// TestRunPlan_NoKey_ProjectNotFound verifies that plan without an issue key
+// returns exit code 1 when --project points to a non-existent project.
+func TestRunPlan_NoKey_ProjectNotFound(t *testing.T) {
 	tmpDir := t.TempDir()
 	homeDir := writeSettings(t, tmpDir)
+
+	// Create a local directory with an issue file.
+	localDir := filepath.Join(tmpDir, "local")
+	if err := os.MkdirAll(localDir, 0o755); err != nil {
+		t.Fatalf("MkdirAll: %v", err)
+	}
+	issueContent := `---
+key: PROJ-1
+type: story
+project:
+  type: project
+  value: PROJ
+summary: Test issue
+---
+
+Summary: Test issue
+`
+	if err := os.WriteFile(filepath.Join(localDir, "PROJ-1.md"), []byte(issueContent), 0o644); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+
 	oldHome := os.Getenv("HOME")
 	os.Setenv("HOME", homeDir)
 	defer os.Setenv("HOME", oldHome)
 
 	_, stderr := withPlanTestIO(t)
-	exit := RunPlan([]string{"--cwd", filepath.Join(tmpDir, "outside")})
+	exit := RunPlan([]string{"--project", "nonexistent"})
 	if exit != 1 {
-		t.Fatalf("RunPlan([\"--cwd\", ...]) = %d, want 1", exit)
+		t.Fatalf("RunPlan([\"--project\", \"nonexistent\"]) = %d, want 1", exit)
 	}
-	if !strings.Contains(stderr.String(), "missing issue key") {
-		t.Fatalf("stderr = %q, want missing issue key", stderr.String())
+	if !strings.Contains(stderr.String(), "not found in settings") {
+		t.Fatalf("stderr = %q, want not found in settings", stderr.String())
+	}
+}
+
+// TestRunPlan_NoKey_ClientError verifies that plan without an issue key
+// skips issues that fail client creation.
+func TestRunPlan_NoKey_ClientError(t *testing.T) {
+	tmpDir := t.TempDir()
+	homeDir := writeSettings(t, tmpDir)
+
+	// Create a local directory with an issue file.
+	localDir := filepath.Join(tmpDir, "local")
+	if err := os.MkdirAll(localDir, 0o755); err != nil {
+		t.Fatalf("MkdirAll: %v", err)
+	}
+	issueContent := `---
+key: PROJ-1
+type: story
+project:
+  type: project
+  value: PROJ
+summary: Test issue
+---
+
+Summary: Test issue
+`
+	if err := os.WriteFile(filepath.Join(localDir, "PROJ-1.md"), []byte(issueContent), 0o644); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+
+	oldHome := os.Getenv("HOME")
+	os.Setenv("HOME", homeDir)
+	defer os.Setenv("HOME", oldHome)
+
+	// Return an error from the client factory.
+	withPlanClientFactory(t, func(*config.Settings, *context.Context, string) (jira.Client, error) {
+		return nil, os.ErrPermission
+	})
+	_, stderr := withPlanTestIO(t)
+	exit := RunPlan([]string{"--project", "test"})
+	if exit != 0 {
+		t.Fatalf("RunPlan([\"--project\", \"test\"]) = %d, want 0", exit)
+	}
+	if !strings.Contains(stderr.String(), "cannot create client") {
+		t.Fatalf("stderr = %q, want client creation error", stderr.String())
+	}
+}
+
+// TestRunPlan_NoKey_NoParseableFiles verifies that plan without an issue key
+// reports no parseable files when all files are unparseable.
+func TestRunPlan_NoKey_NoParseableFiles(t *testing.T) {
+	tmpDir := t.TempDir()
+	homeDir := writeSettings(t, tmpDir)
+
+	// Create a local directory with only unparseable .md files.
+	localDir := filepath.Join(tmpDir, "local")
+	if err := os.MkdirAll(localDir, 0o755); err != nil {
+		t.Fatalf("MkdirAll: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(localDir, "README.md"), []byte("just a readme"), 0o644); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(localDir, "PROJ-1.md"), []byte("not an issue file"), 0o644); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+
+	oldHome := os.Getenv("HOME")
+	os.Setenv("HOME", homeDir)
+	defer os.Setenv("HOME", oldHome)
+
+	stdout, stderr := withPlanTestIO(t)
+	exit := RunPlan([]string{"--project", "test"})
+	if exit != 0 {
+		t.Fatalf("RunPlan([\"--project\", \"test\"]) = %d, stderr = %q, want 0", exit, stderr.String())
+	}
+	output := stdout.String()
+	if !strings.Contains(output, "no parseable issue files found") {
+		t.Fatalf("stdout = %q, want no parseable issue files found", output)
 	}
 }
 

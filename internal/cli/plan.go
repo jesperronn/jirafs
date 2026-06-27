@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strings"
 
 	"github.com/jirafs/jirafs/internal/color"
 	"github.com/jirafs/jirafs/internal/config"
@@ -27,14 +28,12 @@ var (
 // context, fetches the remote issue from Jira, reads the local issue from
 // the file system, and displays the plan of operations needed to bring the
 // remote in line with the local copy.
+//
+// When called without an issue key, RunPlan resolves the project context
+// and lists all local issues with their planned operations.
 func RunPlan(args []string) int {
-	if len(args) == 0 {
-		fmt.Fprintln(planStderr, "jirafs plan: missing issue key. Use --help for usage.")
-		return 1
-	}
-
 	// Check for help before loading settings.
-	if args[0] == "help" || args[0] == "--help" || args[0] == "-h" {
+	if len(args) > 0 && (args[0] == "help" || args[0] == "--help" || args[0] == "-h") {
 		printPlanHelp()
 		return 0
 	}
@@ -45,41 +44,44 @@ func RunPlan(args []string) int {
 		fmt.Fprintf(planStderr, "jirafs plan: cannot load settings: %v\n", err)
 		return 1
 	}
-	resolver := context.NewResolver(settings, "")
 
-	return runPlanIssue(args, settings, resolver)
-}
-
-// runPlanIssue handles `jirafs plan KEY`. It resolves the project context,
-// fetches the remote issue from Jira through the real service path, reads
-// the local issue from the file system, and displays the plan of operations.
-func runPlanIssue(args []string, settings *config.Settings, resolver *context.Resolver) int {
-	fs := flag.NewFlagSet("plan", flag.ExitOnError)
-	// --project overrides the auto-detected project.
+	// Parse flags first to extract --project and --cwd.
+	fs := flag.NewFlagSet("plan", flag.ContinueOnError)
 	projectFlag := fs.String("project", "", "project key or name to use")
-	// --cwd overrides the working directory for project resolution.
 	cwdFlag := fs.String("cwd", "", "working directory to use for project resolution")
-	if err := fs.Parse(args); err != nil {
-		fmt.Fprintf(planStderr, "jirafs plan: invalid flags: %v\n", err)
-		return 1
+	_ = fs.Parse(args)
+
+	// When no issue key is provided, resolve the project and list all local issues.
+	if len(fs.Args()) == 0 {
+		return runPlanList(settings, *projectFlag, *cwdFlag)
 	}
 
-	if len(fs.Args()) == 0 {
-		fmt.Fprintln(planStderr, "jirafs plan: missing issue key")
-		return 1
+	key := ""
+	if len(fs.Args()) > 0 {
+		key = fs.Args()[0]
 	}
 	if len(fs.Args()) > 1 {
 		fmt.Fprintln(planStderr, "jirafs plan: too many positional arguments")
 		return 1
 	}
-	key := fs.Args()[0]
+	return runPlanIssue(key, *projectFlag, *cwdFlag, settings)
+}
 
-	cwd := "."
-	if *cwdFlag != "" {
-		cwd = *cwdFlag
+// runPlanIssue handles `jirafs plan KEY`. It resolves the project context,
+// fetches the remote issue from Jira through the real service path, reads
+// the local issue from the file system, and displays the plan of operations.
+// project and cwd are already parsed by the caller.
+func runPlanIssue(key, project, cwd string, settings *config.Settings) int {
+	if key == "" {
+		fmt.Fprintln(planStderr, "jirafs plan: missing issue key")
+		return 1
 	}
 
-	ctx, ok := resolvePlanContext(settings, *projectFlag, cwd)
+	if cwd == "" {
+		cwd = "."
+	}
+
+	ctx, ok := resolvePlanContext(settings, project, cwd)
 	if !ok {
 		return 1
 	}
@@ -185,6 +187,120 @@ func resolvePlanContext(settings *config.Settings, project, cwd string) (*contex
 		return nil, false
 	}
 	return ctx, true
+}
+
+// runPlanList resolves the project context and lists all local issues
+// with their planned operations (no issue key provided).
+func runPlanList(settings *config.Settings, project, cwd string) int {
+	ctx, ok := resolvePlanContext(settings, project, cwd)
+	if !ok {
+		return 1
+	}
+
+	proj, ok := settings.Projects[ctx.Name]
+	if !ok {
+		fmt.Fprintf(planStderr, "jirafs plan: project %q not found in settings\n", ctx.Name)
+		return 1
+	}
+
+	if len(proj.LocalDirs) == 0 {
+		fmt.Fprintln(planStdout, "jirafs plan: no local directories configured for project", ctx.Name)
+		return 0
+	}
+
+	// Collect all local issue files.
+	var issueFiles []string
+	for _, localDir := range proj.LocalDirs {
+		entries, err := os.ReadDir(localDir)
+		if err != nil {
+			continue
+		}
+		for _, entry := range entries {
+			if entry.IsDir() {
+				continue
+			}
+			name := entry.Name()
+			if len(name) <= 3 || name[len(name)-3:] != ".md" {
+				continue
+			}
+			issueFiles = append(issueFiles, filepath.Join(localDir, name))
+		}
+	}
+
+	if len(issueFiles) == 0 {
+		fmt.Fprintf(planStdout, "jirafs plan: no issue files found in %s\n",
+			strings.Join(proj.LocalDirs, ", "))
+		return 0
+	}
+
+	// Sort files deterministically by path.
+	sort.Strings(issueFiles)
+
+	var totalOps int
+	var totalIssues int
+
+	for _, filePath := range issueFiles {
+		data, err := os.ReadFile(filePath)
+		if err != nil {
+			continue
+		}
+		localIssue, pe := schema.ParseIssue(string(data))
+		if pe != nil {
+			// Skip unparseable files.
+			continue
+		}
+
+		// Fetch the remote issue.
+		client, err := planClientFactory(settings, ctx, cwd)
+		if err != nil {
+			fmt.Fprintf(planStderr, "jirafs plan: %s: cannot create client: %v\n", filePath, err)
+			continue
+		}
+
+		remote, err := client.FetchIssue(nil, string(localIssue.Identity.Key))
+		if err != nil {
+			// Remote issue not found or fetch error - skip.
+			continue
+		}
+
+		// Build the plan.
+		ops, _, err := plan.BuildPlan(localIssue, *remote)
+		if err != nil {
+			fmt.Fprintf(planStderr, "jirafs plan: %s: %v\n", filePath, err)
+			continue
+		}
+
+		totalIssues++
+		totalOps += len(ops)
+
+		if len(ops) == 0 {
+			fmt.Fprintf(planStdout, "  %s: no changes needed\n", localIssue.Identity.Key)
+		} else {
+			// Sort operations deterministically by field type.
+			sort.Slice(ops, func(i, j int) bool {
+				return ops[i].Field < ops[j].Field
+			})
+			fmt.Fprintf(planStdout, "  %s: %d operation(s)\n", localIssue.Identity.Key, len(ops))
+			for _, op := range ops {
+				fmt.Fprintf(planStdout, "    %s %s = %s\n", op.Type, op.Field, op.Value)
+			}
+		}
+	}
+
+	if totalIssues == 0 {
+		fmt.Fprintln(planStdout, "jirafs plan: no parseable issue files found")
+		return 0
+	}
+
+	if totalOps == 0 {
+		fmt.Fprintf(planStdout, "jirafs plan: %d issue(s) in %s: all up to date\n",
+			totalIssues, ctx.Name)
+	} else {
+		fmt.Fprintf(planStdout, "jirafs plan: %d issue(s) in %s: %d total operation(s)\n",
+			totalIssues, ctx.Name, totalOps)
+	}
+
+	return 0
 }
 
 func buildPlanClient(settings *config.Settings, ctx *context.Context, cwd string) (jira.Client, error) {
