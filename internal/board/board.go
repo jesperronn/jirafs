@@ -72,6 +72,15 @@ func (b *Board) GroupByStatus(issues []*schema.Issue, statuses map[string]regist
 		statusName := resolveStatusName(issue.Status, statuses)
 		b.StatusColumns[statusName] = append(b.StatusColumns[statusName], issue)
 	}
+
+	// If registry is empty, build column order from actual statuses found in issues.
+	if len(statuses) == 0 && len(b.StatusColumns) > 0 {
+		b.ColumnOrder = []string{}
+		for statusName := range b.StatusColumns {
+			b.ColumnOrder = append(b.ColumnOrder, statusName)
+		}
+		sort.Strings(b.ColumnOrder)
+	}
 }
 
 // GroupByAssignee groups issues by their assignee, using the user registry
