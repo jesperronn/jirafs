@@ -158,12 +158,57 @@ class MainTest(unittest.TestCase):
                 with patch.object(
                     coverage_gate,
                     "python_coverage_summary",
-                    return_value=(9, 10, ["tools.coverage_gate: 9/10 lines (90.0%)"]),
+                    return_value=(9, 10, ["tools.coverage_gate: 9/10 lines (90.0%)"  ]),
                 ):
                     with patch("sys.stdout") as mock_stdout:
                         exit_code = coverage_gate.main(["90"])
 
         self.assertEqual(exit_code, 0)
+
+    def test_verbose_flag_sets_verbose_mode(self) -> None:
+        fake_result = type("Result", (), {"wasSuccessful": lambda self: True})()
+
+        with patch.object(
+            coverage_gate, "run_go_tests_with_coverage", return_value=(9, 10, "go total: 9/10 statements (90.0%)")
+        ) as mock_run_go:
+            with patch.object(
+                coverage_gate, "run_suite_with_trace", return_value=(fake_result, object())
+            ):
+                with patch.object(
+                    coverage_gate,
+                    "python_coverage_summary",
+                    return_value=(9, 10, ["tools.coverage_gate: 9/10 lines (90.0%)"  ]),
+                ):
+                    with patch("sys.stdout"):
+                        exit_code = coverage_gate.main(["--verbose", "90"])
+
+        self.assertEqual(exit_code, 0)
+        # Verify verbose=True was passed to run_go_tests_with_coverage
+        call_kwargs = mock_run_go.call_args[1]
+        self.assertEqual(call_kwargs.get("verbose"), True)
+
+    def test_extra_packages_passed_to_go_tests(self) -> None:
+        fake_result = type("Result", (), {"wasSuccessful": lambda self: True})()
+
+        with patch.object(
+            coverage_gate, "run_go_tests_with_coverage", return_value=(9, 10, "go total: 9/10 statements (90.0%)")
+        ) as mock_run_go:
+            with patch.object(
+                coverage_gate, "run_suite_with_trace", return_value=(fake_result, object())
+            ):
+                with patch.object(
+                    coverage_gate,
+                    "python_coverage_summary",
+                    return_value=(9, 10, ["tools.coverage_gate: 9/10 lines (90.0%)"  ]),
+                ):
+                    with patch("sys.stdout"):
+                        exit_code = coverage_gate.main(["90", "./internal/board", "./internal/registry"])
+
+        self.assertEqual(exit_code, 0)
+        # Verify extra_packages were passed as second positional arg
+        call_args = mock_run_go.call_args[0]
+        self.assertEqual(len(call_args), 2)  # repo_root + extra_packages
+        self.assertEqual(call_args[1], ["./internal/board", "./internal/registry"])
 
 
 if __name__ == "__main__":
