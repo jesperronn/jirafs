@@ -809,6 +809,167 @@ Body from local2.
 	}
 }
 
+// TestRunBoard_InvalidGroupByWithProject verifies that an invalid --group-by
+// value takes priority over --project resolution, returning the group-by error.
+func TestRunBoard_InvalidGroupByWithProject(t *testing.T) {
+	tmpDir := t.TempDir()
+	homeDir := writeSettings(t, tmpDir)
+	oldHome := os.Getenv("HOME")
+	os.Setenv("HOME", homeDir)
+	defer os.Setenv("HOME", oldHome)
+
+	localDir := filepath.Join(tmpDir, "local")
+	if err := os.MkdirAll(localDir, 0o755); err != nil {
+		t.Fatalf("MkdirAll: %v", err)
+	}
+
+	mirrorDir := filepath.Join(tmpDir, "mirror")
+	if err := os.MkdirAll(mirrorDir, 0o755); err != nil {
+		t.Fatalf("MkdirAll mirror: %v", err)
+	}
+	writeBoardMirrorYAML(t, mirrorDir)
+
+	_, stderr := withBoardTestIO(t)
+	exit := RunBoard([]string{"--project", "test", "--group-by", "priority"})
+	if exit != 1 {
+		t.Fatalf("RunBoard([\"--project\", \"test\", \"--group-by\", \"priority\"]) = %d, want 1", exit)
+	}
+	if !strings.Contains(stderr.String(), "invalid --group-by") {
+		t.Fatalf("stderr = %q, want 'invalid --group-by'", stderr.String())
+	}
+}
+
+// TestRunBoard_InvalidGroupByWithCwd verifies that an invalid --group-by
+// value takes priority over --cwd project resolution, returning the
+// group-by error.
+func TestRunBoard_InvalidGroupByWithCwd(t *testing.T) {
+	tmpDir := t.TempDir()
+	homeDir := writeSettings(t, tmpDir)
+	oldHome := os.Getenv("HOME")
+	os.Setenv("HOME", homeDir)
+	defer os.Setenv("HOME", oldHome)
+
+	_, stderr := withBoardTestIO(t)
+	exit := RunBoard([]string{"--cwd", filepath.Join(tmpDir, "nowhere"), "--group-by", "sprint"})
+	if exit != 1 {
+		t.Fatalf("RunBoard([\"--cwd\", \"nowhere\", \"--group-by\", \"sprint\"]) = %d, want 1", exit)
+	}
+	if !strings.Contains(stderr.String(), "invalid --group-by") {
+		t.Fatalf("stderr = %q, want 'invalid --group-by'", stderr.String())
+	}
+}
+
+// TestRunBoard_EmptyStateWithGroupByAssignee verifies that when no issues
+// exist and --group-by=assignee is used, the output shows the correct
+// grouping mode.
+func TestRunBoard_EmptyStateWithGroupByAssignee(t *testing.T) {
+	tmpDir := t.TempDir()
+	homeDir := writeSettings(t, tmpDir)
+	oldHome := os.Getenv("HOME")
+	os.Setenv("HOME", homeDir)
+	defer os.Setenv("HOME", oldHome)
+
+	localDir := filepath.Join(tmpDir, "local")
+	if err := os.MkdirAll(localDir, 0o755); err != nil {
+		t.Fatalf("MkdirAll: %v", err)
+	}
+
+	mirrorDir := filepath.Join(tmpDir, "mirror")
+	if err := os.MkdirAll(mirrorDir, 0o755); err != nil {
+		t.Fatalf("MkdirAll mirror: %v", err)
+	}
+	writeBoardMirrorYAMLSimple(t, mirrorDir)
+
+	stdout, stderr := withBoardTestIO(t)
+	exit := RunBoard([]string{"--project", "test", "--group-by", "assignee"})
+	if exit != 0 {
+		t.Fatalf("RunBoard([\"--project\", \"test\", \"--group-by\", \"assignee\"]) = %d, stderr = %q", exit, stderr.String())
+	}
+	output := stdout.String()
+	if !strings.Contains(output, "no issues found") {
+		t.Fatalf("stdout should contain 'no issues found', got: %s", output)
+	}
+	if !strings.Contains(output, "group=assignee") {
+		t.Fatalf("stdout should contain 'group=assignee', got: %s", output)
+	}
+}
+
+// TestRunBoard_EmptyStateWithGroupByEpic verifies that when no issues
+// exist and --group-by=epic is used, the output shows the correct
+// grouping mode.
+func TestRunBoard_EmptyStateWithGroupByEpic(t *testing.T) {
+	tmpDir := t.TempDir()
+	homeDir := writeSettings(t, tmpDir)
+	oldHome := os.Getenv("HOME")
+	os.Setenv("HOME", homeDir)
+	defer os.Setenv("HOME", oldHome)
+
+	localDir := filepath.Join(tmpDir, "local")
+	if err := os.MkdirAll(localDir, 0o755); err != nil {
+		t.Fatalf("MkdirAll: %v", err)
+	}
+
+	mirrorDir := filepath.Join(tmpDir, "mirror")
+	if err := os.MkdirAll(mirrorDir, 0o755); err != nil {
+		t.Fatalf("MkdirAll mirror: %v", err)
+	}
+	writeBoardMirrorYAMLSimple(t, mirrorDir)
+
+	stdout, stderr := withBoardTestIO(t)
+	exit := RunBoard([]string{"--project", "test", "--group-by", "epic"})
+	if exit != 0 {
+		t.Fatalf("RunBoard([\"--project\", \"test\", \"--group-by\", \"epic\"]) = %d, stderr = %q", exit, stderr.String())
+	}
+	output := stdout.String()
+	if !strings.Contains(output, "no issues found") {
+		t.Fatalf("stdout should contain 'no issues found', got: %s", output)
+	}
+	if !strings.Contains(output, "group=epic") {
+		t.Fatalf("stdout should contain 'group=epic', got: %s", output)
+	}
+}
+
+// TestRunBoard_ProjectWithGroupByStatus verifies that --project combined
+// with --group-by=status renders issues grouped by status correctly.
+func TestRunBoard_ProjectWithGroupByStatus(t *testing.T) {
+	tmpDir := t.TempDir()
+	homeDir := writeSettings(t, tmpDir)
+	oldHome := os.Getenv("HOME")
+	os.Setenv("HOME", homeDir)
+	defer os.Setenv("HOME", oldHome)
+
+	localDir := filepath.Join(tmpDir, "local")
+	if err := os.MkdirAll(localDir, 0o755); err != nil {
+		t.Fatalf("MkdirAll: %v", err)
+	}
+
+	mirrorDir := filepath.Join(tmpDir, "mirror")
+	if err := os.MkdirAll(mirrorDir, 0o755); err != nil {
+		t.Fatalf("MkdirAll mirror: %v", err)
+	}
+	writeBoardMirrorYAML(t, mirrorDir)
+
+	writeBoardIssue(t, localDir, "PROJ-1", "First issue", "In Progress")
+	writeBoardIssue(t, localDir, "PROJ-2", "Second issue", "To Do")
+
+	stdout, stderr := withBoardTestIO(t)
+	exit := RunBoard([]string{"--project", "test", "--group-by", "status"})
+	if exit != 0 {
+		t.Fatalf("RunBoard([\"--project\", \"test\", \"--group-by\", \"status\"]) = %d, stderr = %q", exit, stderr.String())
+	}
+	output := stdout.String()
+
+	if !strings.Contains(output, "group=status") {
+		t.Fatalf("stdout should contain 'group=status', got: %s", output)
+	}
+	if !strings.Contains(output, "PROJ-1") {
+		t.Fatalf("stdout should contain PROJ-1, got: %s", output)
+	}
+	if !strings.Contains(output, "PROJ-2") {
+		t.Fatalf("stdout should contain PROJ-2, got: %s", output)
+	}
+}
+
 // TestRunBoard_MissingMirrorDirStillWorks verifies that when the mirror
 // directory doesn't exist, the board still works (just without registry
 // data for status/user resolution).

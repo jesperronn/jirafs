@@ -78,8 +78,9 @@ func RunBoard(args []string) int {
 		return 1
 	}
 
+	groupMode := board.GroupMode(*groupByFlag)
 	if len(issues) == 0 {
-		fmt.Fprintln(boardStdout, "jirafs board: no issues found in "+strings.Join(proj.LocalDirs, ", "))
+		fmt.Fprintf(boardStdout, "jirafs board: no issues found in %s (group=%s)\n", strings.Join(proj.LocalDirs, ", "), groupMode)
 		return 0
 	}
 
@@ -93,7 +94,6 @@ func RunBoard(args []string) int {
 
 	// Build the board.
 	b := board.NewBoard()
-	groupMode := board.GroupMode(*groupByFlag)
 
 	switch groupMode {
 	case board.GroupModeStatus:
