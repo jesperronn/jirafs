@@ -1,5 +1,6 @@
 ---
-agent: pi --print
+# agent: pi --print --approve
+agent: opencode run --thinking
 commands:
   - name: init
     run: git reset --hard main
