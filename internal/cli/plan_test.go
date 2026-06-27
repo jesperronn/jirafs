@@ -245,6 +245,98 @@ local_dirs = ["` + localDir + `"]
 	}
 }
 
+// TestRunPlan_NoKey_ListIssues_UsesSelectedProject verifies that calling
+// RunPlan without an issue key and without --project uses the remembered
+// (selected) project from settings state. This is the core acceptance
+// criterion for B095b: "jirafs plan uses the selected project when the
+// issue key is omitted."
+func TestRunPlan_NoKey_ListIssues_UsesSelectedProject(t *testing.T) {
+	tmpDir := t.TempDir()
+	homeDir := filepath.Join(tmpDir, "home")
+	jirafsDir := filepath.Join(homeDir, ".jirafs")
+	if err := os.MkdirAll(jirafsDir, 0o755); err != nil {
+		t.Fatalf("MkdirAll: %v", err)
+	}
+
+	// Create local issue files.
+	localDir := filepath.Join(tmpDir, "local")
+	if err := os.MkdirAll(localDir, 0o755); err != nil {
+		t.Fatalf("MkdirAll: %v", err)
+	}
+
+	issueContent := `---
+key: PROJ-1
+type: story
+project:
+  type: project
+  value: PROJ
+summary: First issue
+---
+
+Summary: First issue
+`
+	if err := os.WriteFile(filepath.Join(localDir, "PROJ-1.md"), []byte(issueContent), 0o644); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+
+	// Create settings with a project and a remembered current project.
+	settingsTOML := `version = 1
+
+[instances.default]
+base_url = "https://example.atlassian.net"
+auth_type = "basic"
+
+[projects.test]
+key = "TEST"
+instance = "default"
+mirror_dir = "` + filepath.Join(tmpDir, "mirror") + `"
+local_dirs = ["` + localDir + `"]
+
+[State]
+current_project = "test"
+`
+	if err := os.WriteFile(filepath.Join(jirafsDir, "settings.toml"), []byte(settingsTOML), 0o644); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+
+	oldHome := os.Getenv("HOME")
+	os.Setenv("HOME", homeDir)
+	defer os.Setenv("HOME", oldHome)
+
+	fake := jira.NewFakeTransport()
+	fake.SetIssue("PROJ-1", &schema.Issue{
+		Identity: schema.IssueIdentity{
+			Key:     "PROJ-1",
+			Type:    "story",
+			Project: schema.TypedRef{Type: schema.RefProject, Value: "PROJ"},
+		},
+		Summary: "First issue",
+	})
+	withPlanClientFactory(t, func(*config.Settings, *context.Context, string) (jira.Client, error) {
+		return fake, nil
+	})
+	stdout, stderr := withPlanTestIO(t)
+
+	// Call RunPlan with NO issue key and NO --project flag.
+	// It should use the remembered project "test" from settings state.
+	exit := RunPlan([]string{})
+	if exit != 0 {
+		t.Fatalf("RunPlan([]) = %d, stderr = %q, want 0", exit, stderr.String())
+	}
+
+	output := stdout.String()
+	// Verify it found and listed the issue from the remembered project.
+	if !strings.Contains(output, "PROJ-1") {
+		t.Fatalf("stdout = %q, want PROJ-1", output)
+	}
+	if !strings.Contains(output, "no changes needed") {
+		t.Fatalf("stdout = %q, want no changes needed", output)
+	}
+	if !strings.Contains(output, "1 issue(s)") {
+		t.Fatalf("stdout = %q, want 1 issue(s)", output)
+	}
+}
+
 // TestRunPlan_NoKey_ListIssues_WithChanges verifies that plan without an
 // issue key lists issues with planned operations when changes exist.
 func TestRunPlan_NoKey_ListIssues_WithChanges(t *testing.T) {
