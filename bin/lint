@@ -2,28 +2,55 @@
 
 set -euo pipefail
 
-# Usage: bin/lint [--help]
-#   --help    Print usage and exit.
+# Usage: bin/lint [--help] [--verbose] [PATH]
+#
+#   --help      Print usage and exit.
+#   --verbose   Print each check name as it runs.
+#   PATH        File or directory to scope go-toolchain linting to. When
+#               given, only `gofmt -l` and `go vet` are run against that
+#               scope (skipping the slower whole-repo docs/lint checks).
+#               No PATH → full repository lint via tools/lint_repo.py.
 
 usage() {
     cat >&2 <<EOF
-Usage: $(basename "$0") [OPTIONS]
+Usage: $(basename "$0") [OPTIONS] [PATH]
 
 Options:
-  --help    Show this help message and exit.
+  --help      Show this help message and exit.
+  --verbose   Print each check name as it runs.
+
+Positional:
+  PATH        Scope go-toolchain linting (gofmt, go vet) to PATH. When
+              omitted, runs the whole-repo lint suite (tools/lint_repo.py).
 EOF
     exit 0
 }
 
-# Parse arguments.
+VERBOSE=0
+POSITIONAL=""
+
 while [ $# -gt 0 ]; do
     case "$1" in
         --help|-h)
             usage
             ;;
-        *)
+        --verbose|-v)
+            VERBOSE=1
+            ;;
+        --)
+            shift
+            break
+            ;;
+        -*)
             echo "error: unknown argument: $1" >&2
             exit 1
+            ;;
+        *)
+            if [ -n "${POSITIONAL}" ]; then
+                echo "error: only one PATH argument is allowed" >&2
+                exit 1
+            fi
+            POSITIONAL="$1"
             ;;
     esac
     shift
@@ -34,4 +61,43 @@ cd "${REPO_ROOT}"
 
 export PYTHONPATH="${REPO_ROOT}"
 
+log() {
+    if [ "${VERBOSE}" -eq 1 ]; then
+        printf "lint: %s\n" "$*" >&2
+    fi
+}
+
+if [ -n "${POSITIONAL}" ]; then
+    target="${POSITIONAL}"
+    if [ -f "${target}" ]; then
+        scope_dir="$(dirname "${target}")"
+        scope_files=("${target}")
+    elif [ -d "${target}" ]; then
+        scope_dir="${target}"
+        # gofmt + go vet can both take a directory pattern.
+        scope_files=("${target}")
+    else
+        echo "error: ${POSITIONAL} is neither a file nor a directory" >&2
+        exit 1
+    fi
+    scope_dir="${scope_dir#./}"
+    pkg_pattern="./${scope_dir}/..."
+
+    log "gofmt -l ${scope_files[*]}"
+    fmt_out="$(gofmt -l "${scope_files[@]}" || true)"
+    if [ -n "${fmt_out}" ]; then
+        echo "gofmt: files need formatting:" >&2
+        echo "${fmt_out}" >&2
+        exit 1
+    fi
+
+    log "go vet ${pkg_pattern}"
+    go vet "${pkg_pattern}"
+
+    echo "lint: ok (${POSITIONAL})"
+    exit 0
+fi
+
+# Whole-repo lint.
+log "tools/lint_repo.py"
 python3 tools/lint_repo.py

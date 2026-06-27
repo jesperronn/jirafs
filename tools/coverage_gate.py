@@ -118,6 +118,7 @@ def parse_go_cover_output(output: str) -> tuple[int, int]:
 def run_go_tests_with_coverage(
     repo_root: Path,
     packages: list[str] | None = None,
+    verbose: bool = False,
 ) -> tuple[int, int, str]:
     """Run Go tests with a cover profile and return covered/total statements."""
     with tempfile.NamedTemporaryFile(
@@ -136,6 +137,8 @@ def run_go_tests_with_coverage(
             os.environ.get("JIRAFS_GO_TEST_TIMEOUT", "120s"),
             f"-coverprofile={coverprofile}",
         ]
+        if verbose:
+            go_args.append("-v")
         if packages:
             go_args.extend(packages)
         else:
@@ -160,7 +163,12 @@ def run_go_tests_with_coverage(
 
 def main(argv: list[str] | None = None) -> int:
     """Run the suites and fail if combined coverage drops below the threshold."""
-    args = argv or sys.argv[1:]
+    args = list(argv) if argv is not None else sys.argv[1:]
+    verbose = False
+    # Strip the (only) supported flag before positional parsing.
+    if args and args[0] == "--verbose":
+        verbose = True
+        args = args[1:]
     minimum = float(args[0]) if args else 90.0
     repo_root = Path(__file__).resolve().parent.parent
     extra_packages: list[str] = []
@@ -170,7 +178,7 @@ def main(argv: list[str] | None = None) -> int:
         i += 1
 
     go_hit, go_total, go_row = run_go_tests_with_coverage(
-        repo_root, extra_packages or None
+        repo_root, extra_packages or None, verbose=verbose,
     )
     result, tracer = run_suite_with_trace(repo_root)
     if not result.wasSuccessful():

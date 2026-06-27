@@ -17,12 +17,24 @@ FAIL=0
 shopt -s nullglob
 for test_file in "${FIXTURES_DIR}"/*.sh; do
     [ -f "${test_file}" ] || continue
-    if bash "${test_file}"; then
-        echo "[PASS] $(basename "${test_file}")"
-        PASS=$((PASS + 1))
+    if [ "${VERBOSE:-0}" = "1" ]; then
+        echo "=== $(basename "${test_file}") ==="
+        if bash "${test_file}"; then
+            echo "[PASS] $(basename "${test_file}")"
+            PASS=$((PASS + 1))
+        else
+            echo "[FAIL] $(basename "${test_file}")"
+            FAIL=$((FAIL + 1))
+        fi
     else
-        echo "[FAIL] $(basename "${test_file}")"
-        FAIL=$((FAIL + 1))
+        if output="$(bash "${test_file}" 2>&1)"; then
+            echo "[PASS] $(basename "${test_file}")"
+            PASS=$((PASS + 1))
+        else
+            echo "[FAIL] $(basename "${test_file}")"
+            echo "${output}"
+            FAIL=$((FAIL + 1))
+        fi
     fi
 done
 

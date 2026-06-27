@@ -2,27 +2,50 @@
 
 set -euo pipefail
 
-# Usage: bin/test [--help] [--package PKG]
+# Usage: bin/test [--help] [--verbose] [--no-coverage] [--package PKG] [PATH]
+#
 #   --help          Print usage and exit.
+#   --verbose       Stream go test output and shell-test detail.
+#   --no-coverage   Skip the Python/Go combined coverage gate. Useful for
+#                   quick iteration; CI should still run without it.
 #   --package PKG   Run only tests matching the Go package PKG.
+#   PATH            A file or directory inside the repo. Files are
+#                   reduced to their package dir. Equivalent to passing
+#                   --package <dir>.
 
 usage() {
     cat >&2 <<EOF
-Usage: $(basename "$0") [OPTIONS]
+Usage: $(basename "$0") [OPTIONS] [PATH]
 
 Options:
   --help          Show this help message and exit.
+  --verbose       Stream go test output (-v) and per-fixture detail.
+  --no-coverage   Skip the coverage gate (faster, no minimum check).
   --package PKG   Run only tests matching the Go package PKG.
+
+Positional:
+  PATH            File or directory to scope the run to. A file path is
+                  reduced to its containing directory before being passed
+                  to go test. Mutually exclusive with --package.
 EOF
     exit 0
 }
 
-# Parse arguments.
+VERBOSE=0
+NO_COVERAGE=0
 PACKAGE=""
+POSITIONAL=""
+
 while [ $# -gt 0 ]; do
     case "$1" in
         --help|-h)
             usage
+            ;;
+        --verbose|-v)
+            VERBOSE=1
+            ;;
+        --no-coverage)
+            NO_COVERAGE=1
             ;;
         --package)
             shift
@@ -32,21 +55,59 @@ while [ $# -gt 0 ]; do
             fi
             PACKAGE="$1"
             ;;
-        *)
+        --)
+            shift
+            break
+            ;;
+        -*)
             echo "error: unknown argument: $1" >&2
             exit 1
+            ;;
+        *)
+            if [ -n "${POSITIONAL}" ]; then
+                echo "error: only one PATH argument is allowed" >&2
+                exit 1
+            fi
+            POSITIONAL="$1"
             ;;
     esac
     shift
 done
+
+if [ -n "${POSITIONAL}" ] && [ -n "${PACKAGE}" ]; then
+    echo "error: PATH and --package are mutually exclusive" >&2
+    exit 1
+fi
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "${REPO_ROOT}"
 
 export PYTHONPATH="${REPO_ROOT}"
 
-# Run shell-test fixtures.
-bash tests/run_shell_tests.sh
+# Translate POSITIONAL → PACKAGE.
+if [ -n "${POSITIONAL}" ]; then
+    target="${POSITIONAL}"
+    if [ -f "${target}" ]; then
+        target="$(dirname "${target}")"
+    fi
+    if [ ! -d "${target}" ]; then
+        echo "error: ${POSITIONAL} is neither a file nor a directory" >&2
+        exit 1
+    fi
+    # Normalize for go's package syntax: relative to repo root, with ./ prefix.
+    target="${target#./}"
+    PACKAGE="./${target}/..."
+fi
+
+# Run shell-test fixtures. Path/package-scoped runs skip these — fixtures
+# are repo-wide, not per-package.
+if [ -z "${PACKAGE}" ]; then
+    if [ "${VERBOSE}" -eq 1 ]; then
+        VERBOSE=1 bash tests/run_shell_tests.sh
+    else
+        bash tests/run_shell_tests.sh
+    fi
+fi
 
 # Build the Go test invocation.
 GO_TEST_ARGS=(./...)
@@ -54,5 +115,19 @@ if [ -n "${PACKAGE}" ]; then
     GO_TEST_ARGS=("${PACKAGE}")
 fi
 
-# Run repository tests with combined Go and Python coverage gate.
-python3 tools/coverage_gate.py 90 "${GO_TEST_ARGS[@]}"
+# Quick path: skip coverage entirely. Just run `go test`, optionally -v.
+if [ "${NO_COVERAGE}" -eq 1 ] || [ -n "${PACKAGE}" ]; then
+    GO_CMD=(go test -timeout "${JIRAFS_GO_TEST_TIMEOUT:-120s}")
+    if [ "${VERBOSE}" -eq 1 ]; then
+        GO_CMD+=(-v)
+    fi
+    GO_CMD+=("${GO_TEST_ARGS[@]}")
+    exec "${GO_CMD[@]}"
+fi
+
+# Full path: combined coverage gate.
+COVERAGE_ARGS=(90 "${GO_TEST_ARGS[@]}")
+if [ "${VERBOSE}" -eq 1 ]; then
+    COVERAGE_ARGS=(--verbose "${COVERAGE_ARGS[@]}")
+fi
+python3 tools/coverage_gate.py "${COVERAGE_ARGS[@]}"
