@@ -69,16 +69,45 @@ func TestUnknownCommand(t *testing.T) {
 
 // TestSyncCommand verifies that `jirafs sync` without an issue key
 // resolves the remembered project and lists local issues (or reports
-// none found). This is the behavior described in B093d.
+// none found). HOME is isolated so the test doesn't read the
+// developer's real ~/.jirafs/settings.toml — which would point at
+// their actual Jira project and trigger 1Password lookups.
 func TestSyncCommand(t *testing.T) {
-	output := runMainHelper(t, "sync")
-	// When no issue key is provided, sync resolves the remembered project
-	// and lists local issues (or reports none found). Exit code is 0.
+	tmpDir := t.TempDir()
+	homeDir := filepath.Join(tmpDir, "home")
+	jirafsDir := filepath.Join(homeDir, settingsDir)
+	if err := os.MkdirAll(jirafsDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	localDir := filepath.Join(jirafsDir, "jira", "platform")
+	if err := os.MkdirAll(localDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	settings := `
+version = 1
+
+[instances.work]
+base_url = "https://jira.example.com"
+auth_type = "atlassian_api_token"
+
+[projects.platform]
+key = "PLAT"
+instance = "work"
+mirror_dir = "` + localDir + `"
+local_dirs = ["` + localDir + `"]
+
+[state]
+current_project = "platform"
+`
+	if err := os.WriteFile(filepath.Join(jirafsDir, settingsFile), []byte(settings), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	output := runMainHelperWithHome(t, homeDir, "sync")
 	if output.exitCode != 0 {
 		t.Fatalf("exitCode = %d, want 0, stderr = %q", output.exitCode, output.stderr)
 	}
-	// The remembered project should be resolved and the output should
-	// indicate no local issues found (since the temp home has no issue files).
 	if !strings.Contains(output.stderr, "no local issues found") {
 		t.Fatalf("stderr = %q, want 'no local issues found'", output.stderr)
 	}

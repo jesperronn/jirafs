@@ -24,6 +24,7 @@ var (
 	syncStderr   io.Writer = os.Stderr
 	syncClientFactory  = buildSyncClient
 	syncBuildClient  = buildSyncClient
+	syncVerbose      bool
 )
 
 // RunSync dispatches the `jirafs sync` subcommand. When an issue key is
@@ -54,10 +55,12 @@ func RunSync(args []string) int {
 	projectFlag := fs.String("project", "", "project key or name to use")
 	cwdFlag := fs.String("cwd", "", "working directory to use for project resolution")
 	applyFlag := fs.Bool("apply", false, "write the updated remote to the local issue file")
+	verboseFlag := fs.Bool("verbose", false, "print extra diagnostic detail")
 	if err := fs.Parse(args); err != nil {
 		fmt.Fprintf(syncStderr, "jirafs sync: invalid flags: %v\n", err)
 		return 1
 	}
+	syncVerbose = *verboseFlag
 
 	// If no positional arguments (no issue key), resolve the project from
 	// the parsed flags and list pending syncs.
@@ -289,7 +292,17 @@ func runSyncAll(settings *config.Settings, project, cwd string) int {
 		ops     []schema.PlanOperation
 	}
 
-	var issues []issueInfo
+	// First pass: collect parseable local issue files. We do NOT build
+	// the Jira client here — credential resolution can shell out to `op`,
+	// and we want to skip that cost entirely when there are no files to
+	// compare. This is what made the old per-file inner build painful:
+	// even an empty-dir project triggered N credential lookups.
+	type localFile struct {
+		issue schema.Issue
+		key   string
+		name  string
+	}
+	var locals []localFile
 
 	for _, localDir := range proj.LocalDirs {
 		entries, err := os.ReadDir(localDir)
@@ -303,8 +316,7 @@ func runSyncAll(settings *config.Settings, project, cwd string) int {
 			if !strings.HasSuffix(entry.Name(), ".md") {
 				continue
 			}
-			filePath := filepath.Join(localDir, entry.Name())
-			data, err := os.ReadFile(filePath)
+			data, err := os.ReadFile(filepath.Join(localDir, entry.Name()))
 			if err != nil {
 				continue
 			}
@@ -316,20 +328,37 @@ func runSyncAll(settings *config.Settings, project, cwd string) int {
 			if key == "" {
 				continue
 			}
+			locals = append(locals, localFile{issue: issue, key: key, name: entry.Name()})
+		}
+	}
 
-			// Fetch the remote issue to compare.
-			client, err := syncBuildClient(settings, ctx, cwd)
-			if err != nil {
-				fmt.Fprintf(syncStderr, "DEBUG: buildSyncClient error: %v\n", err)
-				// Skip issues we can't fetch remotely.
-				continue
-			}
+	if len(locals) == 0 {
+		fmt.Fprintf(syncStdout, "jirafs sync: project %s: no local issues found\n", ctx.Name)
+		return 0
+	}
+
+	// At least one file to check — build the Jira client once for the
+	// whole scan.
+	client, err := syncBuildClient(settings, ctx, cwd)
+	if err != nil {
+		fmt.Fprintf(syncStderr, "jirafs sync: cannot create Jira client: %v\n", err)
+		if syncVerbose {
+			fmt.Fprintf(syncStderr, "jirafs sync: buildSyncClient detail: %+v\n", err)
+		}
+		return 1
+	}
+
+	var issues []issueInfo
+	for _, lf := range locals {
+		{
+			key := lf.key
+			issue := lf.issue
 			remote, err := client.FetchIssue(nil, key)
 			if err != nil {
 				// Remote not found — still report it as needing attention.
 				issues = append(issues, issueInfo{
 					key:     key,
-					path:    entry.Name(),
+					path:    lf.name,
 					hasDiff: true,
 				})
 				continue
@@ -344,16 +373,11 @@ func runSyncAll(settings *config.Settings, project, cwd string) int {
 
 			issues = append(issues, issueInfo{
 				key:     key,
-				path:    entry.Name(),
+				path:    lf.name,
 				hasDiff: len(ops) > 0,
 				ops:     ops,
 			})
 		}
-	}
-
-	if len(issues) == 0 {
-		fmt.Fprintf(syncStdout, "jirafs sync: project %s: no local issues found\n", ctx.Name)
-		return 0
 	}
 
 	// Report each issue.
