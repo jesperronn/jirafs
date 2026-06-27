@@ -6,9 +6,32 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"sync"
 
 	"github.com/pelletier/go-toml/v2"
 )
+
+// opCredentialCache memoizes ResolveOPCredential by ref.Target for the
+// lifetime of the process. The `op` CLI shells out and can be slow (or
+// prompt for biometric), so a single ralph iteration that touches the
+// same credential many times only pays for it once. Tests reset this
+// via ClearOPCredentialCache.
+var opCredentialCache sync.Map // map[string]opCacheEntry
+
+type opCacheEntry struct {
+	cred ResolvedCredential
+	err  error
+}
+
+// ClearOPCredentialCache drops all cached 1Password resolutions. Tests
+// call this when they want each resolution to re-run the (mocked) op
+// command.
+func ClearOPCredentialCache() {
+	opCredentialCache.Range(func(k, _ any) bool {
+		opCredentialCache.Delete(k)
+		return true
+	})
+}
 
 // CredentialRef holds the parsed components of a credential reference string.
 // The scheme and target are both non-empty after successful parsing.
@@ -167,33 +190,44 @@ func ResolveOPCredential(ref CredentialRef) (ResolvedCredential, error) {
 		)
 	}
 
+	if cached, ok := opCredentialCache.Load(ref.Target); ok {
+		entry := cached.(opCacheEntry)
+		return entry.cred, entry.err
+	}
+
 	output, err := resolveOPCommand(
 		"item", "get", item,
 		"--fields", "label="+fieldLabel,
 		"--reveal",
 	)
 	if err != nil {
-		return ResolvedCredential{}, NewSettingError(
+		wrapped := NewSettingError(
 			ErrCredentialResolve,
 			fmt.Sprintf("cannot read 1Password item %q field %q: %s", item, fieldLabel, err.Error()),
 			"credential_ref", "op://"+ref.Target,
 		)
+		opCredentialCache.Store(ref.Target, opCacheEntry{err: wrapped})
+		return ResolvedCredential{}, wrapped
 	}
 
 	value := strings.TrimSpace(string(output))
 	if value == "" {
-		return ResolvedCredential{}, NewSettingError(
+		wrapped := NewSettingError(
 			ErrCredentialResolve,
 			fmt.Sprintf("1Password item %q field %q returned an empty value", item, fieldLabel),
 			"credential_ref", "op://"+ref.Target,
 		)
+		opCredentialCache.Store(ref.Target, opCacheEntry{err: wrapped})
+		return ResolvedCredential{}, wrapped
 	}
 
-	return ResolvedCredential{
+	cred := ResolvedCredential{
 		Scheme: "op",
 		Target: ref.Target,
 		Fields: normalizedCredentialFields(fieldLabel, value),
-	}, nil
+	}
+	opCredentialCache.Store(ref.Target, opCacheEntry{cred: cred})
+	return cred, nil
 }
 
 func parseOPTarget(target string) (item string, fieldLabel string, err error) {

@@ -533,6 +533,7 @@ func TestResolveOPCredential(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			ClearOPCredentialCache()
 			var gotArgs []string
 			resolveOPCommand = func(args ...string) ([]byte, error) {
 				gotArgs = append([]string(nil), args...)
@@ -570,6 +571,49 @@ func TestResolveOPCredential(t *testing.T) {
 				t.Fatalf("ResolveOPCredential(%+v) field %q = %q, want %q", tt.ref, "bearer_token", got.Fields["bearer_token"], tt.wantValue)
 			}
 		})
+	}
+}
+
+
+// TestResolveOPCredential_Cache verifies that repeated resolution of the
+// same op:// ref hits the cache instead of spawning the op CLI again.
+// This is the property the sync loop depends on so a many-issue scan
+// pays for credential resolution once.
+func TestResolveOPCredential_Cache(t *testing.T) {
+	original := resolveOPCommand
+	t.Cleanup(func() {
+		resolveOPCommand = original
+		ClearOPCredentialCache()
+	})
+	t.Setenv("JIRAFS_ALLOW_LIVE_ENDPOINTS", "1")
+	ClearOPCredentialCache()
+
+	calls := 0
+	resolveOPCommand = func(args ...string) ([]byte, error) {
+		calls++
+		return []byte("secret\n"), nil
+	}
+
+	ref := CredentialRef{Scheme: "op", Target: "JIRA_TOKEN_CACHE_TEST"}
+	for i := 0; i < 5; i++ {
+		cred, err := ResolveOPCredential(ref)
+		if err != nil {
+			t.Fatalf("iteration %d: unexpected error: %v", i, err)
+		}
+		if cred.Fields["api_token"] != "secret" {
+			t.Fatalf("iteration %d: api_token = %q, want %q", i, cred.Fields["api_token"], "secret")
+		}
+	}
+	if calls != 1 {
+		t.Fatalf("resolveOPCommand call count = %d, want 1 (cache should suppress repeats)", calls)
+	}
+
+	ClearOPCredentialCache()
+	if _, err := ResolveOPCredential(ref); err != nil {
+		t.Fatalf("after ClearOPCredentialCache: %v", err)
+	}
+	if calls != 2 {
+		t.Fatalf("after clear, call count = %d, want 2", calls)
 	}
 }
 
