@@ -1,6 +1,6 @@
 ---
-# agent: pi --print --approve
-agent: opencode run --thinking
+# agent: bash goose-lms.sh
+agent: goose run --with-builtin developer -i -
 commands:
   - name: init
     run: git reset --hard main
