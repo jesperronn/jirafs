@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from importlib import util
 from pathlib import Path
+from typing import TextIO
 import ast
 import io
 import os
@@ -56,18 +57,50 @@ def load_suite(repo_root: Path) -> unittest.TestSuite:
     return loader.discover(str(repo_root / "tests"), pattern="*_test.py")
 
 
+class _ProgressStream:
+    """unittest progress stream that streams dots live to ``live`` while buffering
+    only the failure/error details.
+
+    Dots are written straight to ``live`` (stderr) so the run shows progress
+    without those dots ever blending with the content written to stdout. Every
+    other write -- the ``F``/``E`` markers, traceback frames, and the final
+    ``OK``/``Ran N tests`` footer -- is buffered so it can be re-emitted once,
+    cleanly, on failure (the footer is discarded on success).
+    """
+
+    def __init__(self, live: TextIO) -> None:
+        self._live = live
+        self._buffer = io.StringIO()
+        self.dots = 0
+
+    def write(self, data: str) -> int:
+        if data == ".":
+            self.dots += 1
+            self._live.write(".")
+            self._live.flush()
+        else:
+            self._buffer.write(data)
+        return len(data)
+
+    def flush(self) -> None:
+        self._live.flush()
+
+    def failure_text(self) -> str:
+        return self._buffer.getvalue()
+
+
 def run_suite_with_trace(repo_root: Path) -> tuple[unittest.result.TestResult, trace.Trace]:
     """Run the suite under tracing; return the result plus tracer.
 
-    The runner writes progress to a throwaway buffer so its dots never blend
-    with diagnostic messages other tests print mid-suite. A single clean
-    summary line stands in for the dots; on failure the buffered failure
-    details are re-emitted so the run stays diagnosable. The Go package list
-    printed earlier is what shows file/dir paths for "what was tested".
+    Progress dots stream live to stderr so the run shows progress without those
+    dots blending with the content on stdout. A single clean summary line stands
+    in for the footer; on failure the buffered failure details are re-emitted so
+    the run stays diagnosable. The Go package list printed earlier shows the
+    file/dir paths that were tested.
     """
     suite = load_suite(repo_root)
     tracer = trace.Trace(count=True, trace=False)
-    progress = io.StringIO()
+    progress = _ProgressStream(sys.stderr)
 
     def _run() -> unittest.result.TestResult:
         runner = unittest.TextTestRunner(stream=progress, verbosity=1)
@@ -78,10 +111,11 @@ def run_suite_with_trace(repo_root: Path) -> tuple[unittest.result.TestResult, t
         raise TypeError("expected unittest result from traced run")
 
     if result.wasSuccessful():
+        if progress.dots:
+            sys.stderr.write("\n")
         print(f"python tests: {result.testsRun} passed")
     else:
-        for line in progress.getvalue().splitlines():
-            print(line)
+        sys.stderr.write(progress.failure_text())
 
     return result, tracer
 
