@@ -5,6 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from unittest.mock import patch
+import io
 import os
 import unittest
 
@@ -147,8 +148,11 @@ class LintRepoRunTest(unittest.TestCase):
             repo_root = Path(tmp)
             build_repo(repo_root)
 
+            # main() prints "lint: ok" to stdout on a clean repo; capture it so
+            # the synthetic clean-repo run doesn't leak into real test output.
             with patch.object(lint_repo, "__file__", str(repo_root / "tools/lint_repo.py")):
-                self.assertEqual(lint_repo.main(), 0)
+                with patch("sys.stdout", io.StringIO()):
+                    self.assertEqual(lint_repo.main(), 0)
 
     def test_main_returns_one_when_dirty(self) -> None:
         with TemporaryDirectory() as tmp:
@@ -156,8 +160,11 @@ class LintRepoRunTest(unittest.TestCase):
             build_repo(repo_root)
             (repo_root / ".github/workflows/ci.yml").write_text("steps:\n", encoding="utf-8")
 
+            # main() prints the lint error to stderr; capture it so a synthetic
+            # dirty-repo run doesn't leak "lint: …" into the real test output.
             with patch.object(lint_repo, "__file__", str(repo_root / "tools/lint_repo.py")):
-                self.assertEqual(lint_repo.main(), 1)
+                with patch("sys.stderr", io.StringIO()):
+                    self.assertEqual(lint_repo.main(), 1)
 
     def test_main_prints_errors_to_stderr(self) -> None:
         """Verify that main() prints lint errors to stderr when repo is dirty."""
@@ -170,8 +177,6 @@ class LintRepoRunTest(unittest.TestCase):
             )
 
             # Patch sys.stderr to capture output.
-            import io
-
             captured = io.StringIO()
             with patch.object(lint_repo, "__file__", str(repo_root / "tools/lint_repo.py")):
                 with patch("sys.stderr", captured):

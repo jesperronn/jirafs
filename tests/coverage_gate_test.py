@@ -5,6 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from unittest.mock import patch
+import io
 import unittest
 
 from tools import coverage_gate
@@ -141,7 +142,10 @@ class MainTest(unittest.TestCase):
                     "python_coverage_summary",
                     return_value=(5, 10, ["tools.coverage_gate: 5/10 lines (50.0%)"]),
                 ):
-                    with patch("sys.stdout") as mock_stdout:
+                    # main() prints the failure summary to stdout and stderr;
+                    # capture both so a synthetic below-threshold run doesn't
+                    # leak "coverage gate failed…" into the real test output.
+                    with patch("sys.stdout"), patch("sys.stderr", io.StringIO()):
                         exit_code = coverage_gate.main(["90"])
 
         self.assertEqual(exit_code, 1)

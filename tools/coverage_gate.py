@@ -5,6 +5,7 @@ from __future__ import annotations
 from importlib import util
 from pathlib import Path
 import ast
+import io
 import os
 import re
 import subprocess
@@ -56,17 +57,32 @@ def load_suite(repo_root: Path) -> unittest.TestSuite:
 
 
 def run_suite_with_trace(repo_root: Path) -> tuple[unittest.result.TestResult, trace.Trace]:
-    """Run the suite under tracing and return the result plus tracer."""
+    """Run the suite under tracing; return the result plus tracer.
+
+    The runner writes progress to a throwaway buffer so its dots never blend
+    with diagnostic messages other tests print mid-suite. A single clean
+    summary line stands in for the dots; on failure the buffered failure
+    details are re-emitted so the run stays diagnosable. The Go package list
+    printed earlier is what shows file/dir paths for "what was tested".
+    """
     suite = load_suite(repo_root)
     tracer = trace.Trace(count=True, trace=False)
+    progress = io.StringIO()
 
     def _run() -> unittest.result.TestResult:
-        runner = unittest.TextTestRunner(verbosity=2)
+        runner = unittest.TextTestRunner(stream=progress, verbosity=1)
         return runner.run(suite)
 
     result = tracer.runfunc(_run)
     if not isinstance(result, unittest.result.TestResult):
         raise TypeError("expected unittest result from traced run")
+
+    if result.wasSuccessful():
+        print(f"python tests: {result.testsRun} passed")
+    else:
+        for line in progress.getvalue().splitlines():
+            print(line)
+
     return result, tracer
 
 
