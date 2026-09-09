@@ -197,16 +197,17 @@ func TestStatusCommand(t *testing.T) {
 	}
 }
 
-func TestUnimplementedCommands(t *testing.T) {
-	cmds := []string{"init", "new", "registry", "board", "archive"}
+// TestCommandsWired verifies that the init/new/registry/archive subcommands are
+// dispatched to their handlers instead of printing the "not yet implemented"
+// stub. Each runs in an isolated temp HOME so it can never touch the real one.
+func TestCommandsWired(t *testing.T) {
+	cmds := []string{"init", "new", "registry", "archive"}
 	for _, cmd := range cmds {
-		output := runMainHelper(t, cmd)
+		tmpDir := t.TempDir()
+		output := runMainHelperWithHome(t, tmpDir, cmd)
 		want := fmt.Sprintf("jirafs %s: not yet implemented", cmd)
-		if !strings.Contains(output.stderr, want) {
-			t.Fatalf("cmd=%s: stderr = %q, want %q", cmd, output.stderr, want)
-		}
-		if output.exitCode != 1 {
-			t.Fatalf("cmd=%s: exitCode = %d, want 1", cmd, output.exitCode)
+		if strings.Contains(output.stderr, want) {
+			t.Fatalf("cmd=%s: stderr = %q, still reports 'not yet implemented'", cmd, output.stderr)
 		}
 	}
 }
@@ -1333,7 +1334,7 @@ auth_type = "atlassian_api_token"
 		t.Fatalf("ReadFile() error = %v", err)
 	}
 	text := string(data)
-	if strings.Contains(text, "current_project = '" ) && !strings.Contains(text, "current_project = ''") {
+	if strings.Contains(text, "current_project = '") && !strings.Contains(text, "current_project = ''") {
 		t.Errorf("settings = %q, should not have a non-empty current_project when --set-current is omitted", text)
 	}
 }

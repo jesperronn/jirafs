@@ -27,9 +27,16 @@ func main() {
 		printHelp()
 	case "--version", "-v":
 		fmt.Println("jirafs", version)
-	case "init", "new", "registry", "board", "archive":
-		fmt.Fprintf(os.Stderr, "jirafs %s: not yet implemented\n", os.Args[1])
-		os.Exit(1)
+	case "board":
+		os.Exit(cli.RunBoard(os.Args[2:]))
+	case "init":
+		os.Exit(cli.RunInit(os.Args[2:]))
+	case "new":
+		os.Exit(cli.RunNew(os.Args[2:]))
+	case "registry":
+		os.Exit(cli.RunRegistry(os.Args[2:]))
+	case "archive":
+		os.Exit(cli.RunArchive(os.Args[2:]))
 	case "setup":
 		os.Exit(runSetup(os.Args[2:]))
 	case "sync":
