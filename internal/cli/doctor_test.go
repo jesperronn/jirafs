@@ -7,7 +7,30 @@ import (
 	"testing"
 
 	"github.com/jirafs/jirafs/internal/config"
+	jcontext "github.com/jirafs/jirafs/internal/context"
+	"github.com/jirafs/jirafs/internal/jira"
 )
+
+// withMockDoctorClient temporarily overrides doctorClientFactory to return a fake
+// Jira client that responds immediately without making HTTP requests.
+func withMockDoctorClient(t *testing.T) {
+	t.Helper()
+	oldFactory := doctorClientFactory
+	doctorClientFactory = func(settings *config.Settings, projCtx *jcontext.Context, cwd string) (jira.Client, error) {
+		fake := jira.NewFakeTransport()
+		// Set a default user so CurrentUser returns immediately.
+		fake.SetCurrentUser(&jira.User{
+			Name:         "testuser",
+			DisplayName:  "Test User",
+			EmailAddress: "test@example.com",
+			Active:       true,
+		})
+		return fake, nil
+	}
+	t.Cleanup(func() {
+		doctorClientFactory = oldFactory
+	})
+}
 
 // TestDoctorSnapshot_ZeroValue verifies that a zero-value DoctorSnapshot
 // reports IsZero() as true and has no meaningful fields set.
@@ -50,6 +73,7 @@ func TestBuildDoctorSnapshot_NoSettings(t *testing.T) {
 // TestBuildDoctorSnapshot_CredentialResolution verifies that credentials
 // are properly resolved and reported in the doctor snapshot.
 func TestBuildDoctorSnapshot_CredentialResolution(t *testing.T) {
+	withMockDoctorClient(t)
 	tmpDir := t.TempDir()
 	homeDir := filepath.Join(tmpDir, "home")
 	jirafsDir := filepath.Join(homeDir, ".jirafs")
@@ -107,15 +131,16 @@ local_dirs = ["` + filepath.Join(tmpDir, "local") + `"]
 		t.Fatal("expected non-empty CredentialSummary")
 	}
 
-	// Verify that no live probes exist (since we can't actually connect).
-	// The live probe should exist but show as not connected since we're
-	// using a fake URL.
+	// Verify that the live probe succeeds with the mocked client.
 	lpc, ok := dsnap.LiveProbes["work"]
 	if !ok {
 		t.Fatal("expected 'work' in LiveProbes")
 	}
-	if lpc.Connected {
-		t.Fatal("expected Connected == false for fake URL")
+	if !lpc.Connected {
+		t.Fatal("expected Connected == true with mock client")
+	}
+	if lpc.User == "" {
+		t.Fatal("expected non-empty User field")
 	}
 }
 
@@ -202,9 +227,9 @@ func TestBuildDoctorSnapshot_EmptyInstances(t *testing.T) {
 // fields are populated correctly.
 func TestDoctorSnapshot_CredentialCheckFields(t *testing.T) {
 	cc := CredentialCheck{
-		InstanceName:    "work",
-		Resolved:        true,
-		AuthType:        "atlassian_api_token",
+		InstanceName:      "work",
+		Resolved:          true,
+		AuthType:          "atlassian_api_token",
 		CredentialSummary: "file (2 field(s))",
 	}
 	if cc.InstanceName != "work" {
@@ -248,6 +273,7 @@ func TestDoctorSnapshot_LiveProbeCheckFields(t *testing.T) {
 // TestDoctorSnapshot_MultipleInstances verifies that multiple instances
 // are all checked for credentials and live-probed.
 func TestBuildDoctorSnapshot_MultipleInstances(t *testing.T) {
+	withMockDoctorClient(t)
 	tmpDir := t.TempDir()
 	homeDir := filepath.Join(tmpDir, "home")
 	jirafsDir := filepath.Join(homeDir, ".jirafs")
@@ -318,6 +344,7 @@ local_dirs = ["` + filepath.Join(tmpDir, "local") + `"]
 // TestRunDoctor_NoArgs verifies that calling RunDoctor with no arguments
 // runs the doctor report (not help) and returns exit code 0.
 func TestRunDoctor_NoArgs(t *testing.T) {
+	withMockDoctorClient(t)
 	stdout, stderr := withDoctorTestIO(t)
 	exit := RunDoctor([]string{})
 	if exit != 0 {
@@ -361,6 +388,7 @@ func TestRunDoctor_NoSettings(t *testing.T) {
 // TestRunDoctor_FullReport verifies that RunDoctor outputs a full doctor
 // report when settings, a project, and credentials are all configured.
 func TestRunDoctor_FullReport(t *testing.T) {
+	withMockDoctorClient(t)
 	tmpDir := t.TempDir()
 	homeDir := filepath.Join(tmpDir, "home")
 	jirafsDir := filepath.Join(homeDir, ".jirafs")
@@ -448,6 +476,7 @@ func withDoctorTestIO(t *testing.T) (*bytes.Buffer, *bytes.Buffer) {
 // TestDoctorSnapshot_EmbeddedStatusSnapshot verifies that the embedded
 // StatusSnapshot fields are properly populated in the DoctorSnapshot.
 func TestDoctorSnapshot_EmbeddedStatusSnapshot(t *testing.T) {
+	withMockDoctorClient(t)
 	tmpDir := t.TempDir()
 	homeDir := filepath.Join(tmpDir, "home")
 	jirafsDir := filepath.Join(homeDir, ".jirafs")
@@ -508,6 +537,7 @@ local_dirs = ["` + filepath.Join(tmpDir, "local") + `"]
 // TestRunDoctor_VerbosePrintsURLs verifies that verbose doctor output
 // includes request URLs for live probes.
 func TestRunDoctor_VerbosePrintsURLs(t *testing.T) {
+	withMockDoctorClient(t)
 	tmpDir := t.TempDir()
 	homeDir := filepath.Join(tmpDir, "home")
 	jirafsDir := filepath.Join(homeDir, ".jirafs")
