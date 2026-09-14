@@ -16,9 +16,45 @@ import (
 // TestRunPlan_NoArgs verifies that calling RunPlan with no arguments
 // returns exit code 0 and lists local issues (possibly empty).
 func TestRunPlan_NoArgs(t *testing.T) {
+	tmpDir := t.TempDir()
+	homeDir := filepath.Join(tmpDir, "home")
+	jirafsDir := filepath.Join(homeDir, ".jirafs")
+	if err := os.MkdirAll(jirafsDir, 0o755); err != nil {
+		t.Fatalf("MkdirAll: %v", err)
+	}
+
+	// Create settings with a default current_project, so RunPlan doesn't need --project flag.
+	settingsTOML := `version = 1
+
+[instances.default]
+base_url = "https://example.atlassian.net"
+auth_type = "basic"
+
+[projects.test]
+key = "TEST"
+instance = "default"
+mirror_dir = "` + filepath.Join(tmpDir, "mirror") + `"
+local_dirs = ["` + filepath.Join(tmpDir, "local") + `"]
+
+[State]
+current_project = "test"
+`
+	if err := os.WriteFile(filepath.Join(jirafsDir, "settings.toml"), []byte(settingsTOML), 0o644); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+
+	oldHome := os.Getenv("HOME")
+	os.Setenv("HOME", homeDir)
+	defer os.Setenv("HOME", oldHome)
+
+	stdout, _ := withPlanTestIO(t)
 	exit := RunPlan([]string{})
 	if exit != 0 {
 		t.Errorf("RunPlan([]) = %d, want 0", exit)
+	}
+	// Verify it found no issue files (since tmpDir/local doesn't exist).
+	if !strings.Contains(stdout.String(), "no issue files found") {
+		t.Errorf("stdout = %q, want 'no issue files found'", stdout.String())
 	}
 }
 
@@ -532,8 +568,6 @@ func withPlanClientFactory(t *testing.T, factory func(*config.Settings, *context
 		planClientFactory = oldFactory
 	})
 }
-
-
 
 // TestRunPlan_NoKey_ProjectNotFound verifies that plan without an issue key
 // returns exit code 1 when --project points to a non-existent project.
