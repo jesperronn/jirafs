@@ -600,3 +600,62 @@ func TestRunExportIssue_IncludesCommentsAndWarnsOnFailure(t *testing.T) {
 		t.Errorf("stderr = %q stdout = %q", stderr.String(), stdout.String())
 	}
 }
+
+// TestRunExportIssue_NoLocalDirsSuggestsStdout verifies that exporting to a file when the
+// project has no local_dirs fails with exit 1 and points the user at --stdout.
+func TestRunExportIssue_NoLocalDirsSuggestsStdout(t *testing.T) {
+	tmpDir := t.TempDir()
+	homeDir := filepath.Join(tmpDir, "home")
+	jirafsDir := filepath.Join(homeDir, ".jirafs")
+	if err := os.MkdirAll(jirafsDir, 0o755); err != nil {
+		t.Fatalf("MkdirAll: %v", err)
+	}
+	credsPath := filepath.Join(tmpDir, "creds.toml")
+	if err := os.WriteFile(credsPath, []byte("email = \"user@example.com\"\napi_token = \"token\"\n"), 0o644); err != nil {
+		t.Fatalf("WriteFile creds: %v", err)
+	}
+	settingsTOML := `version = 1
+
+[instances.default]
+base_url = "https://example.atlassian.net"
+auth_type = "atlassian_api_token"
+credential_refs = ["file://` + credsPath + `"]
+
+[projects.test]
+key = "PROJ"
+instance = "default"
+mirror_dir = "` + filepath.Join(tmpDir, "mirror") + `"
+`
+	if err := os.WriteFile(filepath.Join(jirafsDir, "settings.toml"), []byte(settingsTOML), 0o644); err != nil {
+		t.Fatalf("WriteFile settings: %v", err)
+	}
+	oldHome := os.Getenv("HOME")
+	os.Setenv("HOME", homeDir)
+	defer os.Setenv("HOME", oldHome)
+
+	fake := jira.NewFakeTransport()
+	fake.SetIssue("PROJ-42", &schema.Issue{
+		Identity: schema.IssueIdentity{
+			Key:     "PROJ-42",
+			Type:    "story",
+			Project: schema.TypedRef{Type: schema.RefProject, Value: "PROJ"},
+		},
+		Summary:      "No local dir",
+		MachineOwned: schema.MachineOwned{SchemaVersion: "1"},
+	})
+	withExportClientFactory(t, func(*config.Settings, *context.Context, string) (jira.Client, error) {
+		return fake, nil
+	})
+	stdout, stderr := withExportTestIO(t)
+
+	exit := RunExport([]string{"issue", "--project", "test", "PROJ-42"})
+	if exit != 1 {
+		t.Fatalf("RunExport(issue PROJ-42) = %d, want 1; stdout = %q", exit, stdout.String())
+	}
+	if !strings.Contains(stderr.String(), "no local_dirs configured") || !strings.Contains(stderr.String(), "--stdout") {
+		t.Errorf("stderr = %q, want no local_dirs error suggesting --stdout", stderr.String())
+	}
+	if stdout.Len() != 0 {
+		t.Errorf("stdout = %q, want empty", stdout.String())
+	}
+}
