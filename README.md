@@ -33,7 +33,8 @@ jirafs setup \
 
 jirafs use
 jirafs mirror refresh my-issues
-jirafs export issue PLAT-123 > /tmp/PLAT-123.md
+jirafs export issue PLAT-123            # writes <local_dir>/PLAT-123.md
+jirafs export issue PLAT-123 --stdout > /tmp/PLAT-123.md
 jirafs plan PLAT-123
 jirafs sync PLAT-123
 ```

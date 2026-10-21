@@ -151,7 +151,7 @@ func TestRunExportIssue_Success(t *testing.T) {
 	})
 	stdout, stderr := withExportTestIO(t)
 
-	exit := RunExport([]string{"issue", "--project", "test", "PROJ-42"})
+	exit := RunExport([]string{"issue", "--stdout", "--project", "test", "PROJ-42"})
 	if exit != 0 {
 		t.Fatalf("RunExport([\"issue\", \"--project\", \"test\", \"PROJ-42\"]) = %d, stderr = %q", exit, stderr.String())
 	}
@@ -295,7 +295,7 @@ func TestRunExportIssue_MinimalIssue(t *testing.T) {
 	})
 	stdout, stderr := withExportTestIO(t)
 
-	exit := RunExport([]string{"issue", "--project", "test", "--cwd", filepath.Join(tmpDir, "outside"), "DRF-1"})
+	exit := RunExport([]string{"issue", "--stdout", "--project", "test", "--cwd", filepath.Join(tmpDir, "outside"), "DRF-1"})
 	if exit != 0 {
 		t.Fatalf("RunExport([\"issue\", \"DRF-1\"]) = %d, stderr = %q", exit, stderr.String())
 	}
@@ -436,7 +436,7 @@ func TestRunExportIssue_BrowseURL(t *testing.T) {
 	})
 	stdout, stderr := withExportTestIO(t)
 
-	exit := RunExport([]string{"issue", "--project", "test", "https://example.atlassian.net/browse/PROJ-42"})
+	exit := RunExport([]string{"issue", "--stdout", "--project", "test", "https://example.atlassian.net/browse/PROJ-42"})
 	if exit != 0 {
 		t.Fatalf("exit = %d, stderr = %q", exit, stderr.String())
 	}
@@ -452,5 +452,109 @@ func TestRunExportIssue_BrowseURL(t *testing.T) {
 	}
 	if !strings.Contains(stderr.String(), "jirafs export issue KEY --project test") {
 		t.Fatalf("stderr = %q, want copy-pasteable hint", stderr.String())
+	}
+}
+
+func exportFakeIssue(key string) *jira.FakeTransport {
+	fake := jira.NewFakeTransport()
+	fake.SetIssue(key, &schema.Issue{
+		Identity: schema.IssueIdentity{
+			Key:     schema.IssueKey(key),
+			Type:    "task",
+			Project: schema.TypedRef{Type: schema.RefProject, Value: "PROJ"},
+		},
+		Summary:        "File issue",
+		MachineOwned:   schema.MachineOwned{SchemaVersion: "1"},
+		RemoteMetadata: schema.RemoteMetadata{StateFile: "synced", RemoteVersion: "1", ContentHash: "h"},
+	})
+	return fake
+}
+
+// TestRunExportIssue_WritesFile verifies the default mode writes
+// <local_dirs[0]>/<KEY>.md (creating the missing directory) and prints the
+// absolute path.
+func TestRunExportIssue_WritesFile(t *testing.T) {
+	tmpDir := t.TempDir()
+	homeDir := writeSettings(t, tmpDir)
+	t.Setenv("HOME", homeDir)
+	fake := exportFakeIssue("PROJ-7")
+	withExportClientFactory(t, func(*config.Settings, *context.Context, string) (jira.Client, error) {
+		return fake, nil
+	})
+	stdout, stderr := withExportTestIO(t)
+
+	// The local dir does not exist yet; it must be created.
+	localDir := filepath.Join(tmpDir, "local")
+	if _, err := os.Stat(localDir); err == nil {
+		t.Fatal("local dir unexpectedly exists")
+	}
+
+	exit := RunExport([]string{"issue", "--project", "test", "PROJ-7"})
+	if exit != 0 {
+		t.Fatalf("exit = %d, stderr = %q", exit, stderr.String())
+	}
+	dest := filepath.Join(localDir, "PROJ-7.md")
+	want := "wrote PROJ-7 → " + dest + "\n"
+	if stdout.String() != want {
+		t.Fatalf("stdout = %q, want %q", stdout.String(), want)
+	}
+	if !filepath.IsAbs(dest) {
+		t.Fatalf("dest %q not absolute", dest)
+	}
+	data, err := os.ReadFile(dest)
+	if err != nil {
+		t.Fatalf("ReadFile: %v", err)
+	}
+	if !strings.Contains(string(data), "File issue") {
+		t.Fatalf("file = %q, want summary", string(data))
+	}
+}
+
+// TestRunExportIssue_StdoutWritesNoFile verifies --stdout prints the document
+// and writes no file.
+func TestRunExportIssue_StdoutWritesNoFile(t *testing.T) {
+	tmpDir := t.TempDir()
+	homeDir := writeSettings(t, tmpDir)
+	t.Setenv("HOME", homeDir)
+	fake := exportFakeIssue("PROJ-8")
+	withExportClientFactory(t, func(*config.Settings, *context.Context, string) (jira.Client, error) {
+		return fake, nil
+	})
+	stdout, stderr := withExportTestIO(t)
+
+	exit := RunExport([]string{"issue", "--stdout", "--project", "test", "PROJ-8"})
+	if exit != 0 {
+		t.Fatalf("exit = %d, stderr = %q", exit, stderr.String())
+	}
+	if !strings.Contains(stdout.String(), "File issue") || strings.HasPrefix(stdout.String(), "wrote ") {
+		t.Fatalf("stdout = %q, want document", stdout.String())
+	}
+	if _, err := os.Stat(filepath.Join(tmpDir, "local")); err == nil {
+		t.Fatal("--stdout must not create the local dir or file")
+	}
+}
+
+// TestRunExportIssue_NoLocalDirs verifies a project without local_dirs fails
+// with a hint in file mode.
+func TestRunExportIssue_NoLocalDirs(t *testing.T) {
+	tmpDir := t.TempDir()
+	homeDir := writeSettings(t, tmpDir)
+	t.Setenv("HOME", homeDir)
+	fake := exportFakeIssue("PROJ-9")
+	withExportClientFactory(t, func(*config.Settings, *context.Context, string) (jira.Client, error) {
+		return fake, nil
+	})
+	_, stderr := withExportTestIO(t)
+	// Make local dir creation impossible: a regular file occupies its path.
+	if err := os.WriteFile(filepath.Join(tmpDir, "local"), []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	exit := RunExport([]string{"issue", "--project", "test", "PROJ-9"})
+	if exit != 1 {
+		t.Fatalf("exit = %d, want 1", exit)
+	}
+	if !strings.Contains(stderr.String(), "create local directory") {
+		t.Fatalf("stderr = %q, want create local directory error", stderr.String())
 	}
 }

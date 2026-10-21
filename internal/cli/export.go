@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/jirafs/jirafs/internal/color"
@@ -16,9 +17,9 @@ import (
 )
 
 var (
-	exportStdout   io.Writer = os.Stdout
-	exportStderr   io.Writer = os.Stderr
-	exportClientFactory = buildExportClient
+	exportStdout        io.Writer = os.Stdout
+	exportStderr        io.Writer = os.Stderr
+	exportClientFactory           = buildExportClient
 )
 
 // RunExport dispatches the `jirafs export` subcommand. It supports:
@@ -60,7 +61,8 @@ func RunExport(args []string) int {
 func runExportIssue(args []string, settings *config.Settings, resolver *context.Resolver) int {
 	fs := flag.NewFlagSet("export issue", flag.ExitOnError)
 	fs.Usage = func() {
-		fmt.Fprintf(exportStderr, "Usage: jirafs export issue <KEY|URL> [--project NAME] [--cwd DIR]\n\n")
+		fmt.Fprintf(exportStderr, "Usage: jirafs export issue <KEY|URL> [--project NAME] [--cwd DIR] [--stdout]\n\n")
+		fmt.Fprintf(exportStderr, "By default the issue is written to <local_dirs[0]>/<KEY>.md and the path is printed.\n\n")
 		fmt.Fprintf(exportStderr, "KEY is an issue key (PROJ-123); URL is <base_url>/browse/PROJ-123 or a URL with selectedIssue=PROJ-123.\n\n")
 		fs.PrintDefaults()
 	}
@@ -68,6 +70,8 @@ func runExportIssue(args []string, settings *config.Settings, resolver *context.
 	projectFlag := fs.String("project", "", "project key or name to use")
 	// --cwd overrides the working directory for project resolution.
 	cwdFlag := fs.String("cwd", "", "working directory to use for project resolution")
+	// --stdout prints the document instead of writing a file.
+	stdoutFlag := fs.Bool("stdout", false, "print the document to stdout and write no file")
 	if err := fs.Parse(args); err != nil {
 		fmt.Fprintf(exportStderr, "jirafs export issue: invalid flags: %v\n", err)
 		return 1
@@ -115,7 +119,30 @@ func runExportIssue(args []string, settings *config.Settings, resolver *context.
 
 	// Export through the canonical codec.
 	output := export.ExportIssue(issue)
-	fmt.Fprint(exportStdout, output)
+	if *stdoutFlag {
+		fmt.Fprint(exportStdout, output)
+		return 0
+	}
+
+	proj, ok := settings.Projects[ctx.Name]
+	if !ok || len(proj.LocalDirs) == 0 {
+		fmt.Fprintf(exportStderr, "jirafs export issue: project %q has no local_dirs configured; use --stdout to print instead\n", ctx.Name)
+		return 1
+	}
+	if err := os.MkdirAll(proj.LocalDirs[0], 0o755); err != nil {
+		fmt.Fprintf(exportStderr, "jirafs export issue: create local directory %s: %v\n", proj.LocalDirs[0], err)
+		return 1
+	}
+	dest, err := filepath.Abs(filepath.Join(proj.LocalDirs[0], key+".md"))
+	if err != nil {
+		fmt.Fprintf(exportStderr, "jirafs export issue: %v\n", err)
+		return 1
+	}
+	if err := os.WriteFile(dest, []byte(output), 0o644); err != nil {
+		fmt.Fprintf(exportStderr, "jirafs export issue: write %s: %v\n", dest, err)
+		return 1
+	}
+	fmt.Fprintf(exportStdout, "wrote %s → %s\n", key, dest)
 	return 0
 }
 
@@ -168,7 +195,8 @@ func printExportHelp() {
 
 	fmt.Fprintf(exportStderr, "%s:\n", color.BoldGreen(exportStderr, "Flags"))
 	fmt.Fprintf(exportStderr, "  %s KEY   %s\n", color.Yellow(exportStderr, "--project"), color.Dim(exportStderr, "project key or name to use"))
-	fmt.Fprintf(exportStderr, "  %s DIR   %s\n\n", color.Yellow(exportStderr, "--cwd"), color.Dim(exportStderr, "working directory for project resolution"))
+	fmt.Fprintf(exportStderr, "  %s DIR   %s\n", color.Yellow(exportStderr, "--cwd"), color.Dim(exportStderr, "working directory for project resolution"))
+	fmt.Fprintf(exportStderr, "  %s     %s\n\n", color.Yellow(exportStderr, "--stdout"), color.Dim(exportStderr, "print the document to stdout instead of writing <local_dirs[0]>/<KEY>.md"))
 
 	fmt.Fprintf(exportStderr, "%s\n", color.Cyan(exportStderr, `Run "jirafs export <subcommand> --help" for more information about a subcommand.`))
 }

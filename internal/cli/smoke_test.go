@@ -67,7 +67,7 @@ func TestSmokeExportEditPlanSyncReexport(t *testing.T) {
 		t.Fatalf("MkdirAll export: %v", err)
 	}
 
-	exit := RunExport([]string{"issue", "--project", "test", "PROJ-42"})
+	exit := RunExport([]string{"issue", "--stdout", "--project", "test", "PROJ-42"})
 	if exit != 0 {
 		t.Fatalf("RunExport([\"issue\", \"--project\", \"test\", \"PROJ-42\"]) = %d, stderr = %q", exit, exportStderr.String())
 	}
@@ -111,7 +111,7 @@ func TestSmokeExportEditPlanSyncReexport(t *testing.T) {
 	// Step 5: Re-export to verify the remote was updated.
 	exportStdout, exportStderr = withExportTestIO(t)
 
-	exit = RunExport([]string{"issue", "--project", "test", "PROJ-42"})
+	exit = RunExport([]string{"issue", "--stdout", "--project", "test", "PROJ-42"})
 	if exit != 0 {
 		t.Fatalf("RunExport re-export = %d, stderr = %q", exit, exportStderr.String())
 	}
@@ -173,7 +173,7 @@ func TestSmokeExportEditPlanSyncReexport_MinimalIssue(t *testing.T) {
 	// withExportTestIO swaps the global exportStdout to a buffer and returns it.
 	exportStdout, exportStderr := withExportTestIO(t)
 
-	exit := RunExport([]string{"issue", "--project", "test", "DRF-1"})
+	exit := RunExport([]string{"issue", "--stdout", "--project", "test", "DRF-1"})
 	if exit != 0 {
 		t.Fatalf("RunExport minimal = %d, stderr = %q", exit, exportStderr.String())
 	}
@@ -218,7 +218,7 @@ func TestSmokeExportEditPlanSyncReexport_MinimalIssue(t *testing.T) {
 	// Step 5: Re-export.
 	exportStdout, exportStderr = withExportTestIO(t)
 
-	exit = RunExport([]string{"issue", "--project", "test", "DRF-1"})
+	exit = RunExport([]string{"issue", "--stdout", "--project", "test", "DRF-1"})
 	if exit != 0 {
 		t.Fatalf("RunExport re-export minimal = %d, stderr = %q", exit, exportStderr.String())
 	}
@@ -253,7 +253,7 @@ func TestSmokeExportEditPlanSyncReexport_FetchError(t *testing.T) {
 	})
 
 	_, exportStderr := withExportTestIO(t)
-	exit := RunExport([]string{"issue", "--project", "test", "PROJ-42"})
+	exit := RunExport([]string{"issue", "--stdout", "--project", "test", "PROJ-42"})
 	if exit != 1 {
 		t.Fatalf("RunExport with fetch error = %d, want 1", exit)
 	}
@@ -295,7 +295,7 @@ func TestSmokeExportEditPlanSyncReexport_Conflict(t *testing.T) {
 	// Step 1: Export.
 	// withExportTestIO swaps the global exportStdout to a buffer and returns it.
 	exportStdout, exportStderr := withExportTestIO(t)
-	exit := RunExport([]string{"issue", "--project", "test", "PROJ-42"})
+	exit := RunExport([]string{"issue", "--stdout", "--project", "test", "PROJ-42"})
 	if exit != 0 {
 		t.Fatalf("RunExport = %d, stderr = %q", exit, exportStderr.String())
 	}
@@ -383,7 +383,7 @@ func TestSmokeExportEditPlanSyncReexport_UpdateError(t *testing.T) {
 	// Step 1: Export.
 	// withExportTestIO swaps the global exportStdout to a buffer and returns it.
 	exportStdout, exportStderr := withExportTestIO(t)
-	exit := RunExport([]string{"issue", "--project", "test", "PROJ-42"})
+	exit := RunExport([]string{"issue", "--stdout", "--project", "test", "PROJ-42"})
 	if exit != 0 {
 		t.Fatalf("RunExport = %d, stderr = %q", exit, exportStderr.String())
 	}
@@ -424,7 +424,7 @@ func TestSmokeExportEditPlanSyncReexport_UpdateError(t *testing.T) {
 	// Step 4: Verify re-export still shows the original (unchanged) remote.
 	exportStdout, exportStderr = withExportTestIO(t)
 
-	exit = RunExport([]string{"issue", "--project", "test", "PROJ-42"})
+	exit = RunExport([]string{"issue", "--stdout", "--project", "test", "PROJ-42"})
 	if exit != 0 {
 		t.Fatalf("RunExport re-export = %d, stderr = %q", exit, exportStderr.String())
 	}
