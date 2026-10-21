@@ -116,6 +116,18 @@ type and summary are required), applies `--project`/`--assignee`, and prints
 `jirafs: created <path>`. Invalid documents are rejected with the offending
 field and a retry command.
 
+Drafts are created in Jira with `jirafs push`. It is a dry run by default;
+`--apply` creates the issue, renames the file to `KEY.md`, marks it synced and
+prints the browse URL:
+
+```sh
+jirafs push jira/add-dark-mode.md            # show what would be created
+jirafs push jira/add-dark-mode.md --apply    # POST /rest/api/2/issue
+```
+
+Only files with `state: draft` can be pushed; use `jirafs sync KEY` to update
+existing issues.
+
 ## Initial Scope
 
 - Export Jira issues, sprints, and related metadata into a local filesystem.

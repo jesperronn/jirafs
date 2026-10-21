@@ -2,6 +2,7 @@ package jira
 
 import (
 	"context"
+	"fmt"
 	"sync"
 
 	"github.com/jirafs/jirafs/internal/config"
@@ -22,6 +23,7 @@ type FakeTransport struct {
 	statuses    []StatusEntry
 	sprints     map[string][]SprintEntry     // projectKey -> sprints
 	fixVersions map[string][]FixVersionEntry // projectKey -> versions
+	created     int                          // issues created via CreateIssue
 }
 
 // NewFakeTransport creates a fake transport with empty state.
@@ -200,6 +202,23 @@ func (f *FakeTransport) UpdateIssue(_ context.Context, key string, issue *schema
 	updated := *issue
 	f.issues[key] = &updated
 	return &updated, nil
+}
+
+// CreateIssue registers a copy of issue under a generated key
+// (<PROJECT>-<n>, starting at 1) and returns it. SetErr("create", err)
+// makes it fail.
+func (f *FakeTransport) CreateIssue(_ context.Context, issue *schema.Issue) (string, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.errOn == "create" {
+		return "", f.err
+	}
+	f.created++
+	key := fmt.Sprintf("%s-%d", issue.Identity.Project.Value, f.created)
+	c := *issue
+	c.Identity.Key = schema.IssueKey(key)
+	f.issues[key] = &c
+	return key, nil
 }
 
 // SetCredentials is a no-op for the fake transport.

@@ -33,6 +33,8 @@ func main() {
 		os.Exit(cli.RunInit(os.Args[2:]))
 	case "new":
 		os.Exit(cli.RunNew(os.Args[2:]))
+	case "push":
+		os.Exit(cli.RunPush(os.Args[2:]))
 	case "registry":
 		os.Exit(cli.RunRegistry(os.Args[2:]))
 	case "archive":
@@ -394,6 +396,7 @@ func printHelp() {
 		{"doctor", "run health checks on config, credentials, and live connectivity"},
 		{"sync", "apply a sync plan and push changes to Jira (real service path)"},
 		{"new", "create a new issue from a template"},
+		{"push", "create a local draft issue in Jira (dry run unless --apply)"},
 		{"registry", "manage local registry files for typed references"},
 		{"board", "show a local kanban-style board view"},
 		{"archive", "manage archived issue files"},

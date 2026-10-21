@@ -88,6 +88,10 @@ type Client interface {
 	// to Jira after validating and applying a plan.
 	UpdateIssue(ctx context.Context, key string, issue *schema.Issue) (*schema.Issue, error)
 
+	// CreateIssue creates a new issue in the project named by
+	// issue.Identity.Project and returns its new key.
+	CreateIssue(ctx context.Context, issue *schema.Issue) (string, error)
+
 	// SetCredentials configures the credentials used for authenticating
 	// requests made by this client. It is called after client creation
 	// to inject resolved credentials before making API calls.
@@ -701,4 +705,65 @@ func (c *JiraClient) FetchFixVersions(ctx context.Context, projectKey string) ([
 	}
 
 	return fr.Values, nil
+}
+
+// CreateFields builds the Jira "fields" object for creating issue: the
+// editable fields plus project and issue type. Fields Jira refuses at
+// creation time (status, sprint, issue links) are left out.
+func CreateFields(issue *schema.Issue) map[string]interface{} {
+	fields := issue.ToFieldsMap()
+	delete(fields, "status")
+	delete(fields, "customfield_sprint")
+	delete(fields, "issuelinks")
+	fields["project"] = map[string]string{"key": issue.Identity.Project.Value}
+	fields["issuetype"] = map[string]string{"name": IssueTypeName(string(issue.Identity.Type))}
+	return fields
+}
+
+// IssueTypeName converts a local lower-case type ("story") to the Jira
+// issue type name ("Story").
+func IssueTypeName(t string) string {
+	if t == "" {
+		return t
+	}
+	return strings.ToUpper(t[:1]) + t[1:]
+}
+
+// CreateIssue creates an issue via POST /rest/api/2/issue and returns the
+// new issue key.
+func (c *JiraClient) CreateIssue(ctx context.Context, issue *schema.Issue) (string, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	pbody, err := json.Marshal(map[string]interface{}{"fields": CreateFields(issue)})
+	if err != nil {
+		return "", NewUnknownErr("cannot marshal create request: " + err.Error())
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.baseURL+"/rest/api/2/issue", bytes.NewReader(pbody))
+	if err != nil {
+		return "", NewTransportError("cannot create request: " + err.Error())
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req, err = BuildAuthenticatedRequest(req, c.credential)
+	if err != nil {
+		return "", NewUnknownErr("cannot authenticate create request: " + err.Error())
+	}
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return "", NewTransportError("create request failed: " + err.Error())
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden {
+		return "", NewAuthError("HTTP " + fmt.Sprintf("%d", resp.StatusCode))
+	}
+	if resp.StatusCode >= 400 {
+		return "", mapHTTPErr(resp)
+	}
+	var created struct {
+		Key string `json:"key"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&created); err != nil || created.Key == "" {
+		return "", NewUnknownErr("cannot parse create response: missing issue key")
+	}
+	return created.Key, nil
 }

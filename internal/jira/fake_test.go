@@ -377,3 +377,23 @@ func TestFakeTransportUpdateIssueWithError(t *testing.T) {
 		t.Errorf("expected %v, got %v", wantErr, err)
 	}
 }
+
+func TestFakeTransportCreateIssue(t *testing.T) {
+	f := NewFakeTransport()
+	issue := &schema.Issue{Identity: schema.IssueIdentity{Type: "story", Project: schema.TypedRef{Type: "project", Value: "ABC"}}, Summary: "s"}
+	k1, err := f.CreateIssue(nil, issue)
+	if err != nil || k1 != "ABC-1" {
+		t.Fatalf("k1=%q err=%v", k1, err)
+	}
+	if k2, _ := f.CreateIssue(nil, issue); k2 != "ABC-2" {
+		t.Errorf("k2=%q", k2)
+	}
+	got, err := f.FetchIssue(nil, "ABC-1")
+	if err != nil || got.Identity.Key != "ABC-1" {
+		t.Errorf("fetch: %+v %v", got, err)
+	}
+	f.SetErr("create", NewUnknownErr("x"))
+	if _, err := f.CreateIssue(nil, issue); err == nil {
+		t.Error("expected error")
+	}
+}
