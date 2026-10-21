@@ -1740,7 +1740,7 @@ func TestFetchIssueRequestsExplicitFieldsAndNormalizesContext(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, f := range []string{"description", "status", "priority", "reporter", "created", "updated", "components", "parent", "customfield_10014"} {
+	for _, f := range []string{"description", "status", "priority", "reporter", "created", "updated", "components", "parent", "fixVersions", "subtasks", "customfield_10014"} {
 		if !strings.Contains(","+gotFields+",", ","+f+",") {
 			t.Errorf("fields=%q missing %q", gotFields, f)
 		}

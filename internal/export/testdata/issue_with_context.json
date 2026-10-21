@@ -15,8 +15,16 @@
     "components": [{"name": "Login"}, {"name": "Backend"}],
     "parent": {"key": "SKOLELOGIN-18000", "fields": {"summary": "Login hardening"}},
     "customfield_10014": "SKOLELOGIN-17000",
+    "fixVersions": [{"name": "2026.1"}, {"name": "2026.2"}],
+    "subtasks": [
+      {"key": "SKOLELOGIN-18313", "fields": {"summary": "Fix surname parser", "status": {"name": "Done"}}},
+      {"key": "SKOLELOGIN-18314", "fields": {"summary": "Add regression test", "status": {"name": "To Do"}}}
+    ],
     "issuelinks": [
-      {"type": {"name": "Blocks"}, "outwardIssue": {"key": "SKOLELOGIN-18400"}}
+      {"type": {"name": "Blocks", "outward": "blocks", "inward": "is blocked by"},
+       "outwardIssue": {"key": "SKOLELOGIN-18400", "fields": {"summary": "Release gate", "status": {"name": "Open"}}}},
+      {"type": {"name": "Blocks", "outward": "blocks", "inward": "is blocked by"},
+       "issue": {"key": "SKOLELOGIN-18100", "fields": {"summary": "Upgrade IdP", "status": {"name": "In Review"}}}}
     ]
   }
 }

@@ -127,8 +127,8 @@ func TestRefreshScope_shallow_linked_issues(t *testing.T) {
 	issue := &schema.Issue{
 		Identity: schema.IssueIdentity{Key: "PROJ-1", Type: "Story"},
 		LinkedIssues: []schema.LinkedIssue{
-			{Key: "PROJ-2", Type: "blocks"},
-			{Key: "PROJ-3", Type: "relates to"},
+			{Key: "PROJ-2", Relation: "blocks"},
+			{Key: "PROJ-3", Relation: "relates to"},
 		},
 	}
 	fake.SetIssuesByScope("my-issues", []*schema.Issue{issue})

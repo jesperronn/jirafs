@@ -196,7 +196,15 @@ func ParseIssue(content string) (Issue, *ParseError) {
 		Summary      string        `yaml:"summary"`
 		Labels       []string      `yaml:"labels"`
 		Assignee     string        `yaml:"assignee"`
-		LinkedIssues []LinkedIssue `yaml:"linked_issues"`
+		LinkedIssues []struct {
+			Key      IssueKey `yaml:"key"`
+			Relation string   `yaml:"relation"`
+			Type     string   `yaml:"type"` // legacy name for relation
+			Summary  string   `yaml:"summary"`
+			Status   string   `yaml:"status"`
+		} `yaml:"linked_issues"`
+		FixVersions []string  `yaml:"fix_versions"`
+		Subtasks    []Subtask `yaml:"subtasks"`
 	}
 	_ = yaml.Unmarshal([]byte(frontmatter), &rawEditable)
 	if rawEditable.Summary != "" {
@@ -209,7 +217,21 @@ func ParseIssue(content string) (Issue, *ParseError) {
 		issue.Assignee = &rawEditable.Assignee
 	}
 	if len(rawEditable.LinkedIssues) > 0 {
-		issue.LinkedIssues = rawEditable.LinkedIssues
+		for _, li := range rawEditable.LinkedIssues {
+			rel := li.Relation
+			if rel == "" {
+				rel = li.Type
+			}
+			issue.LinkedIssues = append(issue.LinkedIssues, LinkedIssue{
+				Key: li.Key, Relation: rel, Summary: li.Summary, Status: li.Status,
+			})
+		}
+	}
+	if len(rawEditable.FixVersions) > 0 {
+		issue.FixVersions = rawEditable.FixVersions
+	}
+	if len(rawEditable.Subtasks) > 0 {
+		issue.Subtasks = rawEditable.Subtasks
 	}
 
 	// Parse read-only Jira context.

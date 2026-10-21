@@ -109,8 +109,8 @@ func TestExportIssue(t *testing.T) {
 				Labels:     []string{"bug", "urgent"},
 				Assignee:   ptrString("alice"),
 				LinkedIssues: []schema.LinkedIssue{
-					{Key: "PROJ-1", Type: "blocks"},
-					{Key: "PROJ-2", Type: "relates to"},
+					{Key: "PROJ-1", Relation: "blocks"},
+					{Key: "PROJ-2", Relation: "relates to"},
 				},
 			},
 			wantLen: 1,
@@ -187,9 +187,9 @@ func TestExportIssue(t *testing.T) {
 					t.Errorf("linked_issues[%d].key = %q, want %q",
 						i, parsed.LinkedIssues[i].Key, tt.issue.LinkedIssues[i].Key)
 				}
-				if parsed.LinkedIssues[i].Type != tt.issue.LinkedIssues[i].Type {
+				if parsed.LinkedIssues[i].Relation != tt.issue.LinkedIssues[i].Relation {
 					t.Errorf("linked_issues[%d].type = %q, want %q",
-						i, parsed.LinkedIssues[i].Type, tt.issue.LinkedIssues[i].Type)
+						i, parsed.LinkedIssues[i].Relation, tt.issue.LinkedIssues[i].Relation)
 				}
 			}
 			// Remote metadata round-trip.
@@ -271,7 +271,7 @@ func TestNormalizeLinkedIssues(t *testing.T) {
 			wantTypes: []string{"is blocked by"},
 		},
 		{
-			name: "multiple links dedup by key",
+			name: "same key different relation kept",
 			args: args{fields: map[string]interface{}{
 				"issuelinks": []interface{}{
 					map[string]interface{}{
@@ -284,9 +284,9 @@ func TestNormalizeLinkedIssues(t *testing.T) {
 					},
 				},
 			}},
-			wantLen:   1,
-			wantKeys:  []string{"PROJ-456"},
-			wantTypes: []string{"blocks"},
+			wantLen:   2,
+			wantKeys:  []string{"PROJ-456", "PROJ-456"},
+			wantTypes: []string{"blocks", "is blocked by"},
 		},
 		{
 			name: "multiple distinct links",
@@ -343,8 +343,8 @@ func TestNormalizeLinkedIssues(t *testing.T) {
 				if string(issue.LinkedIssues[i].Key) != tt.wantKeys[i] {
 					t.Errorf("LinkedIssues[%d].Key = %q, want %q", i, issue.LinkedIssues[i].Key, tt.wantKeys[i])
 				}
-				if issue.LinkedIssues[i].Type != tt.wantTypes[i] {
-					t.Errorf("LinkedIssues[%d].Type = %q, want %q", i, issue.LinkedIssues[i].Type, tt.wantTypes[i])
+				if issue.LinkedIssues[i].Relation != tt.wantTypes[i] {
+					t.Errorf("LinkedIssues[%d].Relation = %q, want %q", i, issue.LinkedIssues[i].Relation, tt.wantTypes[i])
 				}
 			}
 		})

@@ -93,9 +93,9 @@ linked_issues:
 		// Verify linked issues
 		assert.Len(t, issue.LinkedIssues, 2)
 		assert.Equal(t, schema.IssueKey("DEF-100"), issue.LinkedIssues[0].Key)
-		assert.Equal(t, "blocks", issue.LinkedIssues[0].Type)
+		assert.Equal(t, "blocks", issue.LinkedIssues[0].Relation)
 		assert.Equal(t, schema.IssueKey("DEF-200"), issue.LinkedIssues[1].Key)
-		assert.Equal(t, "relates to", issue.LinkedIssues[1].Type)
+		assert.Equal(t, "relates to", issue.LinkedIssues[1].Relation)
 
 		// Verify RemoteMetadata is empty for draft issues
 		assert.Equal(t, "", issue.RemoteMetadata.RemoteVersion)

@@ -211,7 +211,7 @@ func (c *JiraClient) issueFields() []string {
 	fields := []string{
 		"summary", "description", "labels", "assignee", "status", "issuetype",
 		"issuelinks", "priority", "reporter", "created", "updated",
-		"components", "parent",
+		"components", "parent", "fixVersions", "subtasks",
 	}
 	if c.epicLinkField != "" {
 		fields = append(fields, c.epicLinkField)

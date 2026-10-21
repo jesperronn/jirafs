@@ -106,18 +106,29 @@ func (m MachineOwned) IsZero() bool {
 type LinkedIssue struct {
 	// Key is the linked issue's key (e.g. "PROJ-456").
 	Key IssueKey `yaml:"key"`
-	// Type is the Jira link type (e.g. "blocks", "is blocked by", "relates to").
-	Type string `yaml:"type"`
+	// Relation is the directional link text (e.g. "blocks", "is blocked by").
+	Relation string `yaml:"relation"`
+	// Summary and Status are read-only context about the linked issue; plan
+	// comparison ignores them.
+	Summary string `yaml:"summary,omitempty"`
+	Status  string `yaml:"status,omitempty"`
+}
+
+// Subtask is a read-only reference to a sub-task of an issue.
+type Subtask struct {
+	Key     string `yaml:"key"`
+	Summary string `yaml:"summary,omitempty"`
+	Status  string `yaml:"status,omitempty"`
 }
 
 // IsZero reports whether l has no linked issue set.
 func (l LinkedIssue) IsZero() bool {
-	return l.Key == "" && l.Type == ""
+	return l.Key == "" && l.Relation == ""
 }
 
 // Equals reports whether l and o refer to the same linked issue.
 func (l LinkedIssue) Equals(o LinkedIssue) bool {
-	return l.Key == o.Key && l.Type == o.Type
+	return l.Key == o.Key && l.Relation == o.Relation
 }
 
 // IssueContext holds read-only, machine-owned Jira metadata. It is rendered
@@ -158,6 +169,9 @@ type Issue struct {
 	LinkedIssues   []LinkedIssue `yaml:"linked_issues,omitempty"`
 	// Context is read-only Jira metadata; plan and push ignore it.
 	Context IssueContext
+	// Subtasks lists the issue's sub-tasks. Read-only; plan and push ignore
+	// it, and mirror does not fetch sub-tasks recursively.
+	Subtasks []Subtask
 	// Comments holds the most recent remote comments, newest first. They are
 	// read-only; plan and push ignore them.
 	Comments []Comment
@@ -211,7 +225,7 @@ func (i Issue) ToFieldsMap() map[string]interface{} {
 		for idx, li := range i.LinkedIssues {
 			links[idx] = map[string]interface{}{
 				"issueKey": string(li.Key),
-				"type":     map[string]string{"name": li.Type},
+				"type":     map[string]string{"name": li.Relation},
 			}
 		}
 		fields["issuelinks"] = links

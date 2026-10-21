@@ -21,8 +21,8 @@ func NormalizeLinkedIssues(issue *schema.Issue, fields map[string]interface{}) {
 		return
 	}
 
-	// Deduplicate by target key to avoid counting the same link twice
-	// (one outward + one inward entry per relationship).
+	// Deduplicate by key plus relation: the same issue may legitimately be
+	// linked twice with different relations.
 	seen := make(map[string]bool)
 	result := make([]schema.LinkedIssue, 0)
 
@@ -32,39 +32,42 @@ func NormalizeLinkedIssues(issue *schema.Issue, fields map[string]interface{}) {
 			continue
 		}
 
-		// Determine the target issue from outward or inward direction.
-		var targetKey string
+		// outwardIssue carries the type's outward text; issue (the inward
+		// side) carries the inward text.
+		var target map[string]interface{}
+		var relKey string
 		if outward, ok := link["outwardIssue"].(map[string]interface{}); ok {
-			if key, ok := outward["key"].(string); ok {
-				targetKey = key
-			}
+			target, relKey = outward, "outward"
 		} else if inward, ok := link["issue"].(map[string]interface{}); ok {
-			if key, ok := inward["key"].(string); ok {
-				targetKey = key
-			}
+			target, relKey = inward, "inward"
 		}
+		targetKey, _ := target["key"].(string)
 		if targetKey == "" {
 			continue
 		}
 
-		// Skip duplicates (same target key = same relationship).
-		if seen[targetKey] {
-			continue
-		}
-		seen[targetKey] = true
-
-		// Extract the link type name.
-		var linkType string
+		// The directional text comes from the link type; fall back to the
+		// type name when Jira omits it.
+		var relation string
 		if lt, ok := link["type"].(map[string]interface{}); ok {
-			if name, ok := lt["name"].(string); ok {
-				linkType = name
+			relation, _ = lt[relKey].(string)
+			if relation == "" {
+				relation, _ = lt["name"].(string)
 			}
 		}
 
-		result = append(result, schema.LinkedIssue{
-			Key:  schema.IssueKey(targetKey),
-			Type: linkType,
-		})
+		id := targetKey + "\x00" + relation
+		if seen[id] {
+			continue
+		}
+		seen[id] = true
+
+		li := schema.LinkedIssue{Key: schema.IssueKey(targetKey), Relation: relation}
+		if tf, ok := target["fields"].(map[string]interface{}); ok {
+			li.Summary, _ = tf["summary"].(string)
+			li.Status = nestedName(tf["status"])
+		}
+		result = append(result, li)
 	}
 
 	issue.LinkedIssues = result
@@ -101,6 +104,35 @@ func NormalizeIssue(issue *schema.Issue, fields map[string]interface{}) {
 			}
 		}
 		issue.Labels = ls
+	}
+
+	issue.FixVersions = nil
+	if fvs, ok := fields["fixVersions"].([]interface{}); ok {
+		for _, raw := range fvs {
+			if n := nestedName(raw); n != "" {
+				issue.FixVersions = append(issue.FixVersions, n)
+			}
+		}
+	}
+
+	issue.Subtasks = nil
+	if sts, ok := fields["subtasks"].([]interface{}); ok {
+		for _, raw := range sts {
+			m, ok := raw.(map[string]interface{})
+			if !ok {
+				continue
+			}
+			key, _ := m["key"].(string)
+			if key == "" {
+				continue
+			}
+			st := schema.Subtask{Key: key}
+			if sf, ok := m["fields"].(map[string]interface{}); ok {
+				st.Summary, _ = sf["summary"].(string)
+				st.Status = nestedName(sf["status"])
+			}
+			issue.Subtasks = append(issue.Subtasks, st)
+		}
 	}
 
 	if assignee, ok := fields["assignee"].(map[string]interface{}); ok {

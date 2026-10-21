@@ -292,7 +292,7 @@ Full description.
 	if len(issue.LinkedIssues) != 2 {
 		t.Errorf("LinkedIssues len = %d, want 2", len(issue.LinkedIssues))
 	}
-	if issue.LinkedIssues[0].Key != "DEP-1" || issue.LinkedIssues[0].Type != "blocks" {
+	if issue.LinkedIssues[0].Key != "DEP-1" || issue.LinkedIssues[0].Relation != "blocks" {
 		t.Errorf("LinkedIssues[0] = %+v", issue.LinkedIssues[0])
 	}
 	if issue.Sections[SecDescription] != "Full description." {

@@ -49,7 +49,7 @@ func TestLinkedIssue_IsZero(t *testing.T) {
 		t.Error("zero LinkedIssue should be IsZero")
 	}
 
-	nonZero := LinkedIssue{Key: "PROJ-1", Type: "blocks"}
+	nonZero := LinkedIssue{Key: "PROJ-1", Relation: "blocks"}
 	if nonZero.IsZero() {
 		t.Error("non-zero LinkedIssue should not be IsZero")
 	}
@@ -62,10 +62,10 @@ func TestLinkedIssue_IsZero(t *testing.T) {
 }
 
 func TestLinkedIssue_Equals(t *testing.T) {
-	a := LinkedIssue{Key: "PROJ-1", Type: "blocks"}
-	b := LinkedIssue{Key: "PROJ-1", Type: "blocks"}
-	c := LinkedIssue{Key: "PROJ-2", Type: "blocks"}
-	d := LinkedIssue{Key: "PROJ-1", Type: "relates to"}
+	a := LinkedIssue{Key: "PROJ-1", Relation: "blocks"}
+	b := LinkedIssue{Key: "PROJ-1", Relation: "blocks"}
+	c := LinkedIssue{Key: "PROJ-2", Relation: "blocks"}
+	d := LinkedIssue{Key: "PROJ-1", Relation: "relates to"}
 
 	if !a.Equals(b) {
 		t.Error("equal LinkedIssues should be Equals")
@@ -129,5 +129,13 @@ func TestIssue_IsZero_empty(t *testing.T) {
 	var issue Issue
 	if !issue.IsZero() {
 		t.Error("empty Issue should be IsZero")
+	}
+}
+
+func TestLinkedIssue_EqualsIgnoresReadOnlyContext(t *testing.T) {
+	a := LinkedIssue{Key: "PROJ-1", Relation: "blocks", Summary: "x", Status: "Open"}
+	b := LinkedIssue{Key: "PROJ-1", Relation: "blocks", Summary: "y", Status: "Done"}
+	if !a.Equals(b) {
+		t.Error("Equals must compare only key and relation")
 	}
 }

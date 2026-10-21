@@ -149,7 +149,7 @@ func TestIssueToFieldsMap_allFields(t *testing.T) {
 		Sprint:      "Sprint 42",
 		FixVersions: []string{"1.0", "2.0"},
 		LinkedIssues: []LinkedIssue{
-			{Key: "PROJ-1", Type: "blocks"},
+			{Key: "PROJ-1", Relation: "blocks"},
 		},
 	}
 	fields := issue.ToFieldsMap()

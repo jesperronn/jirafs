@@ -93,7 +93,31 @@ func RenderIssue(i Issue) string {
 		sb.WriteString("linked_issues:\n")
 		for _, li := range i.LinkedIssues {
 			sb.WriteString("- key: " + quoteScalar(string(li.Key)) + "\n")
-			sb.WriteString("  type: " + quoteScalar(li.Type) + "\n")
+			sb.WriteString("  relation: " + quoteScalar(li.Relation) + "\n")
+			if li.Summary != "" {
+				sb.WriteString("  summary: " + quoteScalar(li.Summary) + "\n")
+			}
+			if li.Status != "" {
+				sb.WriteString("  status: " + quoteScalar(li.Status) + "\n")
+			}
+		}
+	}
+	if len(i.FixVersions) > 0 {
+		sb.WriteString("fix_versions:\n")
+		for _, v := range i.FixVersions {
+			sb.WriteString("- " + quoteScalar(v) + "\n")
+		}
+	}
+	if len(i.Subtasks) > 0 {
+		sb.WriteString("subtasks:\n")
+		for _, st := range i.Subtasks {
+			sb.WriteString("- key: " + quoteScalar(st.Key) + "\n")
+			if st.Summary != "" {
+				sb.WriteString("  summary: " + quoteScalar(st.Summary) + "\n")
+			}
+			if st.Status != "" {
+				sb.WriteString("  status: " + quoteScalar(st.Status) + "\n")
+			}
 		}
 	}
 

@@ -1,6 +1,7 @@
 package codec
 
 import (
+	"reflect"
 	"testing"
 
 	"github.com/jirafs/jirafs/internal/schema"
@@ -75,7 +76,7 @@ This is the definition of ready content.
 		// Check linked issues
 		assert.Len(t, issue.LinkedIssues, 1)
 		assert.Equal(t, schema.IssueKey("DEF-456"), issue.LinkedIssues[0].Key)
-		assert.Equal(t, "blocks", issue.LinkedIssues[0].Type)
+		assert.Equal(t, "blocks", issue.LinkedIssues[0].Relation)
 
 		// Check sections
 		assert.Len(t, issue.Sections, 3)
@@ -200,4 +201,17 @@ project: "project://PROJ"
 		assert.Contains(t, errStr, "invalid_yaml")
 		assert.Contains(t, errStr, "test message")
 	})
+}
+func TestParseLinkedIssues_RelationAndLegacyType(t *testing.T) {
+	got := parseLinkedIssues([]interface{}{
+		map[string]interface{}{"key": "A-1", "relation": "blocks", "summary": "s", "status": "Open"},
+		map[string]interface{}{"key": "A-2", "type": "relates to"},
+	})
+	want := []schema.LinkedIssue{
+		{Key: "A-1", Relation: "blocks", Summary: "s", Status: "Open"},
+		{Key: "A-2", Relation: "relates to"},
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("got %+v want %+v", got, want)
+	}
 }

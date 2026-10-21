@@ -206,10 +206,17 @@ func parseLinkedIssues(linkedIssues interface{}) []schema.LinkedIssue {
 			continue
 		}
 		key, _ := issueMap["key"].(string)
-		liType, _ := issueMap["type"].(string)
+		rel, _ := issueMap["relation"].(string)
+		if rel == "" {
+			rel, _ = issueMap["type"].(string)
+		}
+		summary, _ := issueMap["summary"].(string)
+		status, _ := issueMap["status"].(string)
 		result = append(result, schema.LinkedIssue{
-			Key:  schema.IssueKey(key),
-			Type: liType,
+			Key:      schema.IssueKey(key),
+			Relation: rel,
+			Summary:  summary,
+			Status:   status,
 		})
 	}
 

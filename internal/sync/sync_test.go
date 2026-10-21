@@ -420,7 +420,7 @@ func TestSync_unresolvedLinkedIssue_failsBeforeMutation(t *testing.T) {
 	// B064a: unresolved linked issue reference (empty key) produces conflict.
 	local := schema.Issue{
 		Summary:      "Test issue",
-		LinkedIssues: []schema.LinkedIssue{{Key: "", Type: "blocks"}},
+		LinkedIssues: []schema.LinkedIssue{{Key: "", Relation: "blocks"}},
 	}
 	remote := schema.Issue{Summary: "Test issue"}
 	plan := []schema.PlanOperation{}
@@ -442,7 +442,7 @@ func TestSync_unresolvedRemoteLinkedIssue_failsBeforeMutation(t *testing.T) {
 	local := schema.Issue{Summary: "Test issue"}
 	remote := schema.Issue{
 		Summary:      "Test issue",
-		LinkedIssues: []schema.LinkedIssue{{Key: "", Type: "relates to"}},
+		LinkedIssues: []schema.LinkedIssue{{Key: "", Relation: "relates to"}},
 	}
 	plan := []schema.PlanOperation{}
 

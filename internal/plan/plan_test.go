@@ -128,7 +128,7 @@ func TestBuildPlan_unchangedRefsAndMetadata(t *testing.T) {
 		Labels:      []string{"bug", "priority"},
 		Assignee:    &assignee,
 		LinkedIssues: []schema.LinkedIssue{
-			{Key: "PROJ-1", Type: "blocks"},
+			{Key: "PROJ-1", Relation: "blocks"},
 		},
 		RemoteMetadata: schema.RemoteMetadata{
 			RemoteVersion: "1",
@@ -141,7 +141,7 @@ func TestBuildPlan_unchangedRefsAndMetadata(t *testing.T) {
 		Labels:      []string{"bug", "priority"},
 		Assignee:    &assignee,
 		LinkedIssues: []schema.LinkedIssue{
-			{Key: "PROJ-1", Type: "blocks"},
+			{Key: "PROJ-1", Relation: "blocks"},
 		},
 		RemoteMetadata: schema.RemoteMetadata{
 			RemoteVersion: "1",
@@ -173,7 +173,7 @@ func TestBuildPlan_differingRefsMetadataNoOps(t *testing.T) {
 		Labels:      []string{"bug"},
 		Assignee:    &assignee,
 		LinkedIssues: []schema.LinkedIssue{
-			{Key: "PROJ-1", Type: "blocks"},
+			{Key: "PROJ-1", Relation: "blocks"},
 		},
 		RemoteMetadata: schema.RemoteMetadata{
 			RemoteVersion: "1",
@@ -186,7 +186,7 @@ func TestBuildPlan_differingRefsMetadataNoOps(t *testing.T) {
 		Labels:      []string{"bug"},
 		Assignee:    &assignee,
 		LinkedIssues: []schema.LinkedIssue{
-			{Key: "PROJ-2", Type: "relates to"},
+			{Key: "PROJ-2", Relation: "relates to"},
 		},
 		RemoteMetadata: schema.RemoteMetadata{
 			RemoteVersion: "2",

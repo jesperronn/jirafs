@@ -3,6 +3,7 @@ package schema
 import (
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -170,8 +171,8 @@ func TestRenderIssue_deterministic_across_renders(t *testing.T) {
 		Labels:     []string{"z", "a", "m"},
 		Assignee:   &assignee,
 		LinkedIssues: []LinkedIssue{
-			{Key: "X-1", Type: "blocks"},
-			{Key: "Y-1", Type: "relates to"},
+			{Key: "X-1", Relation: "blocks"},
+			{Key: "Y-1", Relation: "relates to"},
 		},
 	}
 
@@ -280,8 +281,8 @@ func TestRenderIssue_linked_issues_stable_order(t *testing.T) {
 		},
 		MachineOwned: MachineOwned{SchemaVersion: "1"},
 		LinkedIssues: []LinkedIssue{
-			{Key: "A-1", Type: "blocks"},
-			{Key: "B-1", Type: "relates to"},
+			{Key: "A-1", Relation: "blocks"},
+			{Key: "B-1", Relation: "relates to"},
 		},
 	}
 
@@ -482,7 +483,7 @@ func TestRenderIssue_synced_golden_roundtrip(t *testing.T) {
 		t.Errorf("round-trip linked_issues len = %d, want %d", len(issue2.LinkedIssues), len(issue.LinkedIssues))
 	} else {
 		for i := range issue.LinkedIssues {
-			if issue2.LinkedIssues[i].Key != issue.LinkedIssues[i].Key || issue2.LinkedIssues[i].Type != issue.LinkedIssues[i].Type {
+			if issue2.LinkedIssues[i].Key != issue.LinkedIssues[i].Key || issue2.LinkedIssues[i].Relation != issue.LinkedIssues[i].Relation {
 				t.Errorf("round-trip linked_issues[%d] = %+v, want %+v", i, issue2.LinkedIssues[i], issue.LinkedIssues[i])
 			}
 		}
@@ -560,7 +561,7 @@ func TestRenderIssue_draft_golden_roundtrip(t *testing.T) {
 		t.Errorf("round-trip linked_issues len = %d, want %d", len(issue2.LinkedIssues), len(issue.LinkedIssues))
 	} else {
 		for i := range issue.LinkedIssues {
-			if issue2.LinkedIssues[i].Key != issue.LinkedIssues[i].Key || issue2.LinkedIssues[i].Type != issue.LinkedIssues[i].Type {
+			if issue2.LinkedIssues[i].Key != issue.LinkedIssues[i].Key || issue2.LinkedIssues[i].Relation != issue.LinkedIssues[i].Relation {
 				t.Errorf("round-trip linked_issues[%d] = %+v, want %+v", i, issue2.LinkedIssues[i], issue.LinkedIssues[i])
 			}
 		}
@@ -573,5 +574,39 @@ func TestRenderIssue_draft_golden_roundtrip(t *testing.T) {
 				t.Errorf("round-trip Sections[%q] = %q, want %q", name, issue2.Sections[name], issue.Sections[name])
 			}
 		}
+	}
+}
+
+func TestRenderParse_LinksFixVersionsSubtasksRoundTrip(t *testing.T) {
+	issue := Issue{
+		Identity:     IssueIdentity{Key: "P-1", Type: "Story", Project: TypedRef{Type: RefProject, Value: "P"}},
+		Summary:      "s",
+		FixVersions:  []string{"1.0", "2.0"},
+		LinkedIssues: []LinkedIssue{{Key: "P-2", Relation: "blocks", Summary: "two", Status: "Open"}, {Key: "P-3", Relation: "is blocked by"}},
+		Subtasks:     []Subtask{{Key: "P-4", Summary: "four", Status: "Done"}, {Key: "P-5"}},
+	}
+	out := RenderIssue(issue)
+	for _, want := range []string{"relation: 'blocks'", "fix_versions:", "subtasks:", "summary: 'four'"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("rendered output missing %q:\n%s", want, out)
+		}
+	}
+	got, err := ParseIssue(out)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(got.LinkedIssues, issue.LinkedIssues) || !reflect.DeepEqual(got.Subtasks, issue.Subtasks) || !reflect.DeepEqual(got.FixVersions, issue.FixVersions) {
+		t.Errorf("round trip mismatch: %+v", got)
+	}
+}
+
+func TestParseIssue_LegacyLinkedIssueType(t *testing.T) {
+	src := "---\nkey: P-1\ntype: Story\nproject: project:P\nlinked_issues:\n- key: P-2\n  type: blocks\n---\n"
+	got, err := ParseIssue(src)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got.LinkedIssues) != 1 || got.LinkedIssues[0].Relation != "blocks" {
+		t.Errorf("LinkedIssues = %+v", got.LinkedIssues)
 	}
 }

@@ -69,7 +69,7 @@ linked_issues:
 		// Check linked issues
 		assert.Len(t, issue.LinkedIssues, 1)
 		assert.Equal(t, schema.IssueKey("DEF-456"), issue.LinkedIssues[0].Key)
-		assert.Equal(t, "blocks", issue.LinkedIssues[0].Type)
+		assert.Equal(t, "blocks", issue.LinkedIssues[0].Relation)
 	})
 
 	t.Run("parse valid draft issue frontmatter into schema model", func(t *testing.T) {
