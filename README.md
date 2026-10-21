@@ -101,6 +101,21 @@ The most important commands right now are:
 - `jirafs plan`
 - `jirafs sync`
 
+## Creating Issues With An AI
+
+`jirafs` has no LLM dependency. `new --prompt` prints a template plus
+instructions, and `new --from` validates and saves the filled document as a
+local draft:
+
+```sh
+jirafs new story --prompt --idea "users want dark mode" | llm | jirafs new --from -
+```
+
+`--from` accepts a file path or `-` for stdin, validates the document (issue
+type and summary are required), applies `--project`/`--assignee`, and prints
+`jirafs: created <path>`. Invalid documents are rejected with the offending
+field and a retry command.
+
 ## Initial Scope
 
 - Export Jira issues, sprints, and related metadata into a local filesystem.

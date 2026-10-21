@@ -15,6 +15,7 @@ import (
 )
 
 var (
+	newStdin  io.Reader = os.Stdin
 	newStdout io.Writer = os.Stdout
 	newStderr io.Writer = os.Stderr
 )
@@ -108,6 +109,8 @@ func printNewHelp() {
 Usage:
   jirafs new <story|bug|epic> [flags]
   jirafs new --template <path.md> [flags]
+  jirafs new <story|bug|epic> --prompt [--idea <text>]
+  jirafs new --from <file|-> [flags]
 
 The command writes a new draft issue file to the project's local directory.
 It does not contact Jira.
@@ -121,6 +124,12 @@ Flags:
   --assignee <name>  Set the assignee.
   --cwd <dir>        Working directory to resolve the project from.
   --template <path>  Use a user-supplied template file instead of a built-in.
+  --prompt           Print the template plus instructions for an AI; no draft is written.
+  --idea <text>      With --prompt: the idea the AI should turn into the issue.
+  --from <file|->    Create a draft from a filled document (- reads stdin).
+
+AI pipe:
+  jirafs new story --prompt --idea "..." | llm | jirafs new --from -
 `)
 }
 
@@ -170,12 +179,19 @@ func RunNew(args []string) int {
 	assigneeFlag := fs.String("assignee", "", "assignee to set")
 	cwdFlag := fs.String("cwd", "", "working directory to resolve the project from")
 	templateFlag := fs.String("template", "", "path to a template file")
+	promptFlag := fs.Bool("prompt", false, "print the template plus AI instructions")
+	ideaFlag := fs.String("idea", "", "idea text to include in the prompt")
+	fromFlag := fs.String("from", "", "filled document to create a draft from (- for stdin)")
 
 	if err := fs.Parse(flagArgs); err != nil {
 		return 1
 	}
 	if templateName == "" && len(fs.Args()) > 0 {
 		templateName = fs.Args()[0]
+	}
+
+	if *promptFlag {
+		return runNewPrompt(templateName, *templateFlag, *ideaFlag)
 	}
 
 	settings, err := config.Load()
@@ -205,7 +221,14 @@ func RunNew(args []string) int {
 	}
 
 	var content string
-	if *templateFlag != "" {
+	if *fromFlag != "" {
+		data, err := readFromSource(*fromFlag)
+		if err != nil {
+			fmt.Fprintf(newStderr, "jirafs new: cannot read %s: %v\n", *fromFlag, err)
+			return 1
+		}
+		content = stripCodeFence(string(data))
+	} else if *templateFlag != "" {
 		data, err := os.ReadFile(*templateFlag)
 		if err != nil {
 			fmt.Fprintf(newStderr, "jirafs new: cannot read template: %v\n", err)
@@ -223,8 +246,15 @@ func RunNew(args []string) int {
 
 	issue, pe := codec.ParseIssue(content)
 	if pe != nil {
+		if *fromFlag != "" {
+			fmt.Fprintf(newStderr, "jirafs new: invalid document: %v\n%s\n", pe, retryHint(*fromFlag))
+			return 1
+		}
 		fmt.Fprintf(newStderr, "jirafs new: invalid template: %v\n", pe)
 		return 1
+	}
+	if *fromFlag != "" && (issue.Identity.Project.IsZero() || issue.Identity.Project.Value == "PROJECT") {
+		issue.Identity.Project = schema.TypedRef{Type: "project", Value: ctx.Key}
 	}
 
 	if *summaryFlag != "" {
@@ -240,6 +270,12 @@ func RunNew(args []string) int {
 
 	issue.RemoteMetadata.StateFile = "draft"
 
+	if *fromFlag != "" {
+		if msg := validateFilled(issue); msg != "" {
+			fmt.Fprintf(newStderr, "jirafs new: invalid document: %s\n%s\n", msg, retryHint(*fromFlag))
+			return 1
+		}
+	}
 	if issue.Summary == "" {
 		fmt.Fprintln(newStderr, "jirafs new: summary is required (pass --summary)")
 		return 1
@@ -256,4 +292,94 @@ func RunNew(args []string) int {
 	}
 	fmt.Fprintf(newStdout, "jirafs: created %s\n", path)
 	return 0
+}
+
+// promptInstructions is the AI-facing preamble printed by `new --prompt`.
+const promptInstructions = `You are filling in a Jira issue document.
+Rules:
+- Fill every section from the idea below; replace every TODO placeholder.
+- Keep the frontmatter keys exactly as they are; set "summary" to a concise one-line title.
+- Do not add sections that are not in the template.
+- Output only the completed document (frontmatter and sections), with no commentary and no code fences.
+`
+
+// buildPrompt turns a template and an idea into the text handed to an AI.
+// It is the seam for a future built-in LLM call: replace it with a function
+// that sends this prompt to a model and returns the filled document, which
+// createDraft-style validation (`new --from`) then consumes unchanged.
+func buildPrompt(tmpl, idea string) string {
+	var b strings.Builder
+	b.WriteString(promptInstructions)
+	b.WriteString("\nTemplate:\n\n")
+	b.WriteString(tmpl)
+	if idea != "" {
+		b.WriteString("\nIdea:\n\n")
+		b.WriteString(idea)
+		b.WriteString("\n")
+	}
+	return b.String()
+}
+
+// runNewPrompt implements `jirafs new <type> --prompt`.
+func runNewPrompt(templateName, templatePath, idea string) int {
+	var tmpl string
+	if templatePath != "" {
+		data, err := os.ReadFile(templatePath)
+		if err != nil {
+			fmt.Fprintf(newStderr, "jirafs new: cannot read template: %v\n", err)
+			return 1
+		}
+		tmpl = string(data)
+	} else {
+		t, ok := templateFor(templateName)
+		if !ok {
+			fmt.Fprintf(newStderr, "jirafs new: --prompt needs a template; try: jirafs new story --prompt --idea \"...\"\n")
+			return 1
+		}
+		tmpl = t
+	}
+	fmt.Fprint(newStdout, buildPrompt(tmpl, idea))
+	return 0
+}
+
+// readFromSource reads a document from a file path, or stdin when path is "-".
+func readFromSource(path string) ([]byte, error) {
+	if path == "-" {
+		return io.ReadAll(newStdin)
+	}
+	return os.ReadFile(path)
+}
+
+// stripCodeFence removes a wrapping Markdown code fence that LLMs often add.
+func stripCodeFence(s string) string {
+	t := strings.TrimSpace(s)
+	if !strings.HasPrefix(t, "```") {
+		return s
+	}
+	lines := strings.Split(t, "\n")
+	lines = lines[1:]
+	if n := len(lines); n > 0 && strings.TrimSpace(lines[n-1]) == "```" {
+		lines = lines[:n-1]
+	}
+	return strings.Join(lines, "\n")
+}
+
+// validateFilled checks the fields a filled document must carry and returns
+// a message naming the offending field, or "" when valid.
+func validateFilled(issue *schema.Issue) string {
+	if issue.Identity.Type == "" {
+		return "field \"type\" is required (set type: story, bug, or epic in the frontmatter)"
+	}
+	if strings.TrimSpace(issue.Summary) == "" {
+		return "field \"summary\" is required (set a one-line summary: in the frontmatter)"
+	}
+	return ""
+}
+
+// retryHint returns a copy-pasteable command for retrying after a bad document.
+func retryHint(from string) string {
+	if from == "-" {
+		return `retry: jirafs new story --prompt --idea "..." | llm | jirafs new --from -`
+	}
+	return fmt.Sprintf("retry: fix the document, then run: jirafs new --from %s", from)
 }
