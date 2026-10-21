@@ -22,9 +22,15 @@ func TestIsClientError_ThroughJoinedErrors(t *testing.T) {
 	if !IsClientError(errors.Join(inner, errors.New("second")), ErrNotFound) {
 		t.Error("expected first joined element to be found")
 	}
-	// Only the first element of a joined error is inspected.
-	if IsClientError(errors.Join(errors.New("first"), inner), ErrNotFound) {
-		t.Error("second joined element should not be inspected")
+	// Every element of a joined error is inspected, not just the first.
+	if !IsClientError(errors.Join(errors.New("first"), inner), ErrNotFound) {
+		t.Error("second joined element should be inspected")
+	}
+	if !HasCode(errors.Join(errors.New("first"), fmt.Errorf("ctx: %w", inner)), ErrNotFound) {
+		t.Error("wrapped element inside a later joined branch should be found")
+	}
+	if IsClientError(errors.Join(errors.New("plain"), NewAuthError("x")), ErrNotFound) {
+		t.Error("joined error without the code must not match")
 	}
 	wrapped := fmt.Errorf("ctx: %w", inner)
 	if !IsClientError(wrapped, ErrNotFound) || HasCode(wrapped, ErrAuth) {

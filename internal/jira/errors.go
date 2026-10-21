@@ -35,34 +35,39 @@ func (e *ClientError) Error() string {
 }
 
 // IsClientError reports whether err is a *ClientError with the given code.
+// Every branch of a joined error (errors.Join) is inspected, as is each
+// wrapped error in the chain.
 func IsClientError(err error, code ErrCode) bool {
-	var cerr *ClientError
+	return hasClientCode(err, code)
+}
+
+// hasClientCode walks the error tree depth-first, following both single and
+// multi-error Unwrap methods, and reports whether any *ClientError in it has
+// the given code.
+func hasClientCode(err error, code ErrCode) bool {
 	if err == nil {
 		return false
 	}
-	return isClientError(err, &cerr) && cerr.Code == code
-}
-
-// isClientError is a helper that unwraps errors to find a *ClientError.
-func isClientError(err error, target **ClientError) bool {
-	for err != nil {
-		if cerr, ok := err.(*ClientError); ok {
-			*target = cerr
-			return true
+	if cerr, ok := err.(*ClientError); ok && cerr.Code == code {
+		return true
+	}
+	switch e := err.(type) {
+	case interface{ Unwrap() error }:
+		return hasClientCode(e.Unwrap(), code)
+	case interface{ Unwrap() []error }:
+		for _, inner := range e.Unwrap() {
+			if hasClientCode(inner, code) {
+				return true
+			}
 		}
-		err = unwrap(err)
 	}
 	return false
 }
 
 // HasCode reports whether err has the given error code at any level of the
-// error chain.
+// error chain, including every branch of a joined error.
 func HasCode(err error, code ErrCode) bool {
-	if err == nil {
-		return false
-	}
-	var cerr *ClientError
-	return isClientError(err, &cerr) && cerr.Code == code
+	return hasClientCode(err, code)
 }
 
 // unwrap extracts the wrapped error from standard error types.
