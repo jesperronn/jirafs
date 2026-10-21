@@ -167,29 +167,40 @@ func decodeJSONResponse(resp *http.Response, target interface{}, contextLabel st
 // mapHTTPErr reads the response body and maps the HTTP status to a
 // structured ClientError, preferring Jira error details when available.
 func mapHTTPErr(resp *http.Response) *ClientError {
+	raw, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
+	status := fmt.Sprintf("HTTP %d", resp.StatusCode)
+	if text := http.StatusText(resp.StatusCode); text != "" {
+		status += " " + text
+	}
+
 	var details jiraErrorDetails
-	if err := json.NewDecoder(resp.Body).Decode(&details); err != nil {
-		// Body is not JSON or empty; fall back to status code.
-		return NewHTTPErr(resp.StatusCode, "HTTP error")
+	if err := json.Unmarshal(raw, &details); err == nil {
+		// Build a message from Jira's structured error fields: every general
+		// message, then every field error as "field: message" sorted by field.
+		parts := append([]string(nil), details.ErrorMessages...)
+		fields := make([]string, 0, len(details.Errors))
+		for field := range details.Errors {
+			fields = append(fields, field)
+		}
+		sort.Strings(fields)
+		for _, field := range fields {
+			parts = append(parts, field+": "+details.Errors[field])
+		}
+		if len(parts) > 0 {
+			return NewHTTPErr(resp.StatusCode, fmt.Sprintf("HTTP %d: %s", resp.StatusCode, strings.Join(parts, "; ")))
+		}
 	}
 
-	// Build a message from Jira's structured error fields: every general
-	// message, then every field error as "field: message" sorted by field.
-	parts := append([]string(nil), details.ErrorMessages...)
-	fields := make([]string, 0, len(details.Errors))
-	for field := range details.Errors {
-		fields = append(fields, field)
+	// Body is not JSON, empty, or carries no message: show status and a
+	// whitespace-collapsed preview of the raw body.
+	preview := strings.Join(strings.Fields(string(raw)), " ")
+	if len(preview) > 300 {
+		preview = strings.ToValidUTF8(preview[:300], "") + "..."
 	}
-	sort.Strings(fields)
-	for _, field := range fields {
-		parts = append(parts, field+": "+details.Errors[field])
+	if preview != "" {
+		return NewHTTPErr(resp.StatusCode, status+": "+preview)
 	}
-	msg := strings.Join(parts, "; ")
-	if msg == "" {
-		msg = "HTTP error"
-	}
-
-	return NewHTTPErr(resp.StatusCode, msg)
+	return NewHTTPErr(resp.StatusCode, status)
 }
 
 // JiraClient is a real Jira REST API client that fetches and searches

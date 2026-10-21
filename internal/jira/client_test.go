@@ -282,8 +282,8 @@ func TestMapHTTPErrEmptyBody(t *testing.T) {
 	if !IsClientError(err, ErrHTTP) {
 		t.Errorf("expected http error, got %v", err)
 	}
-	if err.Error() != "jira: http: HTTP error" {
-		t.Errorf("error = %q, want %q", err.Error(), "jira: http: HTTP error")
+	if err.Error() != "jira: http: HTTP 500 Internal Server Error" {
+		t.Errorf("error = %q, want %q", err.Error(), "jira: http: HTTP 500 Internal Server Error")
 	}
 }
 
@@ -302,8 +302,8 @@ func TestMapHTTPErrEmptyJSON(t *testing.T) {
 	if !IsClientError(err, ErrHTTP) {
 		t.Errorf("expected http error, got %v", err)
 	}
-	if err.Error() != "jira: http: HTTP error" {
-		t.Errorf("error = %q, want %q", err.Error(), "jira: http: HTTP error")
+	if err.Error() != "jira: http: HTTP 500 Internal Server Error: {}" {
+		t.Errorf("error = %q, want %q", err.Error(), "jira: http: HTTP 500 Internal Server Error: {}")
 	}
 }
 
@@ -1761,5 +1761,33 @@ func TestResolveEpicLinkField_EnvOverridesSetting(t *testing.T) {
 	t.Setenv(EpicLinkFieldEnv, "customfield_2")
 	if got := ResolveEpicLinkField("customfield_1"); got != "customfield_2" {
 		t.Errorf("env over setting = %q", got)
+	}
+}
+
+func TestMapHTTPErrMessages(t *testing.T) {
+	long := strings.Repeat("x", 500)
+	tests := map[string]struct {
+		status int
+		body   string
+		want   string
+	}{
+		"non-json html": {405, "<html>\n  <body>Method   Not Allowed</body>\n</html>", "jira: http: HTTP 405 Method Not Allowed: <html> <body>Method Not Allowed</body> </html>"},
+		"empty body":    {502, "", "jira: http: HTTP 502 Bad Gateway"},
+		"json no msg":   {500, `{}`, "jira: http: HTTP 500 Internal Server Error: {}"},
+		"json errors":   {400, `{"errorMessages":["bad"],"errors":{"summary":"required"}}`, "jira: http: HTTP 400: bad; summary: required"},
+		"long body":     {500, long, "jira: http: HTTP 500 Internal Server Error: " + long[:300] + "..."},
+	}
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.WriteHeader(tc.status)
+				w.Write([]byte(tc.body))
+			}))
+			defer server.Close()
+			_, err := NewJiraClient(server.URL).FetchIssue(context.Background(), "PROJ-1")
+			if err == nil || err.Error() != tc.want {
+				t.Errorf("error = %v, want %q", err, tc.want)
+			}
+		})
 	}
 }
