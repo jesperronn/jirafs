@@ -2,14 +2,15 @@
 
 set -euo pipefail
 
-# Usage: bin/lint [--help] [--verbose] [PATH]
+# Usage: bin/lint [--help] [--verbose] [--autofix] [PATH]
 #
 #   --help      Print usage and exit.
 #   --verbose   Print each check name as it runs.
+#   --autofix   Run `gofmt -w` on unformatted Go files in the linted scope.
 #   PATH        File or directory to scope go-toolchain linting to. When
 #               given, only `gofmt -l` and `go vet` are run against that
 #               scope (skipping the slower whole-repo docs/lint checks).
-#               No PATH → full repository lint via tools/lint_repo.py.
+#               No PATH → gofmt over the whole repo, then tools/lint_repo.py.
 
 usage() {
     cat >&2 <<EOF
@@ -18,15 +19,18 @@ Usage: $(basename "$0") [OPTIONS] [PATH]
 Options:
   --help      Show this help message and exit.
   --verbose   Print each check name as it runs.
+  --autofix   Rewrite unformatted Go files with `gofmt -w` instead of failing.
 
 Positional:
   PATH        Scope go-toolchain linting (gofmt, go vet) to PATH. When
-              omitted, runs the whole-repo lint suite (tools/lint_repo.py).
+              omitted, runs gofmt over the whole repo, then the whole-repo
+              lint suite (tools/lint_repo.py).
 EOF
     exit 0
 }
 
 VERBOSE=0
+AUTOFIX=0
 POSITIONAL=""
 
 while [ $# -gt 0 ]; do
@@ -36,6 +40,9 @@ while [ $# -gt 0 ]; do
             ;;
         --verbose|-v)
             VERBOSE=1
+            ;;
+        --autofix)
+            AUTOFIX=1
             ;;
         --)
             shift
@@ -67,6 +74,29 @@ log() {
     fi
 }
 
+# check_gofmt SCOPE...
+# Fails (listing files) if gofmt -l reports unformatted Go files in SCOPE.
+# With --autofix, rewrites them with gofmt -w instead.
+check_gofmt() {
+    log "gofmt -l $*"
+    local fmt_out
+    fmt_out="$(gofmt -l "$@" || true)"
+    if [ -z "${fmt_out}" ]; then
+        return 0
+    fi
+    if [ "${AUTOFIX}" -eq 1 ]; then
+        log "gofmt -w (autofix)"
+        echo "${fmt_out}" | while IFS= read -r f; do
+            gofmt -w "$f"
+            echo "gofmt: fixed ${f}" >&2
+        done
+        return 0
+    fi
+    echo "gofmt: files need formatting (run bin/lint --autofix to fix):" >&2
+    echo "${fmt_out}" | sed 's/^/  /' >&2
+    exit 1
+}
+
 if [ -n "${POSITIONAL}" ]; then
     target="${POSITIONAL}"
     if [ -f "${target}" ]; then
@@ -83,13 +113,7 @@ if [ -n "${POSITIONAL}" ]; then
     scope_dir="${scope_dir#./}"
     pkg_pattern="./${scope_dir}/..."
 
-    log "gofmt -l ${scope_files[*]}"
-    fmt_out="$(gofmt -l "${scope_files[@]}" || true)"
-    if [ -n "${fmt_out}" ]; then
-        echo "gofmt: files need formatting:" >&2
-        echo "${fmt_out}" >&2
-        exit 1
-    fi
+    check_gofmt "${scope_files[@]}"
 
     log "go vet ${pkg_pattern}"
     go vet "${pkg_pattern}"
@@ -99,5 +123,8 @@ if [ -n "${POSITIONAL}" ]; then
 fi
 
 # Whole-repo lint.
+log "gofmt over whole repo"
+check_gofmt .
+
 log "tools/lint_repo.py"
 python3 tools/lint_repo.py
