@@ -84,6 +84,21 @@ cd "${REPO_ROOT}"
 
 export PYTHONPATH="${REPO_ROOT}"
 
+# Hermetic environment: never touch real settings or credentials, even when
+# the caller's shell exports JIRAFS_ALLOW_LIVE_ENDPOINTS or similar.
+for _v in $(env | sed -n 's/^\(JIRAFS_[A-Za-z0-9_]*\)=.*/\1/p'); do unset "${_v}"; done
+# Pin Go's caches to their real locations before HOME is replaced.
+export GOCACHE="$(go env GOCACHE)" GOMODCACHE="$(go env GOMODCACHE)" GOPATH="$(go env GOPATH)"
+HERMETIC_DIR="$(mktemp -d)"
+trap 'rm -rf "${HERMETIC_DIR}"' EXIT
+mkdir -p "${HERMETIC_DIR}/home" "${HERMETIC_DIR}/stubs"
+for _c in op security secret-tool pass gpg gcloud aws; do
+    printf '#!/bin/sh\necho "blocked: tests must not access real credentials" >&2\nexit 1\n' > "${HERMETIC_DIR}/stubs/${_c}"
+    chmod +x "${HERMETIC_DIR}/stubs/${_c}"
+done
+export HOME="${HERMETIC_DIR}/home" XDG_CONFIG_HOME="${HERMETIC_DIR}/home"
+export PATH="${HERMETIC_DIR}/stubs:${PATH}"
+
 # Translate POSITIONAL → PACKAGE.
 if [ -n "${POSITIONAL}" ]; then
     target="${POSITIONAL}"
@@ -122,7 +137,7 @@ if [ "${NO_COVERAGE}" -eq 1 ] || [ -n "${PACKAGE}" ]; then
         GO_CMD+=(-v)
     fi
     GO_CMD+=("${GO_TEST_ARGS[@]}")
-    exec "${GO_CMD[@]}"
+    "${GO_CMD[@]}"
 fi
 
 # Full path: combined coverage gate.

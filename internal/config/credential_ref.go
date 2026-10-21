@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"testing"
 
 	"github.com/pelletier/go-toml/v2"
 )
@@ -153,6 +154,9 @@ func ResolveEnvCredential(ref CredentialRef) (ResolvedCredential, error) {
 
 // resolveOPCommand is extracted for testability.
 var resolveOPCommand = func(args ...string) ([]byte, error) {
+	if testing.Testing() {
+		return nil, fmt.Errorf("blocked: tests must not access real credentials (inject a fake resolveOPCommand)")
+	}
 	return exec.Command("op", args...).Output()
 }
 

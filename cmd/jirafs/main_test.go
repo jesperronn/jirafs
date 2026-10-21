@@ -104,7 +104,7 @@ func TestShortVersionFlag(t *testing.T) {
 }
 
 func TestDoctorCommand(t *testing.T) {
-	output := runMainHelper(t, "doctor")
+	output := runMainHelperWithHome(t, writeMinimalHome(t), "doctor")
 	// Doctor returns 0 when no settings exist (it reports health issues but doesn't fail).
 	if output.exitCode != 0 {
 		t.Fatalf("exitCode = %d, want 0", output.exitCode)
@@ -112,7 +112,7 @@ func TestDoctorCommand(t *testing.T) {
 }
 
 func TestStatusCommand(t *testing.T) {
-	output := runMainHelper(t, "status")
+	output := runMainHelperWithHome(t, writeMinimalHome(t), "status")
 	// Status returns 0 when no settings exist (it reports status but doesn't fail).
 	if output.exitCode != 0 {
 		t.Fatalf("exitCode = %d, want 0", output.exitCode)
@@ -245,19 +245,7 @@ type helperOutput struct {
 
 func runMainHelper(t *testing.T, args ...string) helperOutput {
 	t.Helper()
-
-	cmd := exec.Command(os.Args[0], append([]string{"-test.run=TestMainHelperProcess", "--"}, args...)...)
-	cmd.Env = append(os.Environ(), "GO_WANT_HELPER_PROCESS=1")
-	output, err := cmd.CombinedOutput()
-	if err == nil {
-		return helperOutput{stderr: string(output), exitCode: 0}
-	}
-
-	exitErr, ok := err.(*exec.ExitError)
-	if !ok {
-		t.Fatalf("helper process error = %v", err)
-	}
-	return helperOutput{stderr: string(output), exitCode: exitErr.ExitCode()}
+	return runMainHelperWithHome(t, writeMinimalHome(t), args...)
 }
 
 func TestUseNoArgsNoProjectSet(t *testing.T) {
@@ -1337,4 +1325,18 @@ func TestMainHelperProcess(t *testing.T) {
 	}
 
 	main()
+}
+
+func writeMinimalHome(t *testing.T) string {
+	t.Helper()
+	home := t.TempDir()
+	dir := filepath.Join(home, ".jirafs")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	toml := "version = 1\n\n[instances.default]\nbase_url = \"https://example.atlassian.net\"\nauth_type = \"basic\"\n\n[projects.test]\nkey = \"TEST\"\ninstance = \"default\"\nmirror_dir = \"" + filepath.Join(home, "mirror") + "\"\nlocal_dirs = [\"" + filepath.Join(home, "local") + "\"]\n"
+	if err := os.WriteFile(filepath.Join(dir, "settings.toml"), []byte(toml), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	return home
 }

@@ -504,6 +504,7 @@ local_dirs = ["` + filepath.Join(tmpDir, "local") + `"]
 // TestRunStatus_NoArgs verifies that calling RunStatus with no arguments
 // runs the status report (not help) and returns exit code 0.
 func TestRunStatus_NoArgs(t *testing.T) {
+	t.Setenv("HOME", writeSettings(t, t.TempDir()))
 	stdout, stderr := withStatusTestIO(t)
 	exit := RunStatus([]string{})
 	if exit != 0 {
@@ -532,6 +533,7 @@ func TestRunStatus_Help(t *testing.T) {
 // TestRunStatus_NoSettings verifies that RunStatus with no settings file
 // reports missing steps and returns exit code 0 (status is informational).
 func TestRunStatus_NoSettings(t *testing.T) {
+	t.Setenv("HOME", writeSettings(t, t.TempDir()))
 	exit := RunStatus([]string{})
 	if exit != 0 {
 		t.Fatalf("RunStatus([]) = %d, want 0", exit)

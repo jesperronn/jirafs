@@ -345,6 +345,7 @@ local_dirs = ["` + filepath.Join(tmpDir, "local") + `"]
 // TestRunDoctor_NoArgs verifies that calling RunDoctor with no arguments
 // runs the doctor report (not help) and returns exit code 0.
 func TestRunDoctor_NoArgs(t *testing.T) {
+	t.Setenv("HOME", writeSettings(t, t.TempDir()))
 	withMockDoctorClient(t)
 	stdout, stderr := withDoctorTestIO(t)
 	exit := RunDoctor([]string{})
@@ -380,6 +381,7 @@ func TestRunDoctor_Help(t *testing.T) {
 // TestRunDoctor_NoSettings verifies that RunDoctor with no settings file
 // reports missing steps and returns exit code 0 (doctor is informational).
 func TestRunDoctor_NoSettings(t *testing.T) {
+	t.Setenv("HOME", writeSettings(t, t.TempDir()))
 	exit := RunDoctor([]string{})
 	if exit != 0 {
 		t.Fatalf("RunDoctor([]) = %d, want 0", exit)

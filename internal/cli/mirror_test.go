@@ -206,6 +206,7 @@ func TestRunMirrorRefresh_MissingScope(t *testing.T) {
 }
 
 func TestRunMirrorRefresh_Help(t *testing.T) {
+	t.Setenv("HOME", writeSettings(t, t.TempDir()))
 	exit := RunMirror([]string{"refresh", "--help"})
 	if exit != 0 {
 		t.Fatalf("RunMirror([\"refresh\", \"--help\"]) = %d, want 0", exit)
