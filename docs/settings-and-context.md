@@ -126,6 +126,7 @@ key = "PLAT"
 instance = "work"
 mirror_dir = "~/jira/platform"
 default_user = "jesper"
+epic_link_field = "customfield_10014"
 local_dirs = [
   "~/src/platform-app",
   "~/src/platform-infra",
@@ -337,3 +338,12 @@ The main design choice is to make `project` the default unit of context while
 keeping `instance` and credentials behind it. That gives `jirafs` one clear
 answer for most commands, supports multiple Jira sites, and allows folder-based
 auto-detection even when the user is working outside the Jira mirror itself.
+
+## Epic link field
+
+`projects.<name>.epic_link_field` is the Jira custom field id that holds the
+epic link (for example `customfield_10014`; it differs per Jira site). When set,
+export, mirror, plan and sync request that field and render `epic_link`.
+
+The environment variable `JIRAFS_EPIC_LINK_FIELD` overrides the setting.
+`jirafs doctor` prints the effective value, or how to set it when unset.

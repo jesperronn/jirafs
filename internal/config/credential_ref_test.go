@@ -574,7 +574,6 @@ func TestResolveOPCredential(t *testing.T) {
 	}
 }
 
-
 // TestResolveOPCredential_Cache verifies that repeated resolution of the
 // same op:// ref hits the cache instead of spawning the op CLI again.
 // This is the property the sync loop depends on so a many-issue scan

@@ -31,12 +31,12 @@ func TestParseTypedRef_valid(t *testing.T) {
 
 func TestParseTypedRef_invalid(t *testing.T) {
 	tests := []string{
-		"user",         // no colon
-		"user:",        // empty value
-		":jesper",      // empty type
-		"unknown:x",    // unknown type
-		"",             // empty string
-	// "user:val:ue" is valid — only the first colon separates type from value
+		"user",      // no colon
+		"user:",     // empty value
+		":jesper",   // empty type
+		"unknown:x", // unknown type
+		"",          // empty string
+		// "user:val:ue" is valid — only the first colon separates type from value
 	}
 	for _, tc := range tests {
 		t.Run(tc, func(t *testing.T) {

@@ -122,8 +122,8 @@ func TestRemoteMetadata_State_draft_with_remote_metadata(t *testing.T) {
 func TestRemoteMetadata_State_archived_with_remote_metadata(t *testing.T) {
 	// StateFile takes priority for archived issues.
 	r := RemoteMetadata{
-		StateFile:     "archived",
-		ContentHash:   "abc",
+		StateFile:   "archived",
+		ContentHash: "abc",
 	}
 	if got := r.State(); got != StateArchived {
 		t.Errorf("State() = %q, want %q", got, StateArchived)

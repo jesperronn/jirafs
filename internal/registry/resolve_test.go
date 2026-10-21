@@ -136,16 +136,16 @@ func TestResolveUser_nil_map(t *testing.T) {
 func TestResolveProject_found(t *testing.T) {
 	projects := map[string]Project{
 		"project:ABC": {
-			Key:     "ABC",
-			Name:    "A Big Project",
-			ID:      "10000",
-			Lead:    "712020:abcd",
+			Key:         "ABC",
+			Name:        "A Big Project",
+			ID:          "10000",
+			Lead:        "712020:abcd",
 			ProjectType: "software",
 		},
 		"project:XYZ": {
-			Key:     "XYZ",
-			Name:    "XYZ Project",
-			ID:      "20000",
+			Key:         "XYZ",
+			Name:        "XYZ Project",
+			ID:          "20000",
 			ProjectType: "business",
 		},
 	}
@@ -215,8 +215,8 @@ func TestResolveError_Error(t *testing.T) {
 func TestResolveStatus_found(t *testing.T) {
 	statuses := map[string]Status{
 		"status:in-progress": {
-			Name:      "In Progress",
-			Category:  "InProgress",
+			Name:        "In Progress",
+			Category:    "InProgress",
 			Description: "Work is currently being done.",
 		},
 		"status:done": {
@@ -541,9 +541,9 @@ func TestIsResolveError_ambiguous_ref(t *testing.T) {
 
 func TestResolveUserAmbiguous_exact_display_name_match(t *testing.T) {
 	users := map[string]User{
-		"user:jesper":  {AccountID: "712020:abcd", DisplayName: "Jesper Ronn"},
-		"user:bob":     {AccountID: "712020:efgh", DisplayName: "Bob Smith"},
-		"user:jenny":   {AccountID: "712020:ijkl", DisplayName: "Jenny Lee"},
+		"user:jesper": {AccountID: "712020:abcd", DisplayName: "Jesper Ronn"},
+		"user:bob":    {AccountID: "712020:efgh", DisplayName: "Bob Smith"},
+		"user:jenny":  {AccountID: "712020:ijkl", DisplayName: "Jenny Lee"},
 	}
 
 	// Exact match returns the single candidate

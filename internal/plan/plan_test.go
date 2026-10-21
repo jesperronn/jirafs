@@ -259,12 +259,12 @@ func TestBuildPlan_bothChanged(t *testing.T) {
 func TestBuildPlan_labelsChange(t *testing.T) {
 	// B061b: labels change produces a typed operation.
 	local := schema.Issue{
-		Summary:  "Test issue",
-		Labels:   []string{"bug", "priority"},
+		Summary: "Test issue",
+		Labels:  []string{"bug", "priority"},
 	}
 	remote := schema.Issue{
-		Summary:  "Test issue",
-		Labels:   []string{"bug"},
+		Summary: "Test issue",
+		Labels:  []string{"bug"},
 	}
 
 	ops, conflicts, err := BuildPlan(local, remote)

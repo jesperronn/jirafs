@@ -20,11 +20,11 @@ import (
 )
 
 var (
-	syncStdout   io.Writer = os.Stdout
-	syncStderr   io.Writer = os.Stderr
-	syncClientFactory  = buildSyncClient
-	syncBuildClient  = buildSyncClient
-	syncVerbose      bool
+	syncStdout        io.Writer = os.Stdout
+	syncStderr        io.Writer = os.Stderr
+	syncClientFactory           = buildSyncClient
+	syncBuildClient             = buildSyncClient
+	syncVerbose       bool
 )
 
 // RunSync dispatches the `jirafs sync` subcommand. When an issue key is
@@ -213,6 +213,7 @@ func buildSyncClient(settings *config.Settings, ctx *context.Context, cwd string
 	}
 	client := jira.NewJiraClient(creds.BaseURL)
 	client.SetCredentials(creds)
+	client.SetEpicLinkField(jira.ResolveEpicLinkField(projectEpicLinkField(settings, ctx.Name)))
 	return client, nil
 }
 

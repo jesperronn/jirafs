@@ -56,9 +56,9 @@ func TestSync_noOpPlanReturnsUnchangedRemote(t *testing.T) {
 func TestSync_nilPlanReturnsUnchangedRemote(t *testing.T) {
 	// nil plan is treated as no-op.
 	remote := schema.Issue{
-		Summary:  "Test issue",
-		Status:   "To Do",
-		Sprint:   "Sprint 41",
+		Summary:     "Test issue",
+		Status:      "To Do",
+		Sprint:      "Sprint 41",
 		FixVersions: []string{"1.0"},
 	}
 	var plan []schema.PlanOperation // nil

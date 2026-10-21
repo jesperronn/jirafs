@@ -325,7 +325,7 @@ func TestStatusSnapshot_NextStep(t *testing.T) {
 func TestBuildStatusSnapshot_NoInstances(t *testing.T) {
 	// Build a Settings struct directly (config.Load() rejects no-instances).
 	settings := &config.Settings{
-		Version:  1,
+		Version: 1,
 		Projects: map[string]config.Project{
 			"test": {Key: "TEST", Instance: "default", MirrorDir: "/tmp/mirror", LocalDirs: []string{"/tmp/local"}},
 		},
@@ -342,11 +342,11 @@ func TestBuildStatusSnapshot_NoInstances(t *testing.T) {
 func TestBuildStatusSnapshot_NoProjects(t *testing.T) {
 	// Build a Settings struct directly (config.Load() rejects no-projects).
 	settings := &config.Settings{
-		Version:   1,
+		Version: 1,
 		Instances: map[string]config.Instance{
 			"default": {
-				BaseURL:      "https://example.atlassian.net",
-				AuthType:     "basic",
+				BaseURL:        "https://example.atlassian.net",
+				AuthType:       "basic",
 				CredentialRefs: []string{"file:///tmp/creds.toml"},
 			},
 		},

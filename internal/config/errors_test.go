@@ -56,40 +56,40 @@ func TestIsSettingError(t *testing.T) {
 	se := NewSettingError(ErrUnknownInstance, "instance %q not found", "instances.foo", "foo")
 
 	tests := []struct {
-		name  string
-		err   error
-		code  string
-		want  bool
+		name string
+		err  error
+		code string
+		want bool
 	}{
 		{
-			name:  "matching code",
-			err:   se,
-			code:  ErrUnknownInstance,
-			want:  true,
+			name: "matching code",
+			err:  se,
+			code: ErrUnknownInstance,
+			want: true,
 		},
 		{
-			name:  "different code",
-			err:   se,
-			code:  ErrMissingField,
-			want:  false,
+			name: "different code",
+			err:  se,
+			code: ErrMissingField,
+			want: false,
 		},
 		{
-			name:  "nil error",
-			err:   nil,
-			code:  ErrUnknownInstance,
-			want:  false,
+			name: "nil error",
+			err:  nil,
+			code: ErrUnknownInstance,
+			want: false,
 		},
 		{
-			name:  "wrapped error",
-			err:   fmt.Errorf("wrapped: %w", se),
-			code:  ErrUnknownInstance,
-			want:  true,
+			name: "wrapped error",
+			err:  fmt.Errorf("wrapped: %w", se),
+			code: ErrUnknownInstance,
+			want: true,
 		},
 		{
-			name:  "plain error",
-			err:   errors.New("plain error"),
-			code:  ErrUnknownInstance,
-			want:  false,
+			name: "plain error",
+			err:  errors.New("plain error"),
+			code: ErrUnknownInstance,
+			want: false,
 		},
 	}
 

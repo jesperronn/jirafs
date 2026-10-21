@@ -193,17 +193,17 @@ func ParseIssue(content string) (Issue, *ParseError) {
 
 	// Parse editable fields written by RenderIssue.
 	var rawEditable struct {
-		Summary      string        `yaml:"summary"`
-		Labels       []string      `yaml:"labels"`
-		Assignee     string        `yaml:"assignee"`
+		Summary      string   `yaml:"summary"`
+		Labels       []string `yaml:"labels"`
+		Assignee     string   `yaml:"assignee"`
 		LinkedIssues []struct {
-			Key      IssueKey `yaml:"key"`
-			Relation string   `yaml:"relation"`
-			Type     string   `yaml:"type"` // legacy name for relation
-			LinkType string   `yaml:"link_type"`
-			Direction string  `yaml:"direction"`
-			Summary  string   `yaml:"summary"`
-			Status   string   `yaml:"status"`
+			Key       IssueKey `yaml:"key"`
+			Relation  string   `yaml:"relation"`
+			Type      string   `yaml:"type"` // legacy name for relation
+			LinkType  string   `yaml:"link_type"`
+			Direction string   `yaml:"direction"`
+			Summary   string   `yaml:"summary"`
+			Status    string   `yaml:"status"`
 		} `yaml:"linked_issues"`
 		FixVersions []string  `yaml:"fix_versions"`
 		Subtasks    []Subtask `yaml:"subtasks"`

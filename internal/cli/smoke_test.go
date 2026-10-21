@@ -37,9 +37,9 @@ func TestSmokeExportEditPlanSyncReexport(t *testing.T) {
 			Type:    "story",
 			Project: schema.TypedRef{Type: schema.RefProject, Value: "PROJ"},
 		},
-		Summary:     "Original summary",
-		Description: "Original description body",
-		Labels:      []string{"bug"},
+		Summary:      "Original summary",
+		Description:  "Original description body",
+		Labels:       []string{"bug"},
 		MachineOwned: schema.MachineOwned{SchemaVersion: "1"},
 		RemoteMetadata: schema.RemoteMetadata{
 			StateFile:     "synced",

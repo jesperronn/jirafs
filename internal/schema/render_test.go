@@ -167,9 +167,9 @@ func TestRenderIssue_deterministic_across_renders(t *testing.T) {
 			ContentHash:   "abc",
 			SyncTime:      syncTime,
 		},
-		Summary:    "deterministic",
-		Labels:     []string{"z", "a", "m"},
-		Assignee:   &assignee,
+		Summary:  "deterministic",
+		Labels:   []string{"z", "a", "m"},
+		Assignee: &assignee,
 		LinkedIssues: []LinkedIssue{
 			{Key: "X-1", Relation: "blocks"},
 			{Key: "Y-1", Relation: "relates to"},
@@ -228,8 +228,8 @@ func TestRenderIssue_draft_state(t *testing.T) {
 func TestRenderIssue_quoted_scalars(t *testing.T) {
 	issue := Issue{
 		Identity: IssueIdentity{
-			Key:     "123", // numeric-looking key
-			Type:    "true", // boolean-looking type
+			Key:     "123",                                     // numeric-looking key
+			Type:    "true",                                    // boolean-looking type
 			Project: TypedRef{Type: RefProject, Value: "null"}, // null-looking project
 		},
 		MachineOwned: MachineOwned{SchemaVersion: "1"},

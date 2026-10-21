@@ -10,19 +10,19 @@ import (
 
 // Registry file names.
 const (
-	UsersFile      = "users.yaml"
-	ProjectsFile   = "projects.yaml"
-	StatusesFile   = "statuses.yaml"
-	SprintsFile    = "sprints.yaml"
+	UsersFile       = "users.yaml"
+	ProjectsFile    = "projects.yaml"
+	StatusesFile    = "statuses.yaml"
+	SprintsFile     = "sprints.yaml"
 	FixVersionsFile = "fix_versions.yaml"
-	IssueTypesFile = "issue_types.yaml"
+	IssueTypesFile  = "issue_types.yaml"
 )
 
 // RegistryError wraps a structured error for registry file loading failures.
 type RegistryError struct {
-	File  string
-	Code  string
-	Msg   string
+	File string
+	Code string
+	Msg  string
 }
 
 func (e *RegistryError) Error() string {

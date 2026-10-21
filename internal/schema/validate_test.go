@@ -47,7 +47,7 @@ func TestIssueIdentity_ValidateRequired_missingType(t *testing.T) {
 
 func TestIssueIdentity_ValidateRequired_missingProject(t *testing.T) {
 	id := IssueIdentity{
-		Key: "ABC-123",
+		Key:  "ABC-123",
 		Type: "story",
 	}
 	errs := id.ValidateRequired()
@@ -218,7 +218,7 @@ func TestIssueValidate_missingType(t *testing.T) {
 func TestIssueValidate_missingProject(t *testing.T) {
 	issue := Issue{
 		Identity: IssueIdentity{
-			Key: "ABC-123",
+			Key:  "ABC-123",
 			Type: "story",
 		},
 		Sections: map[FixedSectionName]string{
@@ -257,7 +257,7 @@ func TestIssueValidate_unknownSections(t *testing.T) {
 			Project: TypedRef{Type: RefProject, Value: "ABC"},
 		},
 		Sections: map[FixedSectionName]string{
-			SecDescription:        "desc",
+			SecDescription:             "desc",
 			FixedSectionName("Custom"): "custom body",
 		},
 	}
@@ -274,7 +274,7 @@ func TestIssueValidate_combinedErrors(t *testing.T) {
 	issue := Issue{
 		Identity: IssueIdentity{},
 		Sections: map[FixedSectionName]string{
-			SecDescription:        "desc",
+			SecDescription:             "desc",
 			FixedSectionName("Custom"): "custom",
 		},
 	}
@@ -337,9 +337,9 @@ func TestRemoteMetadataValidate_synced_complete(t *testing.T) {
 
 func TestRemoteMetadataValidate_synced_missingVersion(t *testing.T) {
 	r := RemoteMetadata{
-		StateFile:     "synced",
-		ContentHash:   "abc123",
-		SyncTime:      time.Date(2026, 6, 1, 12, 0, 0, 0, time.UTC),
+		StateFile:   "synced",
+		ContentHash: "abc123",
+		SyncTime:    time.Date(2026, 6, 1, 12, 0, 0, 0, time.UTC),
 	}
 	errs := r.Validate()
 	if len(errs) != 1 {

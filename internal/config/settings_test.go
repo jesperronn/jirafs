@@ -5,6 +5,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/pelletier/go-toml/v2"
 )
 
 // TestLoadValidSettings verifies that a valid settings file loads correctly.
@@ -1405,5 +1407,16 @@ func TestSetupProjectCreatesSettingsDirWhenMissing(t *testing.T) {
 	path := filepath.Join(homeDir, settingsDir, settingsFile)
 	if _, err := os.Stat(path); err != nil {
 		t.Fatalf("settings file stat error = %v", err)
+	}
+}
+
+func TestProject_EpicLinkFieldParse(t *testing.T) {
+	var raw SettingsTOML
+	doc := "version = 1\n[projects.a]\nkey = \"A\"\nepic_link_field = \"customfield_10014\"\n"
+	if err := toml.Unmarshal([]byte(doc), &raw); err != nil {
+		t.Fatal(err)
+	}
+	if got := raw.Projects["a"].EpicLinkField; got != "customfield_10014" {
+		t.Errorf("EpicLinkField = %q", got)
 	}
 }

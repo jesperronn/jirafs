@@ -15,7 +15,7 @@ import (
 // makeSettings creates a settings struct from a project map and state.
 func makeSettings(projects map[string]config.Project, state config.State) *config.Settings {
 	return &config.Settings{
-		Version:   1,
+		Version: 1,
 		Instances: map[string]config.Instance{
 			"work": {
 				BaseURL:  "https://jira.example.com",

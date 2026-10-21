@@ -12,9 +12,9 @@ func TestNormalizeIssue(t *testing.T) {
 		fields map[string]interface{}
 	}
 	tests := []struct {
-		name    string
-		args    args
-		want    *schema.Issue
+		name string
+		args args
+		want *schema.Issue
 	}{
 		{
 			name: "all fields present",
@@ -105,9 +105,9 @@ func TestExportIssue(t *testing.T) {
 					ContentHash:   "abc123",
 					SyncTime:      mustParseTime("2026-06-21T14:30:00Z"),
 				},
-				Summary:    "Test summary",
-				Labels:     []string{"bug", "urgent"},
-				Assignee:   ptrString("alice"),
+				Summary:  "Test summary",
+				Labels:   []string{"bug", "urgent"},
+				Assignee: ptrString("alice"),
 				LinkedIssues: []schema.LinkedIssue{
 					{Key: "PROJ-1", Relation: "blocks"},
 					{Key: "PROJ-2", Relation: "relates to"},
@@ -221,25 +221,25 @@ func TestNormalizeLinkedIssues(t *testing.T) {
 		fields map[string]interface{}
 	}
 	tests := []struct {
-		name    string
-		args    args
-		wantLen int
-		wantKeys []string
+		name      string
+		args      args
+		wantLen   int
+		wantKeys  []string
 		wantTypes []string
 	}{
 		{
-			name: "nil fields",
-			args: args{fields: nil},
+			name:    "nil fields",
+			args:    args{fields: nil},
 			wantLen: 0,
 		},
 		{
-			name: "no issuelinks",
-			args: args{fields: map[string]interface{}{}},
+			name:    "no issuelinks",
+			args:    args{fields: map[string]interface{}{}},
 			wantLen: 0,
 		},
 		{
-			name: "empty issuelinks",
-			args: args{fields: map[string]interface{}{"issuelinks": []interface{}{}}},
+			name:    "empty issuelinks",
+			args:    args{fields: map[string]interface{}{"issuelinks": []interface{}{}}},
 			wantLen: 0,
 		},
 		{
@@ -247,7 +247,7 @@ func TestNormalizeLinkedIssues(t *testing.T) {
 			args: args{fields: map[string]interface{}{
 				"issuelinks": []interface{}{
 					map[string]interface{}{
-						"type": map[string]interface{}{"name": "blocks"},
+						"type":         map[string]interface{}{"name": "blocks"},
 						"outwardIssue": map[string]interface{}{"key": "PROJ-456"},
 					},
 				},
@@ -261,7 +261,7 @@ func TestNormalizeLinkedIssues(t *testing.T) {
 			args: args{fields: map[string]interface{}{
 				"issuelinks": []interface{}{
 					map[string]interface{}{
-						"type": map[string]interface{}{"name": "is blocked by"},
+						"type":  map[string]interface{}{"name": "is blocked by"},
 						"issue": map[string]interface{}{"key": "PROJ-789"},
 					},
 				},
@@ -275,11 +275,11 @@ func TestNormalizeLinkedIssues(t *testing.T) {
 			args: args{fields: map[string]interface{}{
 				"issuelinks": []interface{}{
 					map[string]interface{}{
-						"type": map[string]interface{}{"name": "blocks"},
+						"type":         map[string]interface{}{"name": "blocks"},
 						"outwardIssue": map[string]interface{}{"key": "PROJ-456"},
 					},
 					map[string]interface{}{
-						"type": map[string]interface{}{"name": "is blocked by"},
+						"type":  map[string]interface{}{"name": "is blocked by"},
 						"issue": map[string]interface{}{"key": "PROJ-456"},
 					},
 				},
@@ -293,11 +293,11 @@ func TestNormalizeLinkedIssues(t *testing.T) {
 			args: args{fields: map[string]interface{}{
 				"issuelinks": []interface{}{
 					map[string]interface{}{
-						"type": map[string]interface{}{"name": "relates to"},
+						"type":         map[string]interface{}{"name": "relates to"},
 						"outwardIssue": map[string]interface{}{"key": "PROJ-100"},
 					},
 					map[string]interface{}{
-						"type": map[string]interface{}{"name": "blocks"},
+						"type":         map[string]interface{}{"name": "blocks"},
 						"outwardIssue": map[string]interface{}{"key": "PROJ-200"},
 					},
 				},

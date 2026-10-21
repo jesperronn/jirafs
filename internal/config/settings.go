@@ -29,6 +29,9 @@ type Project struct {
 	MirrorDir   string   `toml:"mirror_dir"`
 	LocalDirs   []string `toml:"local_dirs"`
 	DefaultUser string   `toml:"default_user"`
+	// EpicLinkField is the Jira custom field id holding the epic link,
+	// e.g. "customfield_10014". Optional.
+	EpicLinkField string `toml:"epic_link_field"`
 }
 
 // Settings is the top-level parsed settings document.
@@ -247,11 +250,12 @@ func (s *Settings) expandPaths() error {
 
 		// Write back the updated project.
 		s.Projects[name] = Project{
-			Key:         proj.Key,
-			Instance:    proj.Instance,
-			MirrorDir:   expanded,
-			LocalDirs:   expandedDirs,
-			DefaultUser: proj.DefaultUser,
+			Key:           proj.Key,
+			Instance:      proj.Instance,
+			MirrorDir:     expanded,
+			LocalDirs:     expandedDirs,
+			DefaultUser:   proj.DefaultUser,
+			EpicLinkField: proj.EpicLinkField,
 		}
 	}
 	return nil

@@ -61,7 +61,7 @@ func splitFrontmatter(content string) (string, string, *schema.ParseError) {
 	}
 
 	endFrontmatter += 3 // Adjust for the offset
-	frontmatter := content[0:endFrontmatter+3]
+	frontmatter := content[0 : endFrontmatter+3]
 	body := strings.TrimSpace(content[endFrontmatter+3:])
 
 	return frontmatter, body, nil
@@ -215,12 +215,12 @@ func parseLinkedIssues(linkedIssues interface{}) []schema.LinkedIssue {
 		summary, _ := issueMap["summary"].(string)
 		status, _ := issueMap["status"].(string)
 		result = append(result, schema.LinkedIssue{
-			Key:      schema.IssueKey(key),
-			Relation: rel,
-			LinkType: linkType,
+			Key:       schema.IssueKey(key),
+			Relation:  rel,
+			LinkType:  linkType,
 			Direction: direction,
-			Summary:  summary,
-			Status:   status,
+			Summary:   summary,
+			Status:    status,
 		})
 	}
 

@@ -1749,3 +1749,17 @@ func TestFetchIssueRequestsExplicitFieldsAndNormalizesContext(t *testing.T) {
 		t.Errorf("unexpected issue: desc=%q ctx=%+v", issue.Description, issue.Context)
 	}
 }
+
+func TestResolveEpicLinkField_EnvOverridesSetting(t *testing.T) {
+	t.Setenv(EpicLinkFieldEnv, "")
+	if got := ResolveEpicLinkField(" customfield_1 "); got != "customfield_1" {
+		t.Errorf("setting only = %q", got)
+	}
+	if got := ResolveEpicLinkField(""); got != "" {
+		t.Errorf("unset = %q", got)
+	}
+	t.Setenv(EpicLinkFieldEnv, "customfield_2")
+	if got := ResolveEpicLinkField("customfield_1"); got != "customfield_2" {
+		t.Errorf("env over setting = %q", got)
+	}
+}

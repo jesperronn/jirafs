@@ -16,9 +16,9 @@ import (
 )
 
 var (
-	doctorStdout   io.Writer = os.Stdout
-	doctorStderr   io.Writer = os.Stderr
-	doctorClientFactory = buildDoctorClient
+	doctorStdout        io.Writer = os.Stdout
+	doctorStderr        io.Writer = os.Stderr
+	doctorClientFactory           = buildDoctorClient
 )
 
 var doctorVerbose bool
@@ -46,11 +46,11 @@ func (d DoctorSnapshot) IsZero() bool {
 
 // CredentialCheck holds the result of a credential resolution attempt.
 type CredentialCheck struct {
-	InstanceName        string
-	Resolved            bool
-	AuthType            string
-	CredentialSummary   string // "scheme://target" summary
-	ValidationError     string
+	InstanceName      string
+	Resolved          bool
+	AuthType          string
+	CredentialSummary string // "scheme://target" summary
+	ValidationError   string
 }
 
 // LiveProbeCheck holds the result of a live Jira API probe.
@@ -169,6 +169,7 @@ func buildDoctorClient(settings *config.Settings, projCtx *jcontext.Context, cwd
 	}
 	client := jira.NewJiraClient(creds.BaseURL)
 	client.SetCredentials(creds)
+	client.SetEpicLinkField(jira.ResolveEpicLinkField(projectEpicLinkField(settings, projCtx.Name)))
 	return client, nil
 }
 
@@ -218,6 +219,9 @@ func RunDoctor(args []string) int {
 	fmt.Fprintf(doctorStdout, "  key:      %s\n", dsnap.ProjectKey)
 	fmt.Fprintf(doctorStdout, "  instance: %s\n", dsnap.Instance)
 	fmt.Fprintf(doctorStdout, "  resolved: %v\n", dsnap.Resolved)
+	for _, line := range epicLinkReport(settings, dsnap.ProjectName) {
+		fmt.Fprintln(doctorStdout, line)
+	}
 	fmt.Fprintln(doctorStdout)
 
 	// Mirror info.
@@ -331,4 +335,35 @@ func onboardingCommands(snap DoctorSnapshot) []string {
 		}
 	}
 	return nil
+}
+
+// projectEpicLinkField returns the epic_link_field setting of the named
+// project, or "" when the project or setting is absent.
+func projectEpicLinkField(settings *config.Settings, project string) string {
+	if settings == nil {
+		return ""
+	}
+	return settings.Projects[project].EpicLinkField
+}
+
+// epicLinkReport describes the effective epic link field for the Config
+// section of the doctor output.
+func epicLinkReport(settings *config.Settings, project string) []string {
+	setting := projectEpicLinkField(settings, project)
+	if env := strings.TrimSpace(os.Getenv(jira.EpicLinkFieldEnv)); env != "" {
+		return []string{fmt.Sprintf("  epic_link_field: %s (from %s, overrides setting %q)", env, jira.EpicLinkFieldEnv, setting)}
+	}
+	if setting != "" {
+		return []string{fmt.Sprintf("  epic_link_field: %s (from settings)", setting)}
+	}
+	name := project
+	if name == "" {
+		name = "<project>"
+	}
+	return []string{
+		"  epic_link_field: (unset) — epic links are not exported",
+		fmt.Sprintf("    set it in ~/.jirafs/settings.toml under [projects.%s]:", name),
+		"      epic_link_field = \"customfield_10014\"",
+		"    or for one run: JIRAFS_EPIC_LINK_FIELD=customfield_10014 jirafs export issue <KEY>",
+	}
 }

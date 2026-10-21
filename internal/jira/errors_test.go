@@ -58,10 +58,10 @@ func TestIsClientError(t *testing.T) {
 	authErr := NewAuthError("bad token")
 
 	tests := []struct {
-		name   string
-		err    error
-		code   ErrCode
-		want   bool
+		name string
+		err  error
+		code ErrCode
+		want bool
 	}{
 		{
 			name: "matching auth error",

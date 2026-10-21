@@ -280,11 +280,11 @@ func TestLoadProjects_helper(t *testing.T) {
 
 func TestRegistryError_Error(t *testing.T) {
 	tests := []struct {
-		name  string
-		file  string
-		code  string
-		msg   string
-		want  string
+		name string
+		file string
+		code string
+		msg  string
+		want string
 	}{
 		{
 			name: "with file",

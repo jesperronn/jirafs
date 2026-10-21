@@ -12,10 +12,10 @@ func TestBoard_GroupByStatus(t *testing.T) {
 	board := NewBoard()
 
 	statuses := map[string]registry.Status{
-		"status:open":          {Name: "Open"},
-		"status:in-progress":   {Name: "In Progress"},
-		"status:resolved":      {Name: "Resolved"},
-		"status:closed":        {Name: "Closed"},
+		"status:open":        {Name: "Open"},
+		"status:in-progress": {Name: "In Progress"},
+		"status:resolved":    {Name: "Resolved"},
+		"status:closed":      {Name: "Closed"},
 	}
 
 	issues := []*schema.Issue{

@@ -53,10 +53,10 @@ func ErrMissingRef(refType, lookupValue string) *ResolveError {
 // each candidate so callers can present them to the user for disambiguation.
 func ErrAmbiguousRef(refType, lookupValue string, candidates []string) *ResolveError {
 	return &ResolveError{
-		RefType:   refType,
-		Ref:       lookupValue,
-		Code:      "ambiguous_ref",
-		Msg:       fmt.Sprintf("%d %s candidates for %s", len(candidates), refType, lookupValue),
+		RefType:    refType,
+		Ref:        lookupValue,
+		Code:       "ambiguous_ref",
+		Msg:        fmt.Sprintf("%d %s candidates for %s", len(candidates), refType, lookupValue),
 		Candidates: candidates,
 	}
 }

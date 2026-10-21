@@ -229,3 +229,9 @@ What we want to avoid:
 The repository should keep the same verification standard regardless of
 language choice: high test coverage, strict local linting, and green CI before
 merge.
+
+### Epic link field
+
+Set `epic_link_field = "customfield_10014"` under `[projects.<name>]` in
+`~/.jirafs/settings.toml` to export epic links. `JIRAFS_EPIC_LINK_FIELD`
+overrides it; `jirafs doctor` shows the effective value.

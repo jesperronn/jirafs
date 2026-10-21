@@ -19,9 +19,9 @@ import (
 )
 
 var (
-	planStdout   io.Writer = os.Stdout
-	planStderr   io.Writer = os.Stderr
-	planClientFactory  = buildPlanClient
+	planStdout        io.Writer = os.Stdout
+	planStderr        io.Writer = os.Stderr
+	planClientFactory           = buildPlanClient
 )
 
 // RunPlan dispatches the `jirafs plan` subcommand. It resolves the project
@@ -310,6 +310,7 @@ func buildPlanClient(settings *config.Settings, ctx *context.Context, cwd string
 	}
 	client := jira.NewJiraClient(creds.BaseURL)
 	client.SetCredentials(creds)
+	client.SetEpicLinkField(jira.ResolveEpicLinkField(projectEpicLinkField(settings, ctx.Name)))
 	return client, nil
 }
 

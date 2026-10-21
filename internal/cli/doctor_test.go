@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/jirafs/jirafs/internal/config"
@@ -574,5 +575,24 @@ local_dirs = ["` + filepath.Join(tmpDir, "local") + `"]
 	exit := RunDoctor([]string{"--verbose"})
 	if exit != 0 {
 		t.Fatalf("RunDoctor([\"--verbose\"]) = %d", exit)
+	}
+}
+
+func TestEpicLinkReport(t *testing.T) {
+	s := &config.Settings{Projects: map[string]config.Project{"p": {EpicLinkField: "customfield_10014"}, "q": {}}}
+	t.Setenv(jira.EpicLinkFieldEnv, "")
+	if got := strings.Join(epicLinkReport(s, "p"), "\n"); !strings.Contains(got, "customfield_10014 (from settings)") {
+		t.Errorf("settings: %q", got)
+	}
+	got := strings.Join(epicLinkReport(s, "q"), "\n")
+	if !strings.Contains(got, "(unset)") || !strings.Contains(got, `epic_link_field = "customfield_10014"`) || !strings.Contains(got, "[projects.q]") {
+		t.Errorf("unset: %q", got)
+	}
+	if got := strings.Join(epicLinkReport(nil, ""), "\n"); !strings.Contains(got, "[projects.<project>]") {
+		t.Errorf("nil: %q", got)
+	}
+	t.Setenv(jira.EpicLinkFieldEnv, "customfield_9")
+	if got := strings.Join(epicLinkReport(s, "p"), "\n"); !strings.Contains(got, "customfield_9 (from JIRAFS_EPIC_LINK_FIELD") {
+		t.Errorf("env: %q", got)
 	}
 }

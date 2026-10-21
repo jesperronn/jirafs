@@ -560,7 +560,7 @@ key = "NODIRS"
 instance = "default"
 mirror_dir = "` + filepath.Join(tmpDir, "mirror") + `"
 `
-		if err := os.WriteFile(filepath.Join(jirafsDir, "settings.toml"), []byte(settingsTOML), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(jirafsDir, "settings.toml"), []byte(settingsTOML), 0o644); err != nil {
 		t.Fatalf("WriteFile settings: %v", err)
 	}
 

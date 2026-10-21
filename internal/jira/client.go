@@ -200,6 +200,16 @@ type JiraClient struct {
 // epic-link custom field id.
 const EpicLinkFieldEnv = "JIRAFS_EPIC_LINK_FIELD"
 
+// ResolveEpicLinkField returns the effective epic-link field id: the
+// JIRAFS_EPIC_LINK_FIELD environment variable overrides the configured
+// per-project setting. Empty means not configured.
+func ResolveEpicLinkField(setting string) string {
+	if v := strings.TrimSpace(os.Getenv(EpicLinkFieldEnv)); v != "" {
+		return v
+	}
+	return strings.TrimSpace(setting)
+}
+
 // SetEpicLinkField configures the custom field id used for the epic link.
 func (c *JiraClient) SetEpicLinkField(id string) {
 	c.epicLinkField = id
