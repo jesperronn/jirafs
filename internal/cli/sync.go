@@ -41,7 +41,7 @@ func RunSync(args []string) int {
 	fs.String("cwd", "", "ignored; sync resolves the project from the current directory")
 	applyFlag := fs.Bool("apply", false, "write the updated remote to the local issue file")
 	dryRunFlag := fs.Bool("dry-run", false, "print the plan; update neither Jira nor the local file")
-	if err := fs.Parse(args); err != nil {
+	if err := parseFlags(fs, args); err != nil {
 		fmt.Fprintf(syncStderr, "jirafs sync: invalid flags: %v\n", err)
 		return 1
 	}

@@ -73,7 +73,7 @@ func runExportIssue(args []string, settings *config.Settings, resolver *context.
 	// --stdout prints the document instead of writing a file.
 	stdoutFlag := fs.Bool("stdout", false, "print the document to stdout and write no file")
 	dryRunFlag := fs.Bool("dry-run", false, "print the target path and whether it would be overwritten; write nothing")
-	if err := fs.Parse(args); err != nil {
+	if err := parseFlags(fs, args); err != nil {
 		fmt.Fprintf(exportStderr, "jirafs export issue: invalid flags: %v\n", err)
 		return 1
 	}

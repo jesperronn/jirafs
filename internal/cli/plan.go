@@ -49,7 +49,7 @@ func RunPlan(args []string) int {
 	fs := flag.NewFlagSet("plan", flag.ContinueOnError)
 	projectFlag := fs.String("project", "", "project key or name to use")
 	cwdFlag := fs.String("cwd", "", "working directory to use for project resolution")
-	_ = fs.Parse(args)
+	_ = parseFlags(fs, args)
 
 	// When no issue key is provided, resolve the project and list all local issues.
 	if len(fs.Args()) == 0 {

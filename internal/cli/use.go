@@ -77,7 +77,7 @@ func RunUse(args []string) int {
 	fs := flag.NewFlagSet("use", flag.ExitOnError)
 	project := fs.String("project", "", "project key to set as current")
 	clear := fs.Bool("clear", false, "clear the remembered current project")
-	if err := fs.Parse(args); err != nil {
+	if err := parseFlags(fs, args); err != nil {
 		fmt.Fprintf(useStderr, "jirafs use: invalid flags: %v\n", err)
 		return 1
 	}

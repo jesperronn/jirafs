@@ -188,7 +188,7 @@ func RunDoctor(args []string) int {
 	fs := flag.NewFlagSet("doctor", flag.ContinueOnError)
 	fs.SetOutput(doctorStderr)
 	verbose := fs.Bool("verbose", false, "print request URLs during checks")
-	if err := fs.Parse(args); err != nil {
+	if err := parseFlags(fs, args); err != nil {
 		fmt.Fprintf(doctorStderr, "jirafs doctor: invalid flags: %v\n", err)
 		return 1
 	}

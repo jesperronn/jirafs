@@ -47,7 +47,7 @@ func RunBoard(args []string) int {
 	projectFlag := fs.String("project", "", "project key or name to use")
 	groupByFlag := fs.String("group-by", "status", "grouping mode: status, assignee, or epic")
 	cwdFlag := fs.String("cwd", "", "working directory to use for project resolution")
-	_ = fs.Parse(args)
+	_ = parseFlags(fs, args)
 
 	// Validate --group-by.
 	if *groupByFlag != "status" && *groupByFlag != "assignee" && *groupByFlag != "epic" {

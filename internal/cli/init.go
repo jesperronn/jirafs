@@ -65,7 +65,7 @@ func runInit(args []string, settings *config.Settings) int {
 	jiraURLFlag := fs.String("jira-url", "", "Jira base URL (http:// or https://)")
 	mirrorDirFlag := fs.String("mirror-dir", "", "mirror directory (default ~/jira/<project>)")
 	setCurrentFlag := fs.Bool("set-current", false, "also set the remembered current project")
-	if err := fs.Parse(args); err != nil {
+	if err := parseFlags(fs, args); err != nil {
 		fmt.Fprintf(initStderr, "jirafs init: invalid flags: %v\n", err)
 		return 1
 	}

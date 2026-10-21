@@ -223,20 +223,10 @@ func parseRegistryFlags(args []string, withJSON bool) (project, cwd string, json
 	projectFlag := fs.String("project", "", "project key or name to use")
 	cwdFlag := fs.String("cwd", "", "working directory to use for project resolution")
 
-	for {
-		perr := fs.Parse(args)
-		if perr != nil {
-			return "", "", false, nil, perr
-		}
-		rest := fs.Args()
-		if len(rest) <= 1 {
-			positionals = append(positionals, rest...)
-			break
-		}
-		positionals = append(positionals, rest[0])
-		args = rest[1:]
+	positionals, callErr = parseInterspersed(fs, args)
+	if callErr != nil {
+		return "", "", false, nil, callErr
 	}
-
 	return *projectFlag, *cwdFlag, *jsonFlag, positionals, nil
 }
 

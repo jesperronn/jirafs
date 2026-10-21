@@ -43,7 +43,7 @@ func runArchiveIssue(args []string, settings *config.Settings) int {
 	projectFlag := fs.String("project", "", "project key or name to use")
 	cwdFlag := fs.String("cwd", "", "working directory to resolve the project from")
 	dryRunFlag := fs.Bool("dry-run", false, "print what would be archived; move nothing")
-	if err := fs.Parse(flagArgs); err != nil {
+	if err := parseFlags(fs, flagArgs); err != nil {
 		return 1
 	}
 	if keyPos == "" && fs.NArg() > 0 {
@@ -110,7 +110,7 @@ func runArchiveList(args []string, settings *config.Settings) int {
 	fs := flag.NewFlagSet("archive list", flag.ExitOnError)
 	projectFlag := fs.String("project", "", "project key or name to use")
 	cwdFlag := fs.String("cwd", "", "working directory to resolve the project from")
-	if err := fs.Parse(args); err != nil {
+	if err := parseFlags(fs, args); err != nil {
 		return 1
 	}
 

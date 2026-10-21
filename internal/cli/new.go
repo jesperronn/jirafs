@@ -184,7 +184,7 @@ func RunNew(args []string) int {
 	fromFlag := fs.String("from", "", "filled document to create a draft from (- for stdin)")
 	dryRunFlag := fs.Bool("dry-run", false, "print the target path and whether it would be overwritten; write nothing")
 
-	if err := fs.Parse(flagArgs); err != nil {
+	if err := parseFlags(fs, flagArgs); err != nil {
 		return 1
 	}
 	if templateName == "" && len(fs.Args()) > 0 {

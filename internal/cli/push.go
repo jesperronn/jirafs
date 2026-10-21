@@ -57,7 +57,7 @@ func RunPush(args []string) int {
 	dryRunFlag := fs.Bool("dry-run", false, "show what would be created (the default)")
 	projectFlag := fs.String("project", "", "project key or name to use")
 	cwdFlag := fs.String("cwd", "", "working directory to resolve the project from")
-	if err := fs.Parse(flagArgs); err != nil {
+	if err := parseFlags(fs, flagArgs); err != nil {
 		return 1
 	}
 	if dryRunConflicts(pushStderr, "jirafs push", *dryRunFlag, *applyFlag) {

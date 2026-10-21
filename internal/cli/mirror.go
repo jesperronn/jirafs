@@ -87,7 +87,7 @@ func runMirrorRefresh(args []string, settings *config.Settings, resolver *contex
 	projectFlag := fs.String("project", "", "project key or name to refresh")
 	cwdFlag := fs.String("cwd", "", "working directory to use for project resolution")
 	dryRunFlag := fs.Bool("dry-run", false, "list the issue files that would be written; change nothing")
-	if err := fs.Parse(args); err != nil {
+	if err := parseFlags(fs, args); err != nil {
 		fmt.Fprintf(mirrorStderr, "jirafs mirror refresh: invalid flags: %v\n", err)
 		return 1
 	}
@@ -264,7 +264,7 @@ func runMirrorArchiveSweep(args []string, settings *config.Settings, resolver *c
 	// --apply actually moves eligible issues through the archive service.
 	applyFlag := fs.Bool("apply", false, "actually archive eligible issues")
 	dryRunFlag := fs.Bool("dry-run", false, "list eligible issues only (the default)")
-	if err := fs.Parse(args); err != nil {
+	if err := parseFlags(fs, args); err != nil {
 		fmt.Fprintf(os.Stderr, "jirafs mirror archive-sweep: invalid flags: %v\n", err)
 		return 1
 	}
