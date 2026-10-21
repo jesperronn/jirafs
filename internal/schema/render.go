@@ -52,6 +52,29 @@ func RenderIssue(i Issue) string {
 		sb.WriteString("sync_time: " + quoteScalar(i.RemoteMetadata.SyncTime.Format(time.RFC3339)) + "\n")
 	}
 
+	// 3b. Read-only Jira context (machine-owned; ignored by plan/push).
+	c := i.Context
+	for _, kv := range [][2]string{
+		{"status", c.Status}, {"priority", c.Priority}, {"reporter", c.Reporter},
+		{"created", c.Created}, {"updated", c.Updated},
+	} {
+		if kv[1] != "" {
+			sb.WriteString(kv[0] + ": " + quoteScalar(kv[1]) + "\n")
+		}
+	}
+	if len(c.Components) > 0 {
+		sb.WriteString("components:\n")
+		for _, comp := range c.Components {
+			sb.WriteString("- " + quoteScalar(comp) + "\n")
+		}
+	}
+	if c.Parent != "" {
+		sb.WriteString("parent: " + quoteScalar(c.Parent) + "\n")
+	}
+	if c.EpicLink != "" {
+		sb.WriteString("epic_link: " + quoteScalar(c.EpicLink) + "\n")
+	}
+
 	// 4. Editable fields.
 	if i.Summary != "" {
 		sb.WriteString("summary: " + quoteScalar(i.Summary) + "\n")
@@ -76,8 +99,17 @@ func RenderIssue(i Issue) string {
 	sb.WriteString("---\n")
 
 	// Render fixed sections in stable canonical order.
-	if len(i.Sections) > 0 {
-		sb.WriteString(RenderSections(i.Sections))
+	sections := i.Sections
+	if i.Description != "" && sections[SecDescription] == "" {
+		merged := make(map[FixedSectionName]string, len(sections)+1)
+		for k, v := range sections {
+			merged[k] = v
+		}
+		merged[SecDescription] = i.Description
+		sections = merged
+	}
+	if len(sections) > 0 {
+		sb.WriteString(RenderSections(sections))
 	}
 
 	return sb.String()

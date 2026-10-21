@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"strings"
 	"testing"
 
@@ -1717,5 +1718,34 @@ func TestUpdateIssueEmptyBody(t *testing.T) {
 	})
 	if !IsClientError(err, ErrUnknown) {
 		t.Errorf("expected unknown error for empty body, got %v", err)
+	}
+}
+
+func TestFetchIssueRequestsExplicitFieldsAndNormalizesContext(t *testing.T) {
+	fixture, err := os.ReadFile("../export/testdata/issue_with_context.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var gotFields string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotFields = r.URL.Query().Get("fields")
+		w.Header().Set("Content-Type", "application/json")
+		w.Write(fixture)
+	}))
+	defer server.Close()
+
+	client := NewJiraClient(server.URL)
+	client.SetEpicLinkField("customfield_10014")
+	issue, err := client.FetchIssue(context.Background(), "SKOLELOGIN-18312")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, f := range []string{"description", "status", "priority", "reporter", "created", "updated", "components", "parent", "customfield_10014"} {
+		if !strings.Contains(","+gotFields+",", ","+f+",") {
+			t.Errorf("fields=%q missing %q", gotFields, f)
+		}
+	}
+	if issue.Description == "" || issue.Context.Priority != "High" || issue.Context.EpicLink != "SKOLELOGIN-17000" {
+		t.Errorf("unexpected issue: desc=%q ctx=%+v", issue.Description, issue.Context)
 	}
 }

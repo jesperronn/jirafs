@@ -109,3 +109,64 @@ func NormalizeIssue(issue *schema.Issue, fields map[string]interface{}) {
 		}
 	}
 }
+
+// NormalizeContext extracts the read-only Jira context fields (status,
+// priority, reporter, created, updated, components, parent and, when
+// epicLinkField names a custom field, the epic link) into issue.Context.
+func NormalizeContext(issue *schema.Issue, fields map[string]interface{}, epicLinkField string) {
+	if fields == nil {
+		return
+	}
+	c := &issue.Context
+	c.Status = nestedName(fields["status"])
+	c.Priority = nestedName(fields["priority"])
+	c.Reporter = userName(fields["reporter"])
+	if s, ok := fields["created"].(string); ok {
+		c.Created = s
+	}
+	if s, ok := fields["updated"].(string); ok {
+		c.Updated = s
+	}
+	c.Components = nil
+	if comps, ok := fields["components"].([]interface{}); ok {
+		for _, raw := range comps {
+			if n := nestedName(raw); n != "" {
+				c.Components = append(c.Components, n)
+			}
+		}
+	}
+	c.Parent = ""
+	if p, ok := fields["parent"].(map[string]interface{}); ok {
+		if k, ok := p["key"].(string); ok {
+			c.Parent = k
+		}
+	}
+	c.EpicLink = ""
+	if epicLinkField != "" {
+		if s, ok := fields[epicLinkField].(string); ok {
+			c.EpicLink = s
+		}
+	}
+}
+
+func nestedName(v interface{}) string {
+	m, ok := v.(map[string]interface{})
+	if !ok {
+		return ""
+	}
+	s, _ := m["name"].(string)
+	return s
+}
+
+func userName(v interface{}) string {
+	m, ok := v.(map[string]interface{})
+	if !ok {
+		return ""
+	}
+	for _, k := range []string{"displayName", "name", "emailAddress"} {
+		if s, ok := m[k].(string); ok && s != "" {
+			return s
+		}
+	}
+	return ""
+}

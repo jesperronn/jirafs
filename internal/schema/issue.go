@@ -75,9 +75,9 @@ type IssueType string
 
 // IssueIdentity holds the immutable identity fields of a Jira issue.
 type IssueIdentity struct {
-	Key     IssueKey `yaml:"key"`
+	Key     IssueKey  `yaml:"key"`
 	Type    IssueType `yaml:"type"`
-	Project TypedRef `yaml:"project"`
+	Project TypedRef  `yaml:"project"`
 }
 
 // IsZero reports whether i has no identity set.
@@ -113,6 +113,20 @@ func (l LinkedIssue) Equals(o LinkedIssue) bool {
 	return l.Key == o.Key && l.Type == o.Type
 }
 
+// IssueContext holds read-only, machine-owned Jira metadata. It is rendered
+// into frontmatter for context but is never compared by plan or pushed by
+// sync.
+type IssueContext struct {
+	Status     string
+	Priority   string
+	Reporter   string
+	Created    string
+	Updated    string
+	Components []string
+	Parent     string
+	EpicLink   string
+}
+
 // Issue represents a parsed issue file with identity, machine-owned fields,
 // remote metadata, and section content.
 type Issue struct {
@@ -128,6 +142,8 @@ type Issue struct {
 	FixVersions    []string
 	Epic           string
 	LinkedIssues   []LinkedIssue `yaml:"linked_issues,omitempty"`
+	// Context is read-only Jira metadata; plan and push ignore it.
+	Context IssueContext
 	// Sections holds the body sections keyed by their fixed section name.
 	// Only populated by ParseIssue when section parsing is enabled.
 	Sections map[FixedSectionName]string

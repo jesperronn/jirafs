@@ -1,0 +1,22 @@
+{
+  "id": "18312",
+  "key": "SKOLELOGIN-18312",
+  "fields": {
+    "issuetype": {"name": "Story"},
+    "summary": "Unilogin fails for pupils with compound surnames",
+    "description": "Pupils with compound surnames cannot log in.\n\nh3. Steps\n* Open the login page\n* Enter credentials",
+    "labels": ["login", "unilogin"],
+    "assignee": {"name": "jrj", "displayName": "Jesper"},
+    "status": {"name": "In Progress"},
+    "priority": {"name": "High"},
+    "reporter": {"name": "mlh", "displayName": "Mette Hansen"},
+    "created": "2026-03-02T09:15:30.000+0100",
+    "updated": "2026-04-11T16:42:05.000+0200",
+    "components": [{"name": "Login"}, {"name": "Backend"}],
+    "parent": {"key": "SKOLELOGIN-18000", "fields": {"summary": "Login hardening"}},
+    "customfield_10014": "SKOLELOGIN-17000",
+    "issuelinks": [
+      {"type": {"name": "Blocks"}, "outwardIssue": {"key": "SKOLELOGIN-18400"}}
+    ]
+  }
+}

@@ -193,10 +193,10 @@ func ParseIssue(content string) (Issue, *ParseError) {
 
 	// Parse editable fields written by RenderIssue.
 	var rawEditable struct {
-		Summary      string            `yaml:"summary"`
-		Labels       []string          `yaml:"labels"`
-		Assignee     string            `yaml:"assignee"`
-		LinkedIssues []LinkedIssue     `yaml:"linked_issues"`
+		Summary      string        `yaml:"summary"`
+		Labels       []string      `yaml:"labels"`
+		Assignee     string        `yaml:"assignee"`
+		LinkedIssues []LinkedIssue `yaml:"linked_issues"`
 	}
 	_ = yaml.Unmarshal([]byte(frontmatter), &rawEditable)
 	if rawEditable.Summary != "" {
@@ -210,6 +210,25 @@ func ParseIssue(content string) (Issue, *ParseError) {
 	}
 	if len(rawEditable.LinkedIssues) > 0 {
 		issue.LinkedIssues = rawEditable.LinkedIssues
+	}
+
+	// Parse read-only Jira context.
+	var rawContext struct {
+		Status     string   `yaml:"status"`
+		Priority   string   `yaml:"priority"`
+		Reporter   string   `yaml:"reporter"`
+		Created    string   `yaml:"created"`
+		Updated    string   `yaml:"updated"`
+		Components []string `yaml:"components"`
+		Parent     string   `yaml:"parent"`
+		EpicLink   string   `yaml:"epic_link"`
+	}
+	_ = yaml.Unmarshal([]byte(frontmatter), &rawContext)
+	issue.Context = IssueContext{
+		Status: rawContext.Status, Priority: rawContext.Priority,
+		Reporter: rawContext.Reporter, Created: rawContext.Created,
+		Updated: rawContext.Updated, Components: rawContext.Components,
+		Parent: rawContext.Parent, EpicLink: rawContext.EpicLink,
 	}
 
 	// Populate Sections from body when present.
@@ -235,6 +254,7 @@ func ParseIssue(content string) (Issue, *ParseError) {
 		if _, ok := issue.Sections[SecAcceptanceCriteria]; !ok {
 			issue.Sections[SecAcceptanceCriteria] = ""
 		}
+		issue.Description = issue.Sections[SecDescription]
 	}
 
 	return issue, nil

@@ -10,6 +10,8 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	neturl "net/url"
+	"os"
 	"strings"
 
 	"github.com/jirafs/jirafs/internal/config"
@@ -185,6 +187,32 @@ type JiraClient struct {
 	baseURL    string
 	httpClient *http.Client
 	credential config.ResolvedInstanceCredentials
+	// epicLinkField is the custom field id holding the epic link
+	// (e.g. "customfield_10014"); empty when not configured.
+	epicLinkField string
+}
+
+// EpicLinkFieldEnv names the environment variable that configures the
+// epic-link custom field id.
+const EpicLinkFieldEnv = "JIRAFS_EPIC_LINK_FIELD"
+
+// SetEpicLinkField configures the custom field id used for the epic link.
+func (c *JiraClient) SetEpicLinkField(id string) {
+	c.epicLinkField = id
+}
+
+// issueFields returns the explicit list of fields requested from Jira for
+// both single-issue fetches and searches.
+func (c *JiraClient) issueFields() []string {
+	fields := []string{
+		"summary", "description", "labels", "assignee", "status", "issuetype",
+		"issuelinks", "priority", "reporter", "created", "updated",
+		"components", "parent",
+	}
+	if c.epicLinkField != "" {
+		fields = append(fields, c.epicLinkField)
+	}
+	return fields
 }
 
 // SetCredentials configures the credentials used for authenticating
@@ -198,7 +226,8 @@ func (c *JiraClient) SetCredentials(creds config.ResolvedInstanceCredentials) {
 // any certificate (useful for self-signed certs in dev environments).
 func NewJiraClient(baseURL string) *JiraClient {
 	return &JiraClient{
-		baseURL: baseURL,
+		baseURL:       baseURL,
+		epicLinkField: strings.TrimSpace(os.Getenv(EpicLinkFieldEnv)),
 		httpClient: &http.Client{
 			Transport: &http.Transport{
 				TLSClientConfig: &tls.Config{InsecureSkipVerify: true}, //nolint:gosec
@@ -216,7 +245,7 @@ func (c *JiraClient) FetchIssue(ctx context.Context, key string) (*schema.Issue,
 		return nil, NewNotFoundError("empty key")
 	}
 
-	url := fmt.Sprintf("%s/rest/api/2/issue/%s", c.baseURL, key)
+	url := fmt.Sprintf("%s/rest/api/2/issue/%s?fields=%s", c.baseURL, key, neturl.QueryEscape(strings.Join(c.issueFields(), ",")))
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
 		return nil, NewTransportError("cannot create request: " + err.Error())
@@ -271,6 +300,7 @@ func (c *JiraClient) FetchIssue(ctx context.Context, key string) (*schema.Issue,
 		}
 		export.NormalizeIssue(issue, jr.Fields)
 		export.NormalizeLinkedIssues(issue, jr.Fields)
+		export.NormalizeContext(issue, jr.Fields, c.epicLinkField)
 	}
 
 	return issue, nil
@@ -300,7 +330,7 @@ func (c *JiraClient) SearchIssues(ctx context.Context, scope string) ([]*schema.
 	}
 
 	url := c.baseURL + "/rest/api/2/search"
-	fields := []string{"summary", "description", "labels", "assignee", "status", "issuetype"}
+	fields := c.issueFields()
 	const pageSize = 50
 	startAt := 0
 	issues := make([]*schema.Issue, 0)
@@ -378,6 +408,7 @@ func (c *JiraClient) SearchIssues(ctx context.Context, scope string) ([]*schema.
 				}
 				export.NormalizeIssue(issue, ir.Fields)
 				export.NormalizeLinkedIssues(issue, ir.Fields)
+				export.NormalizeContext(issue, ir.Fields, c.epicLinkField)
 			}
 			issues = append(issues, issue)
 		}
@@ -534,7 +565,7 @@ func (c *JiraClient) UpdateIssue(ctx context.Context, key string, issue *schema.
 		return nil, NewNotFoundError("empty key")
 	}
 
-	url := fmt.Sprintf("%s/rest/api/2/issue/%s", c.baseURL, key)
+	url := fmt.Sprintf("%s/rest/api/2/issue/%s?fields=%s", c.baseURL, key, neturl.QueryEscape(strings.Join(c.issueFields(), ",")))
 
 	// Build the fields object from the issue.
 	fields := issue.ToFieldsMap()
