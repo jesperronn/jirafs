@@ -93,6 +93,10 @@ type Client interface {
 	// issue.Identity.Project and returns its new key.
 	CreateIssue(ctx context.Context, issue *schema.Issue) (string, error)
 
+	// FetchCreateMeta returns the fields Jira accepts when creating an issue
+	// of the given type in the project, including which are required.
+	FetchCreateMeta(ctx context.Context, projectKey, issueType string) ([]CreateMetaField, error)
+
 	// SetCredentials configures the credentials used for authenticating
 	// requests made by this client. It is called after client creation
 	// to inject resolved credentials before making API calls.

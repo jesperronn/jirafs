@@ -190,3 +190,102 @@ func TestPushInvalidCreateDefaults(t *testing.T) {
 		t.Fatalf("got %s", errBuf)
 	}
 }
+
+func teamMeta(n int) []jira.CreateMetaField {
+	var av []jira.AllowedValue
+	for i := 1; i <= n; i++ {
+		av = append(av, jira.AllowedValue{ID: string(rune('0' + i%10)), Value: "Team " + string(rune('A'+i-1))})
+	}
+	return []jira.CreateMetaField{
+		{ID: "summary", Name: "Summary", Required: true},
+		{ID: "reporter", Name: "Reporter", Required: true},
+		{ID: "customfield_12601", Name: "Team", Required: true, AllowedValues: av},
+		{ID: "customfield_7", Name: "Optional", Required: false},
+		{ID: "customfield_8", Name: "Defaulted", Required: true, HasDefault: true},
+		{ID: "priority", Name: "Priority", Required: true},
+	}
+}
+
+func TestPushDryRunListsMissingRequiredFields(t *testing.T) {
+	dir := setupNewTest(t)
+	fake := jira.NewFakeTransport()
+	fake.SetCreateMeta("TEST", "Story", teamMeta(12))
+	out, errBuf := withPushTestIO(t, fake)
+	p := writeDraft(t, dir)
+	if code := RunPush([]string{p, "--cwd", dir}); code != 0 {
+		t.Fatalf("exit=%d err=%s", code, errBuf)
+	}
+	s := out.String()
+	for _, want := range []string{
+		"missing required field: Team (customfield_12601)",
+		"allowed values: Team A [id 1]", "(2 more)",
+		"custom_fields:", `customfield_12601: {value: "Team A"}`,
+		"[projects.test.create_defaults]", `customfield_12601 = { value = "Team A" }`,
+		"missing required field: Priority (priority)", "standard field",
+	} {
+		if !strings.Contains(s, want) {
+			t.Errorf("missing %q in:\n%s", want, s)
+		}
+	}
+	for _, bad := range []string{"Reporter", "Optional", "Defaulted", "(summary)"} {
+		if strings.Contains(s, bad) {
+			t.Errorf("must not report %q", bad)
+		}
+	}
+}
+
+func TestPushApplyRefusesMissingRequired(t *testing.T) {
+	dir := setupNewTest(t)
+	fake := jira.NewFakeTransport()
+	fake.SetCreateMeta("TEST", "Story", teamMeta(1))
+	_, errBuf := withPushTestIO(t, fake)
+	p := writeDraft(t, dir)
+	if code := RunPush([]string{p, "--apply", "--cwd", dir}); code != 1 || !strings.Contains(errBuf.String(), "customfield_12601") || !strings.Contains(errBuf.String(), "refusing to create") {
+		t.Fatalf("err=%s", errBuf)
+	}
+	if _, err := os.Stat(p); err != nil {
+		t.Error("draft must remain")
+	}
+	if _, err := fake.FetchIssue(nil, "TEST-1"); err == nil {
+		t.Error("must not create")
+	}
+}
+
+func TestPushRequiredSatisfiedByDefaultsAndDraft(t *testing.T) {
+	dir := setupNewTest(t)
+	addCreateDefaults(t, "customfield_12601 = { value = \"Team A\" }\n")
+	fake := jira.NewFakeTransport()
+	meta := teamMeta(1)[:3]
+	fake.SetCreateMeta("TEST", "Story", meta)
+	_, errBuf := withPushTestIO(t, fake)
+	p := writeDraft(t, dir)
+	if code := RunPush([]string{p, "--apply", "--cwd", dir}); code != 0 {
+		t.Fatalf("exit=%d err=%s", code, errBuf)
+	}
+}
+
+func TestPushCreateMetaFailureWarns(t *testing.T) {
+	dir := setupNewTest(t)
+	fake := jira.NewFakeTransport()
+	fake.SetErr("createmeta", errors.New("boom"))
+	out, errBuf := withPushTestIO(t, fake)
+	p := writeDraft(t, dir)
+	if code := RunPush([]string{p, "--apply", "--cwd", dir}); code != 0 || !strings.Contains(errBuf.String(), "warning: cannot check required fields: boom") || !strings.Contains(out.String(), "created TEST-1") {
+		t.Fatalf("err=%s out=%s", errBuf, out)
+	}
+}
+
+func TestPushDryRunNoClientWarns(t *testing.T) {
+	dir := setupNewTest(t)
+	_, errBuf := withPushTestIO(t, jira.NewFakeTransport())
+	pushClientFactory = func(*config.Settings, *context.Context, string) (jira.Client, error) {
+		return nil, errors.New("no creds")
+	}
+	p := writeDraft(t, dir)
+	if code := RunPush([]string{p, "--cwd", dir}); code != 0 || !strings.Contains(errBuf.String(), "warning: cannot check required fields (no Jira client: no creds)") {
+		t.Fatalf("err=%s", errBuf)
+	}
+	if code := RunPush([]string{p, "--apply", "--cwd", dir}); code != 1 || !strings.Contains(errBuf.String(), "cannot create Jira client") {
+		t.Fatalf("apply err=%s", errBuf)
+	}
+}

@@ -1,6 +1,7 @@
 package cli
 
 import (
+	stdcontext "context"
 	"encoding/json"
 	"flag"
 	"fmt"
@@ -29,8 +30,10 @@ func printPushHelp() {
 Usage:
   jirafs push <draft.md> [--apply|--dry-run] [--project <key>] [--cwd <dir>]
 
-Without --apply (or with --dry-run), shows what would be created and contacts nothing.
-With --apply, creates the issue in Jira, rewrites the file with the new key
+Without --apply (or with --dry-run), shows what would be created and checks Jira's createmeta
+for required fields the draft is missing; nothing is created.
+With --apply, first runs the same required-field check (refusing when fields
+are missing), then creates the issue in Jira, rewrites the file with the new key
 (renamed to KEY.md, state no longer draft) and prints the new path and URL.
 `)
 }
@@ -115,7 +118,37 @@ func RunPush(args []string) int {
 	}
 	issue.CustomFields = schema.MergeCustomFields(defaults, issue.CustomFields)
 
-	payload, _ := json.MarshalIndent(map[string]interface{}{"fields": jira.CreateFields(issue)}, "  ", "  ")
+	createFields := jira.CreateFields(issue)
+	payload, _ := json.MarshalIndent(map[string]interface{}{"fields": createFields}, "  ", "  ")
+
+	// Ask Jira which fields are required on create and report the ones the
+	// payload lacks. A failure to ask is a warning, never fatal.
+	var client jira.Client
+	var missing []jira.CreateMetaField
+	client, cerr := pushClientFactory(settings, ctx, cwd)
+	if cerr != nil {
+		if *applyFlag {
+			fmt.Fprintf(pushStderr, "jirafs push: cannot create Jira client: %v\n", cerr)
+			return 1
+		}
+		fmt.Fprintf(pushStderr, "jirafs push: warning: cannot check required fields (no Jira client: %v)\n", cerr)
+	} else {
+		typeName := jira.IssueTypeName(string(issue.Identity.Type))
+		meta, merr := client.FetchCreateMeta(stdcontext.Background(), issue.Identity.Project.Value, typeName)
+		if merr != nil {
+			fmt.Fprintf(pushStderr, "jirafs push: warning: cannot check required fields: %v\n", merr)
+		} else {
+			missing = missingRequired(meta, createFields)
+		}
+	}
+	if len(missing) > 0 {
+		msg := formatMissingRequired(missing, ctx.Name, path)
+		if *applyFlag {
+			fmt.Fprintf(pushStderr, "jirafs push: refusing to create: Jira requires fields this draft does not set\n%s", msg)
+			return 1
+		}
+		fmt.Fprint(pushStdout, "jirafs push: warning: Jira requires fields this draft does not set\n"+msg)
+	}
 	if !*applyFlag {
 		fmt.Fprintf(pushStdout, "jirafs push: would create %s in project %s: %s\n", jira.IssueTypeName(string(issue.Identity.Type)), issue.Identity.Project.Value, issue.Summary)
 		fmt.Fprintf(pushStdout, "  POST %s/rest/api/2/issue\n  %s\n", baseURL, payload)
@@ -123,11 +156,6 @@ func RunPush(args []string) int {
 		return 0
 	}
 
-	client, err := pushClientFactory(settings, ctx, cwd)
-	if err != nil {
-		fmt.Fprintf(pushStderr, "jirafs push: cannot create Jira client: %v\n", err)
-		return 1
-	}
 	key, err := client.CreateIssue(nil, issue)
 	if err != nil {
 		fmt.Fprintf(pushStderr, "jirafs push: cannot create issue: %v\n", err)
@@ -157,4 +185,77 @@ func syncHintKey(issue *schema.Issue, path string) string {
 		return string(issue.Identity.Key)
 	}
 	return strings.TrimSuffix(filepath.Base(path), ".md")
+}
+
+// skipRequired lists required fields that are never reported as missing:
+// project and issuetype are always sent, and Jira fills in the reporter.
+var skipRequired = map[string]bool{"project": true, "issuetype": true, "reporter": true}
+
+// missingRequired returns the required, default-less create-meta fields that
+// are absent (or empty) in the create payload.
+func missingRequired(meta []jira.CreateMetaField, fields map[string]interface{}) []jira.CreateMetaField {
+	var out []jira.CreateMetaField
+	for _, f := range meta {
+		if !f.Required || f.HasDefault || skipRequired[f.ID] {
+			continue
+		}
+		if v, ok := fields[f.ID]; ok && v != nil && v != "" {
+			continue
+		}
+		out = append(out, f)
+	}
+	return out
+}
+
+const maxAllowedShown = 10
+
+// formatMissingRequired renders the missing fields with their allowed values
+// and copy-pasteable snippets for custom_fields and create_defaults.
+func formatMissingRequired(missing []jira.CreateMetaField, project, path string) string {
+	var sb strings.Builder
+	var draftSnip, tomlSnip strings.Builder
+	for _, f := range missing {
+		fmt.Fprintf(&sb, "  missing required field: %s (%s)\n", f.Name, f.ID)
+		if n := len(f.AllowedValues); n > 0 {
+			shown := f.AllowedValues
+			if n > maxAllowedShown {
+				shown = shown[:maxAllowedShown]
+			}
+			labels := make([]string, len(shown))
+			for i, a := range shown {
+				labels[i] = a.Label()
+				if a.ID != "" && a.ID != a.Label() {
+					labels[i] += " [id " + a.ID + "]"
+				}
+			}
+			more := ""
+			if n > len(shown) {
+				more = fmt.Sprintf(", ... (%d more)", n-len(shown))
+			}
+			fmt.Fprintf(&sb, "    allowed values: %s%s\n", strings.Join(labels, ", "), more)
+		}
+		if !schema.IsCustomFieldKey(f.ID) {
+			fmt.Fprintf(&sb, "    %s is a standard field that jirafs cannot set from a draft yet\n", f.ID)
+			continue
+		}
+		yamlVal, tomlVal := `"TODO"`, `"TODO"`
+		if len(f.AllowedValues) > 0 {
+			a := f.AllowedValues[0]
+			switch {
+			case a.Value != "":
+				yamlVal, tomlVal = fmt.Sprintf("{value: %q}", a.Value), fmt.Sprintf("{ value = %q }", a.Value)
+			case a.ID != "":
+				yamlVal, tomlVal = fmt.Sprintf("{id: %q}", a.ID), fmt.Sprintf("{ id = %q }", a.ID)
+			default:
+				yamlVal, tomlVal = fmt.Sprintf("{name: %q}", a.Name), fmt.Sprintf("{ name = %q }", a.Name)
+			}
+		}
+		fmt.Fprintf(&draftSnip, "    %s: %s\n", f.ID, yamlVal)
+		fmt.Fprintf(&tomlSnip, "    %s = %s\n", f.ID, tomlVal)
+	}
+	if draftSnip.Len() > 0 {
+		fmt.Fprintf(&sb, "  add to the frontmatter of %s:\n    custom_fields:\n%s", path, strings.ReplaceAll(draftSnip.String(), "    customfield", "      customfield"))
+		fmt.Fprintf(&sb, "  or to ~/.jirafs/settings.toml for every draft in the project:\n    [projects.%s.create_defaults]\n%s", project, tomlSnip.String())
+	}
+	return sb.String()
 }

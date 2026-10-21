@@ -160,6 +160,12 @@ customfield_10002 = 5
 
 Custom fields are sent on create only; they are not synced back.
 
+`jirafs push` (dry run) and `jirafs push --apply` ask Jira's createmeta
+endpoint which fields are required and list the ones the payload lacks, with
+allowed values and a copy-pasteable `custom_fields:` / `create_defaults`
+snippet. `--apply` refuses to create until they are set. If createmeta cannot
+be reached, a warning is printed and the push continues.
+
 ## Initial Scope
 
 - Export Jira issues, sprints, and related metadata into a local filesystem.

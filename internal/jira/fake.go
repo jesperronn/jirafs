@@ -23,6 +23,7 @@ type FakeTransport struct {
 	statuses    []StatusEntry
 	sprints     map[string][]SprintEntry     // projectKey -> sprints
 	fixVersions map[string][]FixVersionEntry // projectKey -> versions
+	createMeta  map[string][]CreateMetaField // project/type -> fields
 	created     int                          // issues created via CreateIssue
 }
 
@@ -34,6 +35,7 @@ func NewFakeTransport() *FakeTransport {
 		comments:      make(map[string][]schema.Comment),
 		sprints:       make(map[string][]SprintEntry),
 		fixVersions:   make(map[string][]FixVersionEntry),
+		createMeta:    make(map[string][]CreateMetaField),
 	}
 }
 
@@ -219,6 +221,25 @@ func (f *FakeTransport) CreateIssue(_ context.Context, issue *schema.Issue) (str
 	c.Identity.Key = schema.IssueKey(key)
 	f.issues[key] = &c
 	return key, nil
+}
+
+// SetCreateMeta registers the create-meta fields FetchCreateMeta returns for a
+// project key and issue type name (e.g. "ABC", "Story").
+func (f *FakeTransport) SetCreateMeta(projectKey, issueType string, fields []CreateMetaField) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.createMeta[projectKey+"/"+issueType] = fields
+}
+
+// FetchCreateMeta returns the registered fields (none when unregistered), or
+// the configured error if ErrOn == "createmeta".
+func (f *FakeTransport) FetchCreateMeta(_ context.Context, projectKey, issueType string) ([]CreateMetaField, error) {
+	f.mu.RLock()
+	defer f.mu.RUnlock()
+	if f.errOn == "createmeta" {
+		return nil, f.err
+	}
+	return f.createMeta[projectKey+"/"+issueType], nil
 }
 
 // SetCredentials is a no-op for the fake transport.
