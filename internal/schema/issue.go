@@ -1,5 +1,7 @@
 package schema
 
+import "fmt"
+
 // EditableField represents a field that can be edited by the user in an
 // issue file.
 type EditableField string
@@ -108,6 +110,11 @@ type LinkedIssue struct {
 	Key IssueKey `yaml:"key"`
 	// Relation is the directional link text (e.g. "blocks", "is blocked by").
 	Relation string `yaml:"relation"`
+	// LinkType is the Jira link type name (e.g. "Blocks"); it is what push
+	// sends as the issuelink type name.
+	LinkType string `yaml:"link_type,omitempty"`
+	// Direction is "outward" or "inward" relative to this issue.
+	Direction string `yaml:"direction,omitempty"`
 	// Summary and Status are read-only context about the linked issue; plan
 	// comparison ignores them.
 	Summary string `yaml:"summary,omitempty"`
@@ -187,6 +194,19 @@ func (i Issue) IsZero() bool {
 	return i.Identity.IsZero() && i.MachineOwned.IsZero()
 }
 
+// ValidateLinks reports an error for any linked issue that cannot be pushed
+// because its Jira link type name is unknown (hand-written links that only
+// carry a relation). The message contains a copy-pasteable fix.
+func (i Issue) ValidateLinks() error {
+	for _, li := range i.LinkedIssues {
+		if li.LinkType != "" {
+			continue
+		}
+		return fmt.Errorf("linked issue %s (relation %q) has no link_type; add a line like `  link_type: \"Blocks\"` under it in linked_issues (use the Jira link type name, and `  direction: inward` if the relation is the inward text)", li.Key, li.Relation)
+	}
+	return nil
+}
+
 // ToFieldsMap builds a Jira API fields map from the issue's editable fields.
 // The map contains only non-zero fields, matching what the Jira REST API
 // expects for an update (PATCH) request.
@@ -223,9 +243,13 @@ func (i Issue) ToFieldsMap() map[string]interface{} {
 	if len(i.LinkedIssues) > 0 {
 		links := make([]map[string]interface{}, len(i.LinkedIssues))
 		for idx, li := range i.LinkedIssues {
+			side := "outwardIssue"
+			if li.Direction == "inward" {
+				side = "inwardIssue"
+			}
 			links[idx] = map[string]interface{}{
-				"issueKey": string(li.Key),
-				"type":     map[string]string{"name": li.Relation},
+				"type": map[string]string{"name": li.LinkType},
+				side:   map[string]string{"key": string(li.Key)},
 			}
 		}
 		fields["issuelinks"] = links

@@ -94,6 +94,12 @@ func RenderIssue(i Issue) string {
 		for _, li := range i.LinkedIssues {
 			sb.WriteString("- key: " + quoteScalar(string(li.Key)) + "\n")
 			sb.WriteString("  relation: " + quoteScalar(li.Relation) + "\n")
+			if li.LinkType != "" {
+				sb.WriteString("  link_type: " + quoteScalar(li.LinkType) + "\n")
+			}
+			if li.Direction != "" {
+				sb.WriteString("  direction: " + quoteScalar(li.Direction) + "\n")
+			}
 			if li.Summary != "" {
 				sb.WriteString("  summary: " + quoteScalar(li.Summary) + "\n")
 			}

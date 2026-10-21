@@ -1,6 +1,9 @@
 package schema
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
 
 func TestIssueIdentity_IsZero(t *testing.T) {
 	var zero IssueIdentity
@@ -193,5 +196,50 @@ func TestIssueToFieldsMap_zeroValuesOmitted(t *testing.T) {
 	fields := issue.ToFieldsMap()
 	if len(fields) != 0 {
 		t.Errorf("expected empty fields map for zero-value issue, got %d entries", len(fields))
+	}
+}
+
+func TestToFieldsMap_issuelinksDirection(t *testing.T) {
+	issue := Issue{LinkedIssues: []LinkedIssue{
+		{Key: "A-1", Relation: "blocks", LinkType: "Blocks", Direction: "outward"},
+		{Key: "A-2", Relation: "is blocked by", LinkType: "Blocks", Direction: "inward"},
+	}}
+	links := issue.ToFieldsMap()["issuelinks"].([]map[string]interface{})
+	if links[0]["type"].(map[string]string)["name"] != "Blocks" ||
+		links[0]["outwardIssue"].(map[string]string)["key"] != "A-1" || links[0]["inwardIssue"] != nil {
+		t.Errorf("outward payload wrong: %v", links[0])
+	}
+	if links[1]["type"].(map[string]string)["name"] != "Blocks" ||
+		links[1]["inwardIssue"].(map[string]string)["key"] != "A-2" || links[1]["outwardIssue"] != nil {
+		t.Errorf("inward payload wrong: %v", links[1])
+	}
+}
+
+func TestLinkedIssue_roundTripLinkType(t *testing.T) {
+	in := Issue{Identity: IssueIdentity{Key: "P-1"}, Summary: "s", LinkedIssues: []LinkedIssue{
+		{Key: "A-2", Relation: "is blocked by", LinkType: "Blocks", Direction: "inward"},
+	}}
+	out, perr := ParseIssue(RenderIssue(in))
+	if perr != nil {
+		t.Fatal(perr)
+	}
+	got := out.LinkedIssues[0]
+	if got.LinkType != "Blocks" || got.Direction != "inward" || got.Relation != "is blocked by" {
+		t.Errorf("round trip lost fields: %+v", got)
+	}
+	if !got.Equals(in.LinkedIssues[0]) {
+		t.Error("Equals should hold on key+relation")
+	}
+}
+
+func TestValidateLinks(t *testing.T) {
+	ok := Issue{LinkedIssues: []LinkedIssue{{Key: "A-1", Relation: "blocks", LinkType: "Blocks"}}}
+	if err := ok.ValidateLinks(); err != nil {
+		t.Errorf("unexpected: %v", err)
+	}
+	bad := Issue{LinkedIssues: []LinkedIssue{{Key: "A-1", Relation: "blocks"}}}
+	err := bad.ValidateLinks()
+	if err == nil || !strings.Contains(err.Error(), "link_type:") {
+		t.Errorf("want hint error, got %v", err)
 	}
 }

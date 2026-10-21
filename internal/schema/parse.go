@@ -200,6 +200,8 @@ func ParseIssue(content string) (Issue, *ParseError) {
 			Key      IssueKey `yaml:"key"`
 			Relation string   `yaml:"relation"`
 			Type     string   `yaml:"type"` // legacy name for relation
+			LinkType string   `yaml:"link_type"`
+			Direction string  `yaml:"direction"`
 			Summary  string   `yaml:"summary"`
 			Status   string   `yaml:"status"`
 		} `yaml:"linked_issues"`
@@ -223,7 +225,7 @@ func ParseIssue(content string) (Issue, *ParseError) {
 				rel = li.Type
 			}
 			issue.LinkedIssues = append(issue.LinkedIssues, LinkedIssue{
-				Key: li.Key, Relation: rel, Summary: li.Summary, Status: li.Status,
+				Key: li.Key, Relation: rel, LinkType: li.LinkType, Direction: li.Direction, Summary: li.Summary, Status: li.Status,
 			})
 		}
 	}

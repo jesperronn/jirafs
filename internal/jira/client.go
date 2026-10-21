@@ -572,6 +572,9 @@ func (c *JiraClient) UpdateIssue(ctx context.Context, key string, issue *schema.
 	url := fmt.Sprintf("%s/rest/api/2/issue/%s?fields=%s", c.baseURL, key, neturl.QueryEscape(strings.Join(c.issueFields(), ",")))
 
 	// Build the fields object from the issue.
+	if err := issue.ValidateLinks(); err != nil {
+		return nil, NewUnknownErr(err.Error())
+	}
 	fields := issue.ToFieldsMap()
 
 	payload := map[string]interface{}{

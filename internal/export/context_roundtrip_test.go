@@ -75,8 +75,8 @@ func TestExportIssue_LinksFixVersionsSubtasksRoundTrip(t *testing.T) {
 	t.Logf("rendered:\n%s", out)
 
 	wantLinks := []schema.LinkedIssue{
-		{Key: "SKOLELOGIN-18400", Relation: "blocks", Summary: "Release gate", Status: "Open"},
-		{Key: "SKOLELOGIN-18100", Relation: "is blocked by", Summary: "Upgrade IdP", Status: "In Review"},
+		{Key: "SKOLELOGIN-18400", Relation: "blocks", LinkType: "Blocks", Direction: "outward", Summary: "Release gate", Status: "Open"},
+		{Key: "SKOLELOGIN-18100", Relation: "is blocked by", LinkType: "Blocks", Direction: "inward", Summary: "Upgrade IdP", Status: "In Review"},
 	}
 	wantSubs := []schema.Subtask{
 		{Key: "SKOLELOGIN-18313", Summary: "Fix surname parser", Status: "Done"},
@@ -119,8 +119,8 @@ func TestNormalizeLinkedIssues_SameKeyDifferentRelationKept(t *testing.T) {
 	issue := &schema.Issue{}
 	NormalizeLinkedIssues(issue, fields)
 	want := []schema.LinkedIssue{
-		{Key: "P-1", Relation: "blocks"},
-		{Key: "P-1", Relation: "is blocked by"},
+		{Key: "P-1", Relation: "blocks", LinkType: "Blocks", Direction: "outward"},
+		{Key: "P-1", Relation: "is blocked by", LinkType: "Blocks", Direction: "inward"},
 	}
 	if !reflect.DeepEqual(issue.LinkedIssues, want) {
 		t.Errorf("LinkedIssues = %+v, want %+v", issue.LinkedIssues, want)

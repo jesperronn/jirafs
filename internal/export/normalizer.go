@@ -48,8 +48,9 @@ func NormalizeLinkedIssues(issue *schema.Issue, fields map[string]interface{}) {
 
 		// The directional text comes from the link type; fall back to the
 		// type name when Jira omits it.
-		var relation string
+		var relation, linkType string
 		if lt, ok := link["type"].(map[string]interface{}); ok {
+			linkType, _ = lt["name"].(string)
 			relation, _ = lt[relKey].(string)
 			if relation == "" {
 				relation, _ = lt["name"].(string)
@@ -62,7 +63,7 @@ func NormalizeLinkedIssues(issue *schema.Issue, fields map[string]interface{}) {
 		}
 		seen[id] = true
 
-		li := schema.LinkedIssue{Key: schema.IssueKey(targetKey), Relation: relation}
+		li := schema.LinkedIssue{Key: schema.IssueKey(targetKey), Relation: relation, LinkType: linkType, Direction: relKey}
 		if tf, ok := target["fields"].(map[string]interface{}); ok {
 			li.Summary, _ = tf["summary"].(string)
 			li.Status = nestedName(tf["status"])
