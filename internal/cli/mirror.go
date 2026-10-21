@@ -172,24 +172,26 @@ func materializeScopeIssues(ctx stdcontext.Context, client jira.Client, settings
 		return fmt.Errorf("create local directory %s: %w", proj.LocalDirs[0], err)
 	}
 
-	issues, total, err := client.SearchIssues(ctx, scopeName)
+	issues, _, err := client.SearchIssues(ctx, scopeName)
 	if err != nil {
 		return err
 	}
-	if total < len(issues) {
-		total = len(issues)
+	// Only issues that will actually be written count towards progress.
+	writable := make([]*schema.Issue, 0, len(issues))
+	for _, issue := range issues {
+		if issue != nil && issue.Identity.Key != "" {
+			writable = append(writable, issue)
+		}
 	}
+	total := len(writable)
 	writeMirrorProgress(mirrorStdout, "fetching", 0, total)
-	if len(issues) == 0 {
+	if total == 0 {
 		writeMirrorProgress(mirrorStdout, "fetched", 0, total)
 		fmt.Fprintln(mirrorStdout)
 		return nil
 	}
 	completed := 0
-	for _, issue := range issues {
-		if issue == nil || issue.Identity.Key == "" {
-			continue
-		}
+	for _, issue := range writable {
 		renderIssue := issue
 		fullIssue, err := client.FetchIssue(ctx, string(issue.Identity.Key))
 		if err == nil && fullIssue != nil && fullIssue.Identity.Key != "" {

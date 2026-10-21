@@ -41,8 +41,8 @@ func TestMaterializeScopeIssues_WritesFilesAndSkipsInvalid(t *testing.T) {
 	if len(entries) != 2 {
 		t.Errorf("wrote %d files, want 2 (nil and keyless skipped)", len(entries))
 	}
-	if !strings.Contains(out.String(), "fetching 2/4") {
-		t.Errorf("progress output = %q", out.String())
+	if !strings.Contains(out.String(), "fetching 2/2") || !strings.Contains(out.String(), "fetched 2/2") {
+		t.Errorf("progress output = %q, want fetching 2/2 and fetched 2/2", out.String())
 	}
 }
 
