@@ -77,7 +77,11 @@ If something fails:
 - project resolution issue: run `jirafs use --project <name>`
 - live Jira issue: retry with a single issue export before a whole-scope refresh
 - empty sync scope: run `jirafs mirror refresh current-sprint` or
-  `jirafs mirror refresh my-issues` before `jirafs sync`
+  `jirafs mirror refresh my-issues`, then `jirafs sync <KEY>` per issue
+  (multi-issue `jirafs sync` is not implemented yet)
+- not sure what a command will change: add `--dry-run` (sync, push, export
+  issue, new, archive issue, mirror refresh, mirror archive-sweep); it prints
+  the plan and the command for the real run, and writes nothing
 
 ## Testing Policy
 

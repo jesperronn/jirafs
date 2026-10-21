@@ -182,6 +182,7 @@ func RunNew(args []string) int {
 	promptFlag := fs.Bool("prompt", false, "print the template plus AI instructions")
 	ideaFlag := fs.String("idea", "", "idea text to include in the prompt")
 	fromFlag := fs.String("from", "", "filled document to create a draft from (- for stdin)")
+	dryRunFlag := fs.Bool("dry-run", false, "print the target path and whether it would be overwritten; write nothing")
 
 	if err := fs.Parse(flagArgs); err != nil {
 		return 1
@@ -286,6 +287,11 @@ func RunNew(args []string) int {
 	}
 
 	path := filepath.Join(proj.LocalDirs[0], slugify(issue.Summary)+".md")
+	if *dryRunFlag {
+		fmt.Fprintf(newStdout, "would %s %s\n", writeVerb(path), path)
+		dryRunDone(newStdout, "re-run the same jirafs new command without --dry-run")
+		return 0
+	}
 	if err := os.WriteFile(path, []byte(schema.RenderIssue(*issue)), 0o644); err != nil {
 		fmt.Fprintf(newStderr, "jirafs new: %v\n", err)
 		return 1

@@ -27,9 +27,9 @@ func printPushHelp() {
 	fmt.Fprint(pushStdout, `jirafs push - create a local draft issue in Jira
 
 Usage:
-  jirafs push <draft.md> [--apply] [--project <key>] [--cwd <dir>]
+  jirafs push <draft.md> [--apply|--dry-run] [--project <key>] [--cwd <dir>]
 
-Without --apply, shows what would be created and contacts nothing.
+Without --apply (or with --dry-run), shows what would be created and contacts nothing.
 With --apply, creates the issue in Jira, rewrites the file with the new key
 (renamed to KEY.md, state no longer draft) and prints the new path and URL.
 `)
@@ -51,10 +51,14 @@ func RunPush(args []string) int {
 	fs := flag.NewFlagSet("push", flag.ContinueOnError)
 	fs.SetOutput(pushStderr)
 	applyFlag := fs.Bool("apply", false, "create the issue in Jira")
+	dryRunFlag := fs.Bool("dry-run", false, "show what would be created (the default)")
 	projectFlag := fs.String("project", "", "project key or name to use")
 	cwdFlag := fs.String("cwd", "", "working directory to resolve the project from")
 	if err := fs.Parse(flagArgs); err != nil {
 		return 1
+	}
+	if dryRunConflicts(pushStderr, "jirafs push", *dryRunFlag, *applyFlag) {
+		return 2
 	}
 	if path == "" && fs.NArg() > 0 {
 		path = fs.Arg(0)

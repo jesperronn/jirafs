@@ -86,6 +86,7 @@ func runMirrorRefresh(args []string, settings *config.Settings, resolver *contex
 	fs.SetOutput(mirrorStderr)
 	projectFlag := fs.String("project", "", "project key or name to refresh")
 	cwdFlag := fs.String("cwd", "", "working directory to use for project resolution")
+	dryRunFlag := fs.Bool("dry-run", false, "list the issue files that would be written; change nothing")
 	if err := fs.Parse(args); err != nil {
 		fmt.Fprintf(mirrorStderr, "jirafs mirror refresh: invalid flags: %v\n", err)
 		return 1
@@ -129,6 +130,10 @@ func runMirrorRefresh(args []string, settings *config.Settings, resolver *contex
 		return 1
 	}
 
+	if *dryRunFlag {
+		return mirrorRefreshDryRun(client, settings, ctx, scopeName)
+	}
+
 	added, err := mirror.RefreshScope(stdcontext.Background(), client, scope, m)
 	if err != nil {
 		fmt.Fprintf(mirrorStderr, "jirafs mirror refresh: %v\n", err)
@@ -157,6 +162,36 @@ func runMirrorRefresh(args []string, settings *config.Settings, resolver *contex
 	for _, key := range added {
 		fmt.Fprintf(mirrorStdout, "  %s\n", key)
 	}
+	return 0
+}
+
+// mirrorRefreshDryRun lists the issue files a refresh of scopeName would
+// write, using only read calls, and changes nothing locally or remotely.
+func mirrorRefreshDryRun(client jira.Client, settings *config.Settings, ctx *context.Context, scopeName string) int {
+	proj, ok := settings.Projects[ctx.Name]
+	if !ok || len(proj.LocalDirs) == 0 {
+		fmt.Fprintf(mirrorStderr, "jirafs mirror refresh: project %q has no local_dirs configured\n", ctx.Name)
+		return 1
+	}
+	issues, _, err := client.SearchIssues(stdcontext.Background(), scopeName)
+	if err != nil {
+		fmt.Fprintf(mirrorStderr, "jirafs mirror refresh: %v\n", err)
+		return 1
+	}
+	var lines []string
+	for _, issue := range issues {
+		if issue == nil || issue.Identity.Key == "" {
+			continue
+		}
+		dest := filepath.Join(proj.LocalDirs[0], string(issue.Identity.Key)+".md")
+		lines = append(lines, fmt.Sprintf("  would %s %s", writeVerb(dest), dest))
+	}
+	sort.Strings(lines)
+	fmt.Fprintf(mirrorStdout, "jirafs mirror refresh: would write %d issue file(s) for scope %q in %q and update mirror.yml:\n", len(lines), scopeName, ctx.Name)
+	for _, l := range lines {
+		fmt.Fprintln(mirrorStdout, l)
+	}
+	dryRunDone(mirrorStdout, "jirafs mirror refresh "+scopeName)
 	return 0
 }
 
@@ -228,9 +263,13 @@ func runMirrorArchiveSweep(args []string, settings *config.Settings, resolver *c
 	cwdFlag := fs.String("cwd", "", "working directory to use for project resolution")
 	// --apply actually moves eligible issues through the archive service.
 	applyFlag := fs.Bool("apply", false, "actually archive eligible issues")
+	dryRunFlag := fs.Bool("dry-run", false, "list eligible issues only (the default)")
 	if err := fs.Parse(args); err != nil {
 		fmt.Fprintf(os.Stderr, "jirafs mirror archive-sweep: invalid flags: %v\n", err)
 		return 1
+	}
+	if dryRunConflicts(mirrorStderr, "jirafs mirror archive-sweep", *dryRunFlag, *applyFlag) {
+		return 2
 	}
 
 	// Resolve the current working directory.
@@ -271,6 +310,9 @@ func runMirrorArchiveSweep(args []string, settings *config.Settings, resolver *c
 
 	// With --apply, call the archive service for each eligible issue.
 	if !*applyFlag {
+		if *dryRunFlag {
+			dryRunDone(mirrorStdout, "jirafs mirror archive-sweep --apply")
+		}
 		return 0
 	}
 
@@ -522,7 +564,8 @@ func printMirrorHelp() {
 	fmt.Fprintf(mirrorStderr, "%s:\n", color.BoldGreen(mirrorStderr, "Flags"))
 	fmt.Fprintf(mirrorStderr, "  %s KEY   %s\n", color.Yellow(mirrorStderr, "--project"), color.Dim(mirrorStderr, "project key or name to use"))
 	fmt.Fprintf(mirrorStderr, "  %s DIR   %s\n", color.Yellow(mirrorStderr, "--cwd"), color.Dim(mirrorStderr, "working directory for project resolution"))
-	fmt.Fprintf(mirrorStderr, "  %s         %s\n\n", color.Yellow(mirrorStderr, "--apply"), color.Dim(mirrorStderr, "actually archive eligible issues"))
+	fmt.Fprintf(mirrorStderr, "  %s         %s\n", color.Yellow(mirrorStderr, "--apply"), color.Dim(mirrorStderr, "actually archive eligible issues"))
+	fmt.Fprintf(mirrorStderr, "  %s       %s\n\n", color.Yellow(mirrorStderr, "--dry-run"), color.Dim(mirrorStderr, "list only; on refresh also list the files that would be written"))
 
 	fmt.Fprintf(mirrorStderr, "%s\n", color.Cyan(mirrorStderr, `Run "jirafs mirror <subcommand> --help" for more information about a subcommand.`))
 }

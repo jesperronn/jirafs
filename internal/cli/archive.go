@@ -42,6 +42,7 @@ func runArchiveIssue(args []string, settings *config.Settings) int {
 	fs := flag.NewFlagSet("archive issue", flag.ExitOnError)
 	projectFlag := fs.String("project", "", "project key or name to use")
 	cwdFlag := fs.String("cwd", "", "working directory to resolve the project from")
+	dryRunFlag := fs.Bool("dry-run", false, "print what would be archived; move nothing")
 	if err := fs.Parse(flagArgs); err != nil {
 		return 1
 	}
@@ -83,6 +84,11 @@ func runArchiveIssue(args []string, settings *config.Settings) int {
 	}
 
 	archiveDir := filepath.Join(proj.LocalDirs[0], "_archive")
+	if *dryRunFlag {
+		fmt.Fprintf(archiveStdout, "would archive %s -> %s (%s)\n", issuePath, filepath.Join(archiveDir, filepath.Base(issuePath)), writeVerb(filepath.Join(archiveDir, filepath.Base(issuePath))))
+		dryRunDone(archiveStdout, "jirafs archive issue "+key)
+		return 0
+	}
 	if err := os.MkdirAll(archiveDir, 0o755); err != nil {
 		fmt.Fprintf(archiveStderr, "jirafs archive issue %s: %v\n", key, err)
 		return 1

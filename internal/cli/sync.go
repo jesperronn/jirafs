@@ -40,6 +40,7 @@ func RunSync(args []string) int {
 	projectFlag := fs.String("project", "", "project key or name to use")
 	fs.String("cwd", "", "ignored; sync resolves the project from the current directory")
 	applyFlag := fs.Bool("apply", false, "write the updated remote to the local issue file")
+	dryRunFlag := fs.Bool("dry-run", false, "print the plan; update neither Jira nor the local file")
 	if err := fs.Parse(args); err != nil {
 		fmt.Fprintf(syncStderr, "jirafs sync: invalid flags: %v\n", err)
 		return 1
@@ -48,6 +49,10 @@ func RunSync(args []string) int {
 	// Multi-issue sync is blocked for now; reject before loading anything.
 	if len(fs.Args()) == 0 {
 		fmt.Fprintln(syncStderr, "jirafs sync: syncing multiple issues is not implemented yet; sync one issue at a time: jirafs sync <KEY>")
+		return 2
+	}
+
+	if dryRunConflicts(syncStderr, "jirafs sync", *dryRunFlag, *applyFlag) {
 		return 2
 	}
 
@@ -61,14 +66,14 @@ func RunSync(args []string) int {
 	// Parse flags to extract --project and --cwd regardless of whether
 	// an issue key is provided. This allows "jirafs sync --project TEST"
 	// (no key) to resolve the project and list pending syncs.
-	return runSyncIssue(fs.Args(), settings, context.NewResolver(settings, *projectFlag), *applyFlag)
+	return runSyncIssue(fs.Args(), settings, context.NewResolver(settings, *projectFlag), *applyFlag, *dryRunFlag)
 }
 
 // runSyncIssue handles `jirafs sync KEY`. It resolves the project context,
 // fetches the remote issue from Jira through the real service path, reads
 // the local issue from the file system, builds and validates a plan,
 // applies the plan, and pushes the updated remote back to Jira.
-func runSyncIssue(args []string, settings *config.Settings, resolver *context.Resolver, apply bool) int {
+func runSyncIssue(args []string, settings *config.Settings, resolver *context.Resolver, apply, dryRun bool) int {
 	if len(args) == 0 {
 		fmt.Fprintln(syncStderr, "jirafs sync: missing issue key")
 		return 1
@@ -142,6 +147,11 @@ func runSyncIssue(args []string, settings *config.Settings, resolver *context.Re
 		len(ops), key, localPath)
 	for _, op := range ops {
 		fmt.Fprintf(syncStdout, "  %s %s = %s\n", op.Type, op.Field, op.Value)
+	}
+
+	if dryRun {
+		dryRunDone(syncStdout, "jirafs sync "+key)
+		return 0
 	}
 
 	// Push the updated remote back to Jira through the real service path.
@@ -224,7 +234,8 @@ func printSyncHelp() {
 
 	fmt.Fprintf(syncStderr, "%s:\n", color.BoldGreen(syncStderr, "Flags"))
 	fmt.Fprintf(syncStderr, "  %s KEY    %s\n", color.Yellow(syncStderr, "--project"), color.Dim(syncStderr, "project key or name to use"))
-	fmt.Fprintf(syncStderr, "  %s        %s\n\n", color.Yellow(syncStderr, "--apply"), color.Dim(syncStderr, "write the updated remote to the local issue file"))
+	fmt.Fprintf(syncStderr, "  %s        %s\n", color.Yellow(syncStderr, "--apply"), color.Dim(syncStderr, "write the updated remote to the local issue file"))
+	fmt.Fprintf(syncStderr, "  %s      %s\n\n", color.Yellow(syncStderr, "--dry-run"), color.Dim(syncStderr, "print the plan; no Jira update and no local write"))
 
 	fmt.Fprintf(syncStderr, "%s\n", color.Cyan(syncStderr, `Run "jirafs sync --help" for more information about flags.`))
 }
