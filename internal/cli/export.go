@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"strings"
 
 	"github.com/jirafs/jirafs/internal/color"
 	"github.com/jirafs/jirafs/internal/config"
@@ -58,6 +59,11 @@ func RunExport(args []string) int {
 // exports it through the canonical codec.
 func runExportIssue(args []string, settings *config.Settings, resolver *context.Resolver) int {
 	fs := flag.NewFlagSet("export issue", flag.ExitOnError)
+	fs.Usage = func() {
+		fmt.Fprintf(exportStderr, "Usage: jirafs export issue <KEY|URL> [--project NAME] [--cwd DIR]\n\n")
+		fmt.Fprintf(exportStderr, "KEY is an issue key (PROJ-123); URL is <base_url>/browse/PROJ-123 or a URL with selectedIssue=PROJ-123.\n\n")
+		fs.PrintDefaults()
+	}
 	// --project overrides the auto-detected project.
 	projectFlag := fs.String("project", "", "project key or name to use")
 	// --cwd overrides the working directory for project resolution.
@@ -75,7 +81,7 @@ func runExportIssue(args []string, settings *config.Settings, resolver *context.
 		fmt.Fprintln(exportStderr, "jirafs export issue: too many positional arguments")
 		return 1
 	}
-	key := fs.Args()[0]
+	arg := fs.Args()[0]
 
 	cwd := "."
 	if *cwdFlag != "" {
@@ -84,6 +90,12 @@ func runExportIssue(args []string, settings *config.Settings, resolver *context.
 
 	ctx, ok := resolveExportContext(settings, *projectFlag, cwd)
 	if !ok {
+		return 1
+	}
+
+	key, err := jira.ParseIssueRef(arg, settings.Instances[ctx.Instance].BaseURL)
+	if err != nil {
+		fmt.Fprintf(exportStderr, "jirafs export issue: %s\n", strings.ReplaceAll(err.Error(), "<name>", ctx.Name))
 		return 1
 	}
 
@@ -146,7 +158,9 @@ func buildExportClient(settings *config.Settings, ctx *context.Context, cwd stri
 // printExportHelp prints usage information for the export subcommand.
 func printExportHelp() {
 	fmt.Fprintf(exportStderr, "%s\n", color.BoldBlue(exportStderr, "Usage:"))
-	fmt.Fprintf(exportStderr, "  jirafs %s <%s> [flags]\n\n", color.Blue(exportStderr, "export"), color.Yellow(exportStderr, "subcommand"))
+	fmt.Fprintf(exportStderr, "  jirafs %s <%s> [flags]\n", color.Blue(exportStderr, "export"), color.Yellow(exportStderr, "subcommand"))
+
+	fmt.Fprintf(exportStderr, "  %s\n\n", color.Dim(exportStderr, "issue accepts a key (PROJ-123) or a Jira URL (<base_url>/browse/PROJ-123)"))
 
 	fmt.Fprintf(exportStderr, "%s:\n", color.BoldGreen(exportStderr, "Subcommands"))
 	fmt.Fprintf(exportStderr, "  %s    %s\n", color.Blue(exportStderr, "issue"), color.Dim(exportStderr, "export one issue through the real service path"))

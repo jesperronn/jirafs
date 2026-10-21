@@ -410,3 +410,47 @@ func TestBuildExportClient_CredentialError(t *testing.T) {
 		t.Fatalf("error = %q, want no_usable_instance", err.Error())
 	}
 }
+
+// TestRunExportIssue_BrowseURL verifies that a Jira browse URL on the
+// project's base_url host is accepted in place of an issue key.
+func TestRunExportIssue_BrowseURL(t *testing.T) {
+	tmpDir := t.TempDir()
+	homeDir := writeSettings(t, tmpDir)
+	oldHome := os.Getenv("HOME")
+	os.Setenv("HOME", homeDir)
+	defer os.Setenv("HOME", oldHome)
+
+	fake := jira.NewFakeTransport()
+	fake.SetIssue("PROJ-42", &schema.Issue{
+		Identity: schema.IssueIdentity{
+			Key:     "PROJ-42",
+			Type:    "story",
+			Project: schema.TypedRef{Type: schema.RefProject, Value: "PROJ"},
+		},
+		Summary:        "URL issue",
+		MachineOwned:   schema.MachineOwned{SchemaVersion: "1"},
+		RemoteMetadata: schema.RemoteMetadata{StateFile: "synced", RemoteVersion: "1", ContentHash: "h"},
+	})
+	withExportClientFactory(t, func(*config.Settings, *context.Context, string) (jira.Client, error) {
+		return fake, nil
+	})
+	stdout, stderr := withExportTestIO(t)
+
+	exit := RunExport([]string{"issue", "--project", "test", "https://example.atlassian.net/browse/PROJ-42"})
+	if exit != 0 {
+		t.Fatalf("exit = %d, stderr = %q", exit, stderr.String())
+	}
+	if !strings.Contains(stdout.String(), "URL issue") {
+		t.Fatalf("stdout = %q, want summary", stdout.String())
+	}
+
+	stdout.Reset()
+	stderr.Reset()
+	exit = RunExport([]string{"issue", "--project", "test", "https://evil.example.com/browse/PROJ-42"})
+	if exit != 1 {
+		t.Fatalf("wrong-host exit = %d, want 1", exit)
+	}
+	if !strings.Contains(stderr.String(), "jirafs export issue KEY --project test") {
+		t.Fatalf("stderr = %q, want copy-pasteable hint", stderr.String())
+	}
+}
