@@ -258,7 +258,7 @@ func runMirrorArchiveSweep(args []string, settings *config.Settings, resolver *c
 
 	// Report results.
 	if len(eligible) == 0 {
-		fmt.Fprintln(mirrorStdout, "jirajs mirror archive-sweep: no eligible issues found")
+		fmt.Fprintln(mirrorStdout, "jirafs mirror archive-sweep: no eligible issues found")
 		return 0
 	}
 

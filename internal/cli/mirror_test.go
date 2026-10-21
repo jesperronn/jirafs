@@ -1021,11 +1021,14 @@ Summary: Open issue
 	os.Setenv("HOME", homeDir)
 	defer os.Setenv("HOME", oldHome)
 
-	_, stderr := withMirrorTestIO(t)
+	stdout, stderr := withMirrorTestIO(t)
 
 	exit := RunMirror([]string{"archive-sweep", "--apply", "--project", "test"})
 	if exit != 0 {
 		t.Fatalf("RunMirror([\"archive-sweep\", \"--apply\", \"--project\", \"test\"]) = %d, want 0, stderr = %q", exit, stderr.String())
+	}
+	if want := "jirafs mirror archive-sweep: no eligible issues found"; !strings.Contains(stdout.String(), want) {
+		t.Errorf("stdout = %q, want containing %q", stdout.String(), want)
 	}
 }
 
