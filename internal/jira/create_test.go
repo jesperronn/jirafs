@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/jirafs/jirafs/internal/config"
@@ -80,5 +81,23 @@ func TestCreateIssueErrors(t *testing.T) {
 	}
 	if _, err := newCreateClient("http://127.0.0.1:1").CreateIssue(nil, draftIssue()); err == nil {
 		t.Error("expected transport error")
+	}
+}
+
+func TestFieldErrorsSurfaceOnCreateAndUpdate(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(400)
+		_, _ = w.Write([]byte(`{"errorMessages":["General trouble."],"errors":{"customfield_12601":"Team is required.","assignee":"bad user"}}`))
+	}))
+	defer srv.Close()
+	want := "General trouble.; assignee: bad user; customfield_12601: Team is required."
+	c := newCreateClient(srv.URL)
+	_, err := c.CreateIssue(context.Background(), draftIssue())
+	if err == nil || !strings.Contains(err.Error(), want) {
+		t.Fatalf("create err=%v", err)
+	}
+	_, err = c.UpdateIssue(context.Background(), "ABC-1", draftIssue())
+	if err == nil || !strings.Contains(err.Error(), want) {
+		t.Fatalf("update err=%v", err)
 	}
 }

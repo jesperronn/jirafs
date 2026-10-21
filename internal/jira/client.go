@@ -12,6 +12,7 @@ import (
 	"net/http"
 	neturl "net/url"
 	"os"
+	"sort"
 	"strings"
 
 	"github.com/jirafs/jirafs/internal/config"
@@ -168,21 +169,19 @@ func mapHTTPErr(resp *http.Response) *ClientError {
 		return NewHTTPErr(resp.StatusCode, "HTTP error")
 	}
 
-	// Build a message from Jira's structured error fields.
-	var msg string
-	if len(details.ErrorMessages) > 0 {
-		msg = details.ErrorMessages[0]
-		if len(details.ErrorMessages) > 1 {
-			msg += "; " + details.ErrorMessages[1]
-		}
-	} else if len(details.Errors) > 0 {
-		// Collect field-specific error messages.
-		fields := make([]string, 0, len(details.Errors))
-		for field := range details.Errors {
-			fields = append(fields, field)
-		}
-		msg = fmt.Sprintf("validation error(s) on: %v", fields)
-	} else {
+	// Build a message from Jira's structured error fields: every general
+	// message, then every field error as "field: message" sorted by field.
+	parts := append([]string(nil), details.ErrorMessages...)
+	fields := make([]string, 0, len(details.Errors))
+	for field := range details.Errors {
+		fields = append(fields, field)
+	}
+	sort.Strings(fields)
+	for _, field := range fields {
+		parts = append(parts, field+": "+details.Errors[field])
+	}
+	msg := strings.Join(parts, "; ")
+	if msg == "" {
 		msg = "HTTP error"
 	}
 
