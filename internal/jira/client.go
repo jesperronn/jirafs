@@ -67,6 +67,10 @@ type Client interface {
 	// number of matching issues reported by Jira.
 	SearchIssues(ctx context.Context, scope string) ([]*schema.Issue, int, error)
 
+	// FetchComments returns up to limit comments for the issue, newest
+	// first, and the total number of comments Jira reports.
+	FetchComments(ctx context.Context, key string, limit int) ([]schema.Comment, int, error)
+
 	// CurrentUser returns the authenticated user identity from the Jira API.
 	CurrentUser(ctx context.Context) (*User, error)
 

@@ -1,6 +1,7 @@
 package schema
 
 import (
+	"fmt"
 	"strings"
 	"time"
 )
@@ -112,6 +113,40 @@ func RenderIssue(i Issue) string {
 		sb.WriteString(RenderSections(sections))
 	}
 
+	// Machine-owned comments section: rendered from fetched comments, or
+	// preserved verbatim from a parsed file.
+	if len(i.Comments) > 0 {
+		sb.WriteString(renderComments(i.Comments, i.CommentsTotal))
+	} else if body := sections[SecComments]; body != "" {
+		sb.WriteString("## " + string(SecComments) + "\n" + body + "\n\n")
+	}
+
+	return sb.String()
+}
+
+// renderComments renders the read-only "## Comments" section, newest first as
+// given. Body lines that would read as a section heading are escaped.
+func renderComments(comments []Comment, total int) string {
+	var sb strings.Builder
+	sb.WriteString("## " + string(SecComments) + "\n")
+	if total > len(comments) {
+		fmt.Fprintf(&sb, "_(showing %d of %d comments)_\n", len(comments), total)
+	}
+	for _, c := range comments {
+		sb.WriteString("\n### " + c.Author + " \u2014 " + c.Created + "\n")
+		body := strings.TrimSpace(c.Body)
+		if body == "" {
+			continue
+		}
+		lines := strings.Split(body, "\n")
+		for idx, l := range lines {
+			if strings.HasPrefix(l, "## ") {
+				lines[idx] = "\\" + l
+			}
+		}
+		sb.WriteString(strings.Join(lines, "\n") + "\n")
+	}
+	sb.WriteString("\n")
 	return sb.String()
 }
 

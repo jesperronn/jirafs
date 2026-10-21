@@ -42,6 +42,10 @@ const (
 	SecNotes              FixedSectionName = "Notes"
 	SecCommentsToAdd      FixedSectionName = "Comments To Add"
 	SecRemoteComments     FixedSectionName = "Remote Comments"
+	// SecComments is the read-only, machine-owned recent-comments section.
+	// It is recognized by the parser but is not part of AllFixedSections:
+	// it is rendered only when comments are present.
+	SecComments FixedSectionName = "Comments"
 )
 
 // AllFixedSections returns all known fixed section names in canonical order.
@@ -58,6 +62,9 @@ func AllFixedSections() []FixedSectionName {
 
 // IsKnown reports whether s is a recognized fixed section name.
 func (s FixedSectionName) IsKnown() bool {
+	if s == SecComments {
+		return true
+	}
 	for _, known := range AllFixedSections() {
 		if s == known {
 			return true
@@ -127,6 +134,13 @@ type IssueContext struct {
 	EpicLink   string
 }
 
+// Comment is a single read-only Jira comment.
+type Comment struct {
+	Author  string
+	Created string // RFC3339
+	Body    string
+}
+
 // Issue represents a parsed issue file with identity, machine-owned fields,
 // remote metadata, and section content.
 type Issue struct {
@@ -144,6 +158,11 @@ type Issue struct {
 	LinkedIssues   []LinkedIssue `yaml:"linked_issues,omitempty"`
 	// Context is read-only Jira metadata; plan and push ignore it.
 	Context IssueContext
+	// Comments holds the most recent remote comments, newest first. They are
+	// read-only; plan and push ignore them.
+	Comments []Comment
+	// CommentsTotal is the total number of remote comments reported by Jira.
+	CommentsTotal int
 	// Sections holds the body sections keyed by their fixed section name.
 	// Only populated by ParseIssue when section parsing is enabled.
 	Sections map[FixedSectionName]string

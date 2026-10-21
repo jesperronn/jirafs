@@ -589,3 +589,24 @@ func TestBuildPlan_allFieldsUnchanged(t *testing.T) {
 		t.Errorf("expected 0 conflicts, got %d: %v", len(conflicts), conflicts)
 	}
 }
+
+func TestBuildPlan_ignoresEditedComments(t *testing.T) {
+	local := schema.Issue{
+		Summary: "S",
+		Sections: map[schema.FixedSectionName]string{
+			schema.SecComments: "### someone — 2024-01-01T00:00:00Z\nedited locally",
+		},
+		Comments: []schema.Comment{{Author: "me", Created: "2024-01-01T00:00:00Z", Body: "edited"}},
+	}
+	remote := schema.Issue{
+		Summary:  "S",
+		Comments: []schema.Comment{{Author: "someone", Created: "2024-01-01T00:00:00Z", Body: "original"}},
+	}
+	ops, conflicts, err := BuildPlan(local, remote)
+	if err != nil {
+		t.Fatalf("BuildPlan: %v", err)
+	}
+	if len(ops) != 0 || len(conflicts) != 0 {
+		t.Errorf("edited comments produced ops=%v conflicts=%v", ops, conflicts)
+	}
+}

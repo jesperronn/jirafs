@@ -2,6 +2,7 @@ package cli
 
 import (
 	"bytes"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -556,5 +557,46 @@ func TestRunExportIssue_NoLocalDirs(t *testing.T) {
 	}
 	if !strings.Contains(stderr.String(), "create local directory") {
 		t.Fatalf("stderr = %q, want create local directory error", stderr.String())
+	}
+}
+
+func TestRunExportIssue_IncludesCommentsAndWarnsOnFailure(t *testing.T) {
+	tmpDir := t.TempDir()
+	homeDir := writeSettings(t, tmpDir)
+	oldHome := os.Getenv("HOME")
+	os.Setenv("HOME", homeDir)
+	defer os.Setenv("HOME", oldHome)
+
+	fake := jira.NewFakeTransport()
+	fake.SetIssue("PROJ-42", &schema.Issue{
+		Identity: schema.IssueIdentity{Key: "PROJ-42", Type: "story"},
+		Summary:  "S",
+	})
+	fake.SetComments("PROJ-42", []schema.Comment{
+		{Author: "bob", Created: "2024-02-01T00:00:00Z", Body: "newer"},
+		{Author: "alice", Created: "2024-01-01T00:00:00Z", Body: "older"},
+	})
+	withExportClientFactory(t, func(*config.Settings, *context.Context, string) (jira.Client, error) {
+		return fake, nil
+	})
+	stdout, stderr := withExportTestIO(t)
+	if exit := RunExport([]string{"issue", "--stdout", "--project", "test", "PROJ-42"}); exit != 0 {
+		t.Fatalf("exit = %d, stderr = %q", exit, stderr.String())
+	}
+	out := stdout.String()
+	if !strings.Contains(out, "## Comments") || strings.Index(out, "### bob") > strings.Index(out, "### alice") {
+		t.Errorf("comments missing or misordered:\n%s", out)
+	}
+
+	// A failed comments fetch is a warning, not an error.
+	fake.SetIssue("PROJ-42", &schema.Issue{Identity: schema.IssueIdentity{Key: "PROJ-42", Type: "story"}, Summary: "S"})
+	fake.SetErr("comments", errors.New("comments down"))
+	stdout.Reset()
+	stderr.Reset()
+	if exit := RunExport([]string{"issue", "--stdout", "--project", "test", "PROJ-42"}); exit != 0 {
+		t.Fatalf("exit = %d, want 0 on comments failure; stderr = %q", exit, stderr.String())
+	}
+	if !strings.Contains(stderr.String(), "warning: cannot fetch comments") || strings.Contains(stdout.String(), "## Comments") {
+		t.Errorf("stderr = %q stdout = %q", stderr.String(), stdout.String())
 	}
 }

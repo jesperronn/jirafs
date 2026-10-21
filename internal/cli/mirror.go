@@ -195,6 +195,7 @@ func materializeScopeIssues(ctx stdcontext.Context, client jira.Client, settings
 		if err == nil && fullIssue != nil && fullIssue.Identity.Key != "" {
 			renderIssue = fullIssue
 		}
+		jira.AttachComments(ctx, client, renderIssue, mirrorStderr)
 		output := export.ExportIssue(renderIssue)
 		dest := filepath.Join(proj.LocalDirs[0], string(renderIssue.Identity.Key)+".md")
 		if err := os.WriteFile(dest, []byte(output), 0o644); err != nil {

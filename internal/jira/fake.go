@@ -18,6 +18,7 @@ type FakeTransport struct {
 	errOn         string                     // "fetch", "search", or "user"
 	issuesByScope map[string][]*schema.Issue // scope -> issues
 	// Registry data for registry refresh tests.
+	comments    map[string][]schema.Comment
 	statuses    []StatusEntry
 	sprints     map[string][]SprintEntry     // projectKey -> sprints
 	fixVersions map[string][]FixVersionEntry // projectKey -> versions
@@ -28,6 +29,7 @@ func NewFakeTransport() *FakeTransport {
 	return &FakeTransport{
 		issues:        make(map[string]*schema.Issue),
 		issuesByScope: make(map[string][]*schema.Issue),
+		comments:      make(map[string][]schema.Comment),
 		sprints:       make(map[string][]SprintEntry),
 		fixVersions:   make(map[string][]FixVersionEntry),
 	}
@@ -221,4 +223,27 @@ func generateScopeIssues(scope string) []*schema.Issue {
 	default:
 		return nil
 	}
+}
+
+// SetComments registers the comments FetchComments returns for a key, in the
+// order given (the fake does not sort).
+func (f *FakeTransport) SetComments(key string, comments []schema.Comment) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.comments[key] = comments
+}
+
+// FetchComments returns up to limit registered comments for key and the
+// total registered, or the configured error if ErrOn == "comments".
+func (f *FakeTransport) FetchComments(_ context.Context, key string, limit int) ([]schema.Comment, int, error) {
+	f.mu.RLock()
+	defer f.mu.RUnlock()
+	if f.errOn == "comments" {
+		return nil, 0, f.err
+	}
+	all := f.comments[key]
+	if limit > 0 && len(all) > limit {
+		return all[:limit], len(all), nil
+	}
+	return all, len(all), nil
 }

@@ -2,6 +2,7 @@ package cli
 
 import (
 	"bytes"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -1508,5 +1509,54 @@ func TestResolveMirrorContext_Success(t *testing.T) {
 	}
 	if ctx.Key != "TEST" {
 		t.Fatalf("ctx.Key = %q, want 'TEST'", ctx.Key)
+	}
+}
+
+func TestRunMirrorRefresh_IncludesComments(t *testing.T) {
+	tmpDir := t.TempDir()
+	homeDir := writeSettings(t, tmpDir)
+	writeMirrorWithScopes(t, tmpDir, `
+scopes:
+  - name: my-issues
+    type: jql
+    target: assignee = currentUser()
+`)
+	oldHome := os.Getenv("HOME")
+	os.Setenv("HOME", homeDir)
+	defer os.Setenv("HOME", oldHome)
+
+	fake := jira.NewFakeTransport()
+	fake.SetIssuesByScope("my-issues", []*schema.Issue{
+		{Identity: schema.IssueIdentity{Key: "TEST-1", Type: "bug"}},
+	})
+	fake.SetIssue("TEST-1", &schema.Issue{
+		Identity: schema.IssueIdentity{Key: "TEST-1", Type: "bug"},
+		Summary:  "Has comments",
+	})
+	fake.SetComments("TEST-1", []schema.Comment{
+		{Author: "carol", Created: "2024-02-01T00:00:00Z", Body: "mirrored comment"},
+	})
+	withMirrorClientFactory(t, func(*config.Settings, *context.Context, string) (jira.Client, error) {
+		return fake, nil
+	})
+	_, stderr := withMirrorTestIO(t)
+	if exit := RunMirror([]string{"refresh", "--project", "test", "my-issues"}); exit != 0 {
+		t.Fatalf("exit = %d, stderr = %q", exit, stderr.String())
+	}
+	data, err := os.ReadFile(filepath.Join(tmpDir, "local", "TEST-1.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(data), "### carol") || !strings.Contains(string(data), "mirrored comment") {
+		t.Errorf("TEST-1.md lacks comments:\n%s", data)
+	}
+
+	fake.SetIssue("TEST-1", &schema.Issue{Identity: schema.IssueIdentity{Key: "TEST-1", Type: "bug"}, Summary: "Has comments"})
+	fake.SetErr("comments", errors.New("nope"))
+	if exit := RunMirror([]string{"refresh", "--project", "test", "my-issues"}); exit != 0 {
+		t.Fatalf("exit = %d on comments failure", exit)
+	}
+	if !strings.Contains(stderr.String(), "warning: cannot fetch comments for TEST-1") {
+		t.Errorf("stderr = %q", stderr.String())
 	}
 }

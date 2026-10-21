@@ -117,6 +117,8 @@ func runExportIssue(args []string, settings *config.Settings, resolver *context.
 		return 1
 	}
 
+	jira.AttachComments(nil, client, issue, exportStderr)
+
 	// Export through the canonical codec.
 	output := export.ExportIssue(issue)
 	if *stdoutFlag {
