@@ -1426,26 +1426,38 @@ func TestUpdateIssueEmptyKey(t *testing.T) {
 }
 
 func TestUpdateIssueSuccess(t *testing.T) {
-	payload := map[string]interface{}{
-		"id":  "10001",
-		"key": "PROJ-42",
-		"fields": map[string]interface{}{
-			"summary":     "Updated summary",
-			"description": "Updated description",
-			"issuetype":   map[string]interface{}{"name": "Story"},
-		},
-	}
-	body, err := json.Marshal(payload)
-	if err != nil {
-		t.Fatalf("marshal payload: %v", err)
-	}
-
+	var gotPut, gotGet bool
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodPost {
-			t.Errorf("expected POST, got %s", r.Method)
+		switch r.Method {
+		case http.MethodPut:
+			gotPut = true
+			if r.URL.Path != "/rest/api/2/issue/PROJ-42" || r.URL.RawQuery != "" {
+				t.Errorf("PUT url = %s", r.URL.String())
+			}
+			var got map[string]map[string]interface{}
+			if err := json.NewDecoder(r.Body).Decode(&got); err != nil {
+				t.Errorf("decode body: %v", err)
+			}
+			f := got["fields"]
+			if f["summary"] != "Updated summary" || f["customfield_10002"] != float64(5) {
+				t.Errorf("fields = %v", f)
+			}
+			for _, bad := range []string{"status", "customfield_sprint", "key", "reporter", "created", "updated", "resolution"} {
+				if _, ok := f[bad]; ok {
+					t.Errorf("read-only field %q sent", bad)
+				}
+			}
+			w.WriteHeader(http.StatusNoContent)
+		case http.MethodGet:
+			gotGet = true
+			if !gotPut {
+				t.Error("refetch before PUT")
+			}
+			w.Header().Set("Content-Type", "application/json")
+			w.Write([]byte(`{"id":"1","key":"PROJ-42","fields":{"summary":"Updated summary","issuetype":{"name":"Story"}}}`))
+		default:
+			t.Errorf("unexpected method %s", r.Method)
 		}
-		w.Header().Set("Content-Type", "application/json")
-		w.Write(body)
 	}))
 	defer server.Close()
 
@@ -1453,29 +1465,26 @@ func TestUpdateIssueSuccess(t *testing.T) {
 	client.SetCredentials(config.ResolvedInstanceCredentials{
 		AuthType: "basic",
 		Credential: config.ResolvedCredential{
-			Fields: map[string]string{
-				"username": "user@example.com",
-				"password": "secret",
-			},
+			Fields: map[string]string{"username": "user@example.com", "password": "secret"},
 		},
 	})
 
 	issue := &schema.Issue{
-		Identity: schema.IssueIdentity{Key: "PROJ-42"},
-		Summary:  "Updated summary",
+		Identity:     schema.IssueIdentity{Key: "PROJ-42"},
+		Summary:      "Updated summary",
+		Status:       "Done",
+		Sprint:       "Sprint 1",
+		CustomFields: map[string]interface{}{"customfield_10002": 5},
 	}
 	updated, err := client.UpdateIssue(context.Background(), "PROJ-42", issue)
 	if err != nil {
 		t.Fatalf("UpdateIssue: %v", err)
 	}
-	if updated == nil {
-		t.Fatal("expected non-nil updated issue")
+	if !gotPut || !gotGet {
+		t.Fatalf("put=%v get=%v", gotPut, gotGet)
 	}
-	if string(updated.Identity.Key) != "PROJ-42" {
-		t.Errorf("Key = %q, want %q", updated.Identity.Key, "PROJ-42")
-	}
-	if updated.Summary != "Updated summary" {
-		t.Errorf("Summary = %q, want %q", updated.Summary, "Updated summary")
+	if string(updated.Identity.Key) != "PROJ-42" || updated.Summary != "Updated summary" {
+		t.Errorf("updated = %+v", updated)
 	}
 }
 
