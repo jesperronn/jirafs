@@ -6,9 +6,7 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"path/filepath"
 	"sort"
-	"strings"
 
 	"github.com/jirafs/jirafs/internal/color"
 	"github.com/jirafs/jirafs/internal/config"
@@ -23,22 +21,34 @@ var (
 	syncStdout        io.Writer = os.Stdout
 	syncStderr        io.Writer = os.Stderr
 	syncClientFactory           = buildSyncClient
-	syncBuildClient             = buildSyncClient
-	syncVerbose       bool
 )
 
 // RunSync dispatches the `jirafs sync` subcommand. When an issue key is
 // provided, it resolves the project context, fetches the remote issue from
 // Jira, reads the local issue from the file system, builds and validates a
 // plan, applies the plan, and pushes the updated remote back to Jira through
-// the real service path. When no issue key is provided, it resolves the
-// project context and lists all local issues with their pending sync
-// operations, allowing the user to preview what would be synced.
+// the real service path. Without an issue key it exits 2: syncing multiple
+// issues is not implemented yet.
 func RunSync(args []string) int {
 	// Check for help before loading settings.
 	if len(args) > 0 && (args[0] == "help" || args[0] == "--help" || args[0] == "-h") {
 		printSyncHelp()
 		return 0
+	}
+
+	fs := flag.NewFlagSet("sync", flag.ExitOnError)
+	projectFlag := fs.String("project", "", "project key or name to use")
+	fs.String("cwd", "", "ignored; sync resolves the project from the current directory")
+	applyFlag := fs.Bool("apply", false, "write the updated remote to the local issue file")
+	if err := fs.Parse(args); err != nil {
+		fmt.Fprintf(syncStderr, "jirafs sync: invalid flags: %v\n", err)
+		return 1
+	}
+
+	// Multi-issue sync is blocked for now; reject before loading anything.
+	if len(fs.Args()) == 0 {
+		fmt.Fprintln(syncStderr, "jirafs sync: syncing multiple issues is not implemented yet; sync one issue at a time: jirafs sync <KEY>")
+		return 2
 	}
 
 	// Load settings.
@@ -51,23 +61,6 @@ func RunSync(args []string) int {
 	// Parse flags to extract --project and --cwd regardless of whether
 	// an issue key is provided. This allows "jirafs sync --project TEST"
 	// (no key) to resolve the project and list pending syncs.
-	fs := flag.NewFlagSet("sync", flag.ExitOnError)
-	projectFlag := fs.String("project", "", "project key or name to use")
-	cwdFlag := fs.String("cwd", "", "working directory to use for project resolution")
-	applyFlag := fs.Bool("apply", false, "write the updated remote to the local issue file")
-	verboseFlag := fs.Bool("verbose", false, "print extra diagnostic detail")
-	if err := fs.Parse(args); err != nil {
-		fmt.Fprintf(syncStderr, "jirafs sync: invalid flags: %v\n", err)
-		return 1
-	}
-	syncVerbose = *verboseFlag
-
-	// If no positional arguments (no issue key), resolve the project from
-	// the parsed flags and list pending syncs.
-	if len(fs.Args()) == 0 {
-		return runSyncAll(settings, *projectFlag, *cwdFlag)
-	}
-
 	return runSyncIssue(fs.Args(), settings, context.NewResolver(settings, *projectFlag), *applyFlag)
 }
 
@@ -220,12 +213,9 @@ func buildSyncClient(settings *config.Settings, ctx *context.Context, cwd string
 // printSyncHelp prints usage information for the sync subcommand.
 func printSyncHelp() {
 	fmt.Fprintf(syncStderr, "%s\n", color.BoldBlue(syncStderr, "Usage:"))
-	fmt.Fprintf(syncStderr, "  jirafs %s [flags]\n", color.Blue(syncStderr, "sync"))
 	fmt.Fprintf(syncStderr, "  jirafs %s <%s> [flags]\n\n", color.Blue(syncStderr, "sync"), color.Yellow(syncStderr, "issue-key"))
 
-	fmt.Fprintf(syncStderr, "%s\n", color.Dim(syncStderr, "When called without an issue key, resolves the project context and lists all"))
-	fmt.Fprintf(syncStderr, "%s\n", color.Dim(syncStderr, "local issues with their pending sync operations, allowing preview of what"))
-	fmt.Fprintf(syncStderr, "%s\n\n", color.Dim(syncStderr, "would be synced."))
+	fmt.Fprintf(syncStderr, "%s\n\n", color.Dim(syncStderr, "An issue key is required: syncing multiple issues is not implemented yet."))
 
 	fmt.Fprintf(syncStderr, "%s\n", color.Dim(syncStderr, "When called with an issue key, fetches the remote issue from Jira, reads"))
 	fmt.Fprintf(syncStderr, "%s\n", color.Dim(syncStderr, "the local copy from the file system, builds and validates a plan, applies"))
@@ -234,169 +224,7 @@ func printSyncHelp() {
 
 	fmt.Fprintf(syncStderr, "%s:\n", color.BoldGreen(syncStderr, "Flags"))
 	fmt.Fprintf(syncStderr, "  %s KEY    %s\n", color.Yellow(syncStderr, "--project"), color.Dim(syncStderr, "project key or name to use"))
-	fmt.Fprintf(syncStderr, "  %s DIR    %s\n", color.Yellow(syncStderr, "--cwd"), color.Dim(syncStderr, "working directory for project resolution"))
 	fmt.Fprintf(syncStderr, "  %s        %s\n\n", color.Yellow(syncStderr, "--apply"), color.Dim(syncStderr, "write the updated remote to the local issue file"))
 
 	fmt.Fprintf(syncStderr, "%s\n", color.Cyan(syncStderr, `Run "jirafs sync --help" for more information about flags.`))
-}
-
-// runSyncAll resolves the project context and lists all local issues with
-// their pending sync operations. It resolves the project using the same
-// resolution order as runSyncIssue (explicit --project, cwd mapping,
-// remembered state), then iterates over all local directories to find
-// issue files, compares each against the remote, and reports what would
-// be synced.
-func runSyncAll(settings *config.Settings, project, cwd string) int {
-	// Resolve the project context.
-	if cwd == "" {
-		cwd = "."
-	}
-	resolver := context.NewResolver(settings, project)
-	ctx, err := resolver.Resolve(cwd)
-	if err != nil {
-		var ce *context.Error
-		if context.IsContextError(err, &ce) {
-			if ce.Code == config.ErrNoProjectResolved {
-				fmt.Fprintf(syncStderr, "jirafs sync: no project resolved for cwd %q\n", cwd)
-				if len(ce.Candidates) > 0 {
-					fmt.Fprintln(syncStderr, "Available projects:")
-					for _, name := range ce.Candidates {
-						fmt.Fprintf(syncStderr, "  - %s\n", name)
-					}
-				}
-				return 1
-			}
-			fmt.Fprintf(syncStderr, "jirafs sync: %v\n", err)
-			return 1
-		}
-		fmt.Fprintf(syncStderr, "jirafs sync: %v\n", err)
-		return 1
-	}
-
-	// Get the project from settings.
-	proj, ok := settings.Projects[ctx.Name]
-	if !ok {
-		fmt.Fprintf(syncStderr, "jirafs sync: project %q not found in settings\n", ctx.Name)
-		return 1
-	}
-
-	if len(proj.LocalDirs) == 0 {
-		fmt.Fprintf(syncStderr, "jirafs sync: project %q has no local directories configured\n", ctx.Name)
-		return 1
-	}
-
-	// Collect all issue files from local directories.
-	type issueInfo struct {
-		key     string
-		path    string
-		hasDiff bool
-		ops     []schema.PlanOperation
-	}
-
-	// First pass: collect parseable local issue files. We do NOT build
-	// the Jira client here — credential resolution can shell out to `op`,
-	// and we want to skip that cost entirely when there are no files to
-	// compare. This is what made the old per-file inner build painful:
-	// even an empty-dir project triggered N credential lookups.
-	type localFile struct {
-		issue schema.Issue
-		key   string
-		name  string
-	}
-	var locals []localFile
-
-	for _, localDir := range proj.LocalDirs {
-		entries, err := os.ReadDir(localDir)
-		if err != nil {
-			continue
-		}
-		for _, entry := range entries {
-			if entry.IsDir() {
-				continue
-			}
-			if !strings.HasSuffix(entry.Name(), ".md") {
-				continue
-			}
-			data, err := os.ReadFile(filepath.Join(localDir, entry.Name()))
-			if err != nil {
-				continue
-			}
-			issue, pe := schema.ParseIssue(string(data))
-			if pe != nil {
-				continue
-			}
-			key := string(issue.Identity.Key)
-			if key == "" {
-				continue
-			}
-			locals = append(locals, localFile{issue: issue, key: key, name: entry.Name()})
-		}
-	}
-
-	if len(locals) == 0 {
-		fmt.Fprintf(syncStdout, "jirafs sync: project %s: no local issues found\n", ctx.Name)
-		return 0
-	}
-
-	// At least one file to check — build the Jira client once for the
-	// whole scan.
-	client, err := syncBuildClient(settings, ctx, cwd)
-	if err != nil {
-		fmt.Fprintf(syncStderr, "jirafs sync: cannot create Jira client: %v\n", err)
-		if syncVerbose {
-			fmt.Fprintf(syncStderr, "jirafs sync: buildSyncClient detail: %+v\n", err)
-		}
-		return 1
-	}
-
-	var issues []issueInfo
-	for _, lf := range locals {
-		{
-			key := lf.key
-			issue := lf.issue
-			remote, err := client.FetchIssue(nil, key)
-			if err != nil {
-				// Remote not found — still report it as needing attention.
-				issues = append(issues, issueInfo{
-					key:     key,
-					path:    lf.name,
-					hasDiff: true,
-				})
-				continue
-			}
-
-			// Build the plan by comparing local and remote.
-			ops, _, err := plan.BuildPlan(issue, *remote)
-			if err != nil {
-				// Unparseable plan — skip.
-				continue
-			}
-
-			issues = append(issues, issueInfo{
-				key:     key,
-				path:    lf.name,
-				hasDiff: len(ops) > 0,
-				ops:     ops,
-			})
-		}
-	}
-
-	// Report each issue.
-	var needsSync int
-	for _, info := range issues {
-		if info.hasDiff {
-			needsSync++
-		}
-		if len(info.ops) > 0 {
-			fmt.Fprintf(syncStdout, "  %s (%s): %d operation(s) pending\n",
-				info.key, info.path, len(info.ops))
-		} else {
-			fmt.Fprintf(syncStdout, "  %s (%s): up to date\n",
-				info.key, info.path)
-		}
-	}
-
-	fmt.Fprintf(syncStdout, "jirafs sync: project %s: %d of %d issue(s) have pending operations\n",
-		ctx.Name, needsSync, len(issues))
-	return 0
 }

@@ -67,97 +67,19 @@ func TestUnknownCommand(t *testing.T) {
 	}
 }
 
-// TestSyncCommand verifies that `jirafs sync` without an issue key
-// resolves the remembered project and lists local issues (or reports
-// none found). HOME is isolated so the test doesn't read the
-// developer's real ~/.jirafs/settings.toml — which would point at
-// their actual Jira project and trigger 1Password lookups.
+// TestSyncCommand verifies that `jirafs sync` without an issue key is
+// blocked with exit 2 and a clear message.
 func TestSyncCommand(t *testing.T) {
-	tmpDir := t.TempDir()
-	homeDir := filepath.Join(tmpDir, "home")
-	jirafsDir := filepath.Join(homeDir, settingsDir)
-	if err := os.MkdirAll(jirafsDir, 0o755); err != nil {
+	homeDir := filepath.Join(t.TempDir(), "home")
+	if err := os.MkdirAll(homeDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	localDir := filepath.Join(jirafsDir, "jira", "platform")
-	if err := os.MkdirAll(localDir, 0o755); err != nil {
-		t.Fatal(err)
-	}
-
-	settings := `
-version = 1
-
-[instances.work]
-base_url = "https://jira.example.com"
-auth_type = "atlassian_api_token"
-
-[projects.platform]
-key = "PLAT"
-instance = "work"
-mirror_dir = "` + localDir + `"
-local_dirs = ["` + localDir + `"]
-
-[state]
-current_project = "platform"
-`
-	if err := os.WriteFile(filepath.Join(jirafsDir, settingsFile), []byte(settings), 0o644); err != nil {
-		t.Fatal(err)
-	}
-
 	output := runMainHelperWithHome(t, homeDir, "sync")
-	if output.exitCode != 0 {
-		t.Fatalf("exitCode = %d, want 0, stderr = %q", output.exitCode, output.stderr)
+	if output.exitCode != 2 {
+		t.Fatalf("exitCode = %d, want 2, stderr = %q", output.exitCode, output.stderr)
 	}
-	if !strings.Contains(output.stderr, "no local issues found") {
-		t.Fatalf("stderr = %q, want 'no local issues found'", output.stderr)
-	}
-}
-
-// TestSyncCommand_RememberedProject verifies that `jirafs sync` without
-// an issue key uses the remembered project from state. This is the core
-// acceptance criterion for B093d.
-func TestSyncCommand_RememberedProject(t *testing.T) {
-	tmpDir := t.TempDir()
-	homeDir := filepath.Join(tmpDir, "home")
-	jirafsDir := filepath.Join(homeDir, settingsDir)
-	if err := os.MkdirAll(jirafsDir, 0o755); err != nil {
-		t.Fatal(err)
-	}
-
-	// Create a settings file with a project and a remembered current_project.
-	settings := `
-version = 1
-
-[instances.work]
-base_url = "https://jira.example.com"
-auth_type = "atlassian_api_token"
-
-[projects.platform]
-key = "PLAT"
-instance = "work"
-mirror_dir = "` + jirafsDir + `/jira/platform"
-local_dirs = ["` + jirafsDir + `/jira/platform"]
-
-[state]
-current_project = "platform"
-`
-	if err := os.WriteFile(filepath.Join(jirafsDir, settingsFile), []byte(settings), 0o644); err != nil {
-		t.Fatal(err)
-	}
-
-	// Run `jirafs sync` with NO issue key and NO --project flag.
-	// The remembered project (platform) should be used.
-	output := runMainHelperWithHome(t, homeDir, "sync")
-	if output.exitCode != 0 {
-		t.Fatalf("exitCode = %d, want 0, stderr = %q", output.exitCode, output.stderr)
-	}
-	// The output should reference the remembered project name.
-	if !strings.Contains(output.stderr, "platform") {
-		t.Fatalf("stderr = %q, want 'platform' (remembered project)", output.stderr)
-	}
-	// Should report no local issues found (the mirror dir is empty).
-	if !strings.Contains(output.stderr, "no local issues found") {
-		t.Fatalf("stderr = %q, want 'no local issues found'", output.stderr)
+	if !strings.Contains(output.stderr, "syncing multiple issues is not implemented yet; sync one issue at a time: jirafs sync <KEY>") {
+		t.Fatalf("stderr = %q, want not-implemented message", output.stderr)
 	}
 }
 
