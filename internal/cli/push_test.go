@@ -141,3 +141,52 @@ func TestPushFlagFirstAndProjectOverride(t *testing.T) {
 		t.Errorf("out=%s", out)
 	}
 }
+
+// addCreateDefaults appends create_defaults to the test project's settings.
+func addCreateDefaults(t *testing.T, defaults string) {
+	t.Helper()
+	p := filepath.Join(os.Getenv("HOME"), ".jirafs", "settings.toml")
+	data, err := os.ReadFile(p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	s := strings.Replace(string(data), "\n[state]", "\n[projects.test.create_defaults]\n"+defaults+"\n[state]", 1)
+	if err := os.WriteFile(p, []byte(s), 0o644); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestPushPayloadMergesCreateDefaults(t *testing.T) {
+	dir := setupNewTest(t)
+	addCreateDefaults(t, "customfield_12601 = { value = \"Default Team\" }\ncustomfield_20000 = \"dflt\"\n")
+	fake := jira.NewFakeTransport()
+	out, errBuf := withPushTestIO(t, fake)
+	p := filepath.Join(dir, "d.md")
+	draft := strings.Replace(filledStory, "\n---\n", "\ncustom_fields:\n  customfield_12601:\n    value: Own Team\n---\n", 1)
+	if err := os.WriteFile(p, []byte(draft), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if code := RunPush([]string{p, "--cwd", dir}); code != 0 {
+		t.Fatalf("exit=%d err=%s", code, errBuf)
+	}
+	s := out.String()
+	for _, want := range []string{`"customfield_12601": {`, `"value": "Own Team"`, `"customfield_20000": "dflt"`} {
+		if !strings.Contains(s, want) {
+			t.Errorf("missing %q in:\n%s", want, s)
+		}
+	}
+	if strings.Contains(s, "Default Team") {
+		t.Errorf("draft value must win:\n%s", s)
+	}
+}
+
+func TestPushInvalidCreateDefaults(t *testing.T) {
+	dir := setupNewTest(t)
+	addCreateDefaults(t, "bogus = 1\n")
+	out, errBuf := withPushTestIO(t, jira.NewFakeTransport())
+	_ = out
+	p := writeDraft(t, dir)
+	if code := RunPush([]string{p, "--cwd", dir}); code != 1 || !strings.Contains(errBuf.String(), "invalid create_defaults") {
+		t.Fatalf("got %s", errBuf)
+	}
+}

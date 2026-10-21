@@ -101,3 +101,17 @@ func TestFieldErrorsSurfaceOnCreateAndUpdate(t *testing.T) {
 		t.Fatalf("update err=%v", err)
 	}
 }
+
+func TestCreateFieldsIncludeCustomFields(t *testing.T) {
+	i := draftIssue()
+	i.CustomFields = map[string]interface{}{
+		"customfield_12601": map[string]interface{}{"value": "Team A"},
+		"customfield_10002": 5,
+	}
+	b, _ := json.Marshal(CreateFields(i))
+	for _, want := range []string{`"customfield_12601":{"value":"Team A"}`, `"customfield_10002":5`, `"summary":"Crash"`} {
+		if !strings.Contains(string(b), want) {
+			t.Errorf("missing %s in %s", want, b)
+		}
+	}
+}

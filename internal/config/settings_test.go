@@ -1420,3 +1420,15 @@ func TestProject_EpicLinkFieldParse(t *testing.T) {
 		t.Errorf("EpicLinkField = %q", got)
 	}
 }
+
+func TestProject_CreateDefaultsParse(t *testing.T) {
+	var raw SettingsTOML
+	doc := "version = 1\n[projects.a]\nkey = \"A\"\n[projects.a.create_defaults]\ncustomfield_12601 = { value = \"Team A\" }\ncustomfield_1 = 3\n"
+	if err := toml.Unmarshal([]byte(doc), &raw); err != nil {
+		t.Fatal(err)
+	}
+	cd := raw.Projects["a"].CreateDefaults
+	if cd["customfield_12601"].(map[string]interface{})["value"] != "Team A" || cd["customfield_1"] != int64(3) {
+		t.Errorf("create_defaults = %#v", cd)
+	}
+}

@@ -108,6 +108,12 @@ func RunPush(args []string) int {
 		issue.Identity.Project = schema.TypedRef{Type: "project", Value: ctx.Key}
 	}
 	baseURL := settings.Instances[ctx.Instance].BaseURL
+	defaults, derr := schema.NormalizeCustomFields(settings.Projects[ctx.Name].CreateDefaults)
+	if derr != nil {
+		fmt.Fprintf(pushStderr, "jirafs push: invalid create_defaults for project %s: %v\n", ctx.Name, derr)
+		return 1
+	}
+	issue.CustomFields = schema.MergeCustomFields(defaults, issue.CustomFields)
 
 	payload, _ := json.MarshalIndent(map[string]interface{}{"fields": jira.CreateFields(issue)}, "  ", "  ")
 	if !*applyFlag {

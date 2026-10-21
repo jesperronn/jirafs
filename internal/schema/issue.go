@@ -174,6 +174,8 @@ type Issue struct {
 	FixVersions    []string
 	Epic           string
 	LinkedIssues   []LinkedIssue `yaml:"linked_issues,omitempty"`
+	// CustomFields holds customfield_NNNNN values sent on create only.
+	CustomFields map[string]interface{}
 	// Context is read-only Jira metadata; plan and push ignore it.
 	Context IssueContext
 	// Subtasks lists the issue's sub-tasks. Read-only; plan and push ignore

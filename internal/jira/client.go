@@ -714,6 +714,9 @@ func CreateFields(issue *schema.Issue) map[string]interface{} {
 	delete(fields, "status")
 	delete(fields, "customfield_sprint")
 	delete(fields, "issuelinks")
+	for k, v := range issue.CustomFields {
+		fields[k] = v
+	}
 	fields["project"] = map[string]string{"key": issue.Identity.Project.Value}
 	fields["issuetype"] = map[string]string{"name": IssueTypeName(string(issue.Identity.Type))}
 	return fields

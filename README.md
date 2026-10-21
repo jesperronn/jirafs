@@ -132,6 +132,34 @@ jirafs push jira/add-dark-mode.md --apply    # POST /rest/api/2/issue
 Only files with `state: draft` can be pushed; use `jirafs sync KEY` to update
 existing issues.
 
+### Custom fields on create
+
+Some Jira instances require custom fields when creating an issue. Add them to
+the draft's frontmatter as `custom_fields:`. Keys are `customfield_NNNNN`;
+values may be a string, number, list, or a map such as `{value: "X"}` or
+`{id: "123"}`, and are sent to Jira as JSON unchanged:
+
+```yaml
+custom_fields:
+  customfield_12601:
+    value: Platform Team
+  customfield_10002: 5
+  customfield_10003:
+    - id: "10100"
+```
+
+To avoid repeating them in every draft, set per-project defaults in
+`~/.jirafs/settings.toml`. A draft's own `custom_fields:` win over
+`create_defaults` for the same key; templates may include `custom_fields:` too.
+
+```toml
+[projects.platform.create_defaults]
+customfield_12601 = { value = "Platform Team" }
+customfield_10002 = 5
+```
+
+Custom fields are sent on create only; they are not synced back.
+
 ## Initial Scope
 
 - Export Jira issues, sprints, and related metadata into a local filesystem.

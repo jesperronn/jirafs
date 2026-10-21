@@ -205,8 +205,9 @@ func ParseIssue(content string) (Issue, *ParseError) {
 			Summary   string   `yaml:"summary"`
 			Status    string   `yaml:"status"`
 		} `yaml:"linked_issues"`
-		FixVersions []string  `yaml:"fix_versions"`
-		Subtasks    []Subtask `yaml:"subtasks"`
+		FixVersions  []string    `yaml:"fix_versions"`
+		Subtasks     []Subtask   `yaml:"subtasks"`
+		CustomFields interface{} `yaml:"custom_fields"`
 	}
 	_ = yaml.Unmarshal([]byte(frontmatter), &rawEditable)
 	if rawEditable.Summary != "" {
@@ -232,6 +233,11 @@ func ParseIssue(content string) (Issue, *ParseError) {
 	if len(rawEditable.FixVersions) > 0 {
 		issue.FixVersions = rawEditable.FixVersions
 	}
+	cf, cfErr := NormalizeCustomFields(rawEditable.CustomFields)
+	if cfErr != nil {
+		return Issue{}, &ParseError{Kind: ErrKindInvalidYAML, Msg: cfErr.Error()}
+	}
+	issue.CustomFields = cf
 	if len(rawEditable.Subtasks) > 0 {
 		issue.Subtasks = rawEditable.Subtasks
 	}

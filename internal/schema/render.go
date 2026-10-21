@@ -127,6 +127,7 @@ func RenderIssue(i Issue) string {
 		}
 	}
 
+	sb.WriteString(renderCustomFields(i.CustomFields))
 	sb.WriteString("---\n")
 
 	// Render fixed sections in stable canonical order.

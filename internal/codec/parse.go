@@ -161,6 +161,12 @@ func parseFrontmatter(frontmatter string) (*schema.Issue, *schema.ParseError) {
 		}
 	}
 
+	cf, cfErr := schema.NormalizeCustomFields(raw["custom_fields"])
+	if cfErr != nil {
+		return nil, &schema.ParseError{Kind: schema.ErrKindInvalidYAML, Msg: cfErr.Error()}
+	}
+	issue.CustomFields = cf
+
 	// Handle linked issues
 	if linkedIssues, ok := raw["linked_issues"]; ok {
 		issue.LinkedIssues = parseLinkedIssues(linkedIssues)

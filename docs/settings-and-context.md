@@ -347,3 +347,15 @@ export, mirror, plan and sync request that field and render `epic_link`.
 
 The environment variable `JIRAFS_EPIC_LINK_FIELD` overrides the setting.
 `jirafs doctor` prints the effective value, or how to set it when unset.
+
+## Create defaults
+
+`projects.<name>.create_defaults` is a table of `customfield_NNNNN` values
+merged under a draft's own `custom_fields:` when `jirafs push --apply` creates
+an issue (the draft wins on conflicts). Values may be strings, numbers, lists,
+or maps such as `{ value = "X" }` / `{ id = "123" }`:
+
+```toml
+[projects.platform.create_defaults]
+customfield_12601 = { value = "Platform Team" }
+```
