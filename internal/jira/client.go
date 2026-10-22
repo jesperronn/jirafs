@@ -8,12 +8,14 @@ import (
 	"crypto/tls"
 	"encoding/json"
 	"fmt"
+	"github.com/jirafs/jirafs/internal/netguard"
 	"io"
 	"net/http"
 	neturl "net/url"
 	"os"
 	"sort"
 	"strings"
+	"testing"
 
 	"github.com/jirafs/jirafs/internal/config"
 	"github.com/jirafs/jirafs/internal/export"
@@ -279,14 +281,16 @@ func (c *JiraClient) SetCredentials(creds config.ResolvedInstanceCredentials) {
 // The client uses a default HTTP transport with TLS configured to accept
 // any certificate (useful for self-signed certs in dev environments).
 func NewJiraClient(baseURL string) *JiraClient {
+	var rt http.RoundTripper = &http.Transport{
+		TLSClientConfig: &tls.Config{InsecureSkipVerify: true}, //nolint:gosec
+	}
+	if testing.Testing() {
+		rt = netguard.Wrap(rt) // tests may only talk to loopback
+	}
 	return &JiraClient{
 		baseURL:       baseURL,
 		epicLinkField: strings.TrimSpace(os.Getenv(EpicLinkFieldEnv)),
-		httpClient: &http.Client{
-			Transport: &http.Transport{
-				TLSClientConfig: &tls.Config{InsecureSkipVerify: true}, //nolint:gosec
-			},
-		},
+		httpClient:    &http.Client{Transport: rt},
 	}
 }
 

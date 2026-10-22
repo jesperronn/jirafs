@@ -132,7 +132,7 @@ fi
 
 # Quick path: skip coverage entirely. Just run `go test`, optionally -v.
 if [ "${NO_COVERAGE}" -eq 1 ] || [ -n "${PACKAGE}" ]; then
-    GO_CMD=(go test -timeout "${JIRAFS_GO_TEST_TIMEOUT:-120s}")
+    GO_CMD=(go test -count=1 -timeout "${JIRAFS_GO_TEST_TIMEOUT:-120s}")
     if [ "${VERBOSE}" -eq 1 ]; then
         GO_CMD+=(-v)
     fi
@@ -146,3 +146,14 @@ if [ "${VERBOSE}" -eq 1 ]; then
     COVERAGE_ARGS=(--verbose "${COVERAGE_ARGS[@]}")
 fi
 python3 tools/coverage_gate.py "${COVERAGE_ARGS[@]}"
+
+# Isolation proof (full runs only): tests must pass with an empty HOME/XDG
+# config and a dead proxy, i.e. with no user config and no network.
+if [ -z "${PACKAGE}" ]; then
+    PROOF_HOME="$(mktemp -d)"
+    trap 'rm -rf "${HERMETIC_DIR}" "${PROOF_HOME}"' EXIT
+    echo "isolation proof: go test with empty HOME and dead proxy" >&2
+    HOME="${PROOF_HOME}" XDG_CONFIG_HOME="${PROOF_HOME}" \
+        HTTP_PROXY=http://127.0.0.1:9 HTTPS_PROXY=http://127.0.0.1:9 \
+        go test -count=1 -timeout "${JIRAFS_GO_TEST_TIMEOUT:-120s}" ./...
+fi

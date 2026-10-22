@@ -5,6 +5,10 @@ import (
 	"os"
 	"strings"
 	"testing"
+
+	"net/http"
+
+	"github.com/jirafs/jirafs/internal/netguard"
 )
 
 // RunHermetic is meant to be called from TestMain(m). It points HOME and
@@ -26,6 +30,18 @@ func RunHermetic(m *testing.M) {
 			os.Unsetenv(strings.SplitN(kv, "=", 2)[0])
 		}
 	}
+	for _, kv := range os.Environ() {
+		k := strings.SplitN(kv, "=", 2)[0]
+		if strings.HasPrefix(k, "OP_") {
+			os.Unsetenv(k)
+		}
+	}
+	for _, k := range []string{"HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY", "http_proxy", "https_proxy", "all_proxy"} {
+		os.Unsetenv(k)
+	}
+	os.Setenv("NO_PROXY", "127.0.0.1,localhost,::1")
+	os.Setenv("no_proxy", "127.0.0.1,localhost,::1")
+	http.DefaultTransport = netguard.Wrap(http.DefaultTransport)
 	os.Setenv("HOME", dir)
 	os.Setenv("XDG_CONFIG_HOME", dir)
 	code := m.Run()

@@ -183,6 +183,7 @@ def run_go_tests_with_coverage(
         go_args = [
             "go",
             "test",
+            "-count=1",
             "-timeout",
             os.environ.get("JIRAFS_GO_TEST_TIMEOUT", "120s"),
             f"-coverprofile={coverprofile}",
