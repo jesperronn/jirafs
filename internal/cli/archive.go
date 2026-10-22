@@ -85,6 +85,11 @@ func runArchiveIssue(args []string, settings *config.Settings) int {
 
 	archiveDir := filepath.Join(proj.LocalDirs[0], "_archive")
 	if *dryRunFlag {
+		if err := (archive.FileService{ArchiveDir: archiveDir}).CheckEligible(key, ctx.MirrorDir, issuePath); err != nil {
+			fmt.Fprintf(archiveStdout, "would skip %s: %v\n", issuePath, err)
+			fmt.Fprintln(archiveStdout, "dry run: nothing would be archived; nothing was moved")
+			return 0
+		}
 		fmt.Fprintf(archiveStdout, "would archive %s -> %s (%s)\n", issuePath, filepath.Join(archiveDir, filepath.Base(issuePath)), writeVerb(filepath.Join(archiveDir, filepath.Base(issuePath))))
 		dryRunDone(archiveStdout, "jirafs archive issue "+key)
 		return 0

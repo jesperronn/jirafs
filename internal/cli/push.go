@@ -82,7 +82,7 @@ func RunPush(args []string) int {
 		return 1
 	}
 	if issue.RemoteMetadata.StateFile != "draft" || issue.Identity.Key != "" {
-		fmt.Fprintf(pushStderr, "jirafs push: %s is not a draft (it already is a synced issue); to update an existing issue run: jirafs sync %s\n", path, syncHintKey(issue, path))
+		fmt.Fprintf(pushStderr, "jirafs push: %s is not a draft (it already is a synced issue)%s\n", path, syncHint(issue))
 		return 1
 	}
 	if msg := validateFilled(issue); msg != "" {
@@ -152,7 +152,7 @@ func RunPush(args []string) int {
 	if !*applyFlag {
 		fmt.Fprintf(pushStdout, "jirafs push: would create %s in project %s: %s\n", jira.IssueTypeName(string(issue.Identity.Type)), issue.Identity.Project.Value, issue.Summary)
 		fmt.Fprintf(pushStdout, "  POST %s/rest/api/2/issue\n  %s\n", baseURL, payload)
-		fmt.Fprintf(pushStdout, "dry run: nothing was created; to create it run: jirafs push %s --apply\n", path)
+		fmt.Fprintf(pushStdout, "dry run: nothing was created; to create it run: %s\n", pushApplyHint(path, *projectFlag, *cwdFlag))
 		return 0
 	}
 
@@ -179,12 +179,26 @@ func RunPush(args []string) int {
 	return 0
 }
 
-// syncHintKey returns the issue key for a hint, falling back to the file stem.
-func syncHintKey(issue *schema.Issue, path string) string {
-	if issue.Identity.Key != "" {
-		return string(issue.Identity.Key)
+// syncHint returns a copy-pasteable follow-up for an already-synced file, or
+// an empty string when the file carries no issue key to sync.
+func syncHint(issue *schema.Issue) string {
+	if issue.Identity.Key == "" {
+		return "; it has no issue key, so there is nothing to push or sync"
 	}
-	return strings.TrimSuffix(filepath.Base(path), ".md")
+	return "; to update an existing issue run: jirafs sync " + string(issue.Identity.Key)
+}
+
+// pushApplyHint builds the exact `jirafs push --apply` command for path as
+// given, preserving the flags needed to resolve the same project.
+func pushApplyHint(path, project, cwd string) string {
+	parts := []string{"jirafs", "push", shellQuote(path), "--apply"}
+	if project != "" {
+		parts = append(parts, "--project", shellQuote(project))
+	}
+	if cwd != "" {
+		parts = append(parts, "--cwd", shellQuote(cwd))
+	}
+	return strings.Join(parts, " ")
 }
 
 // skipRequired lists required fields that are never reported as missing:

@@ -128,3 +128,37 @@ func TestRunNew_WriteFails(t *testing.T) {
 		t.Errorf("code=%d stderr=%q", code, errBuf.String())
 	}
 }
+
+func TestNewRefusesToOverwriteExistingDraft(t *testing.T) {
+	localDir := setupNewTest(t)
+	out, errBuf := withNewTestIO(t)
+	args := []string{"story", "--summary", "Same name", "--cwd", localDir}
+	if code := RunNew(args); code != 0 {
+		t.Fatalf("first exit=%d err=%s", code, errBuf)
+	}
+	if !strings.Contains(out.String(), "next: edit it, then run: jirafs push "+filepath.Join(localDir, "same-name.md")) {
+		t.Errorf("missing push hint: %s", out)
+	}
+	path := filepath.Join(localDir, "same-name.md")
+	if err := os.WriteFile(path, []byte("hand edited"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	errBuf.Reset()
+	if code := RunNew(args); code != 1 {
+		t.Fatalf("second exit=%d, want 1", code)
+	}
+	for _, want := range []string{"already exists", "jirafs new story --summary 'Same name' --cwd " + localDir + " --force"} {
+		if !strings.Contains(errBuf.String(), want) {
+			t.Errorf("stderr missing %q:\n%s", want, errBuf)
+		}
+	}
+	if data, _ := os.ReadFile(path); string(data) != "hand edited" {
+		t.Fatalf("file was overwritten: %q", data)
+	}
+	if code := RunNew(append(args, "--force")); code != 0 {
+		t.Fatalf("--force exit=%d", code)
+	}
+	if data, _ := os.ReadFile(path); !strings.Contains(string(data), "Same name") {
+		t.Fatalf("--force did not overwrite: %q", data)
+	}
+}

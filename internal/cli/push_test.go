@@ -13,6 +13,7 @@ import (
 	"github.com/jirafs/jirafs/internal/config"
 	"github.com/jirafs/jirafs/internal/context"
 	"github.com/jirafs/jirafs/internal/jira"
+	"github.com/jirafs/jirafs/internal/schema"
 )
 
 func withPushTestIO(t *testing.T, fake *jira.FakeTransport) (*bytes.Buffer, *bytes.Buffer) {
@@ -287,5 +288,18 @@ func TestPushDryRunNoClientWarns(t *testing.T) {
 	}
 	if code := RunPush([]string{p, "--apply", "--cwd", dir}); code != 1 || !strings.Contains(errBuf.String(), "cannot create Jira client") {
 		t.Fatalf("apply err=%s", errBuf)
+	}
+}
+
+func TestPushApplyHintPreservesPathAndFlags(t *testing.T) {
+	if got, want := pushApplyHint("drafts/my draft.md", "test", "/w"), "jirafs push 'drafts/my draft.md' --apply --project test --cwd /w"; got != want {
+		t.Fatalf("got %q want %q", got, want)
+	}
+	if got, want := pushApplyHint("d.md", "", ""), "jirafs push d.md --apply"; got != want {
+		t.Fatalf("got %q want %q", got, want)
+	}
+	issue := &schema.Issue{}
+	if h := syncHint(issue); strings.Contains(h, "jirafs sync") {
+		t.Errorf("keyless hint must not suggest sync: %q", h)
 	}
 }

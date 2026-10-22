@@ -79,6 +79,27 @@ func (s FileService) Archive(eligible string, mirrorDir, localDir, issuePath str
 	return nil
 }
 
+// CheckEligible reports, without changing anything, whether Archive would
+// accept issuePath. The error text is the reason it would be refused.
+func (s FileService) CheckEligible(eligible string, mirrorDir, issuePath string) error {
+	data, err := os.ReadFile(issuePath)
+	if err != nil {
+		return fmt.Errorf("read issue file: %w", err)
+	}
+	issue, parseErr := schema.ParseIssue(string(data))
+	if parseErr != nil {
+		return fmt.Errorf("parse issue file: %w", parseErr)
+	}
+	m, _, loadErr := loadMirrorYAML(mirrorDir)
+	if loadErr != nil {
+		return fmt.Errorf("load mirror file: %w", loadErr)
+	}
+	if !m.IsArchiveEligible(issue.Identity.Key, mirror.ResolvedStatus(issue.RemoteMetadata.ResolvedStatus), issue.RemoteMetadata) {
+		return fmt.Errorf("issue %s is not archive-eligible: live membership rules prevent archiving", eligible)
+	}
+	return nil
+}
+
 // loadMirrorYAML reads the mirror file from the mirror directory.
 // It looks for mirror.yml or mirror.yaml in the mirror directory.
 // If no mirror file is found, it returns an empty mirror (all issues are eligible).

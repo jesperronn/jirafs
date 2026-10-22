@@ -358,7 +358,38 @@ func TestNewDryRun(t *testing.T) {
 		t.Fatalf("exit = %d, stderr = %s", code, errBuf)
 	}
 	assertTreeUnchanged(t, localDir, before)
-	if !strings.Contains(out.String(), "would overwrite") {
+	if !strings.Contains(out.String(), "would refuse") || !strings.Contains(out.String(), "--force") {
 		t.Fatalf("stdout = %q", out.String())
+	}
+}
+
+func TestArchiveIssueDryRunReportsIneligible(t *testing.T) {
+	tmpDir := t.TempDir()
+	t.Setenv("HOME", writeSettings(t, tmpDir))
+	writeMirror(t, tmpDir)
+	localDir := filepath.Join(tmpDir, "local")
+	if err := os.MkdirAll(localDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	writeArchiveIssue(t, localDir, "ABC-1", "Pinned issue")
+	p := filepath.Join(localDir, "ABC-1.md")
+	data, _ := os.ReadFile(p)
+	if err := os.WriteFile(p, []byte(strings.Replace(string(data), "resolved_status: resolved\n", "resolved_status: resolved\npinned: true\n", 1)), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	chdir(t, localDir)
+	stdout, stderr := withArchiveTestIO(t)
+	before := snapshotTree(t, tmpDir)
+	if code := RunArchive([]string{"issue", "ABC-1", "--project", "test", "--dry-run"}); code != 0 {
+		t.Fatalf("exit = %d, stderr = %s", code, stderr)
+	}
+	assertTreeUnchanged(t, tmpDir, before)
+	for _, want := range []string{"would skip", "not archive-eligible"} {
+		if !strings.Contains(stdout.String(), want) {
+			t.Errorf("stdout missing %q:\n%s", want, stdout)
+		}
+	}
+	if strings.Contains(stdout.String(), "would archive") {
+		t.Errorf("must not claim it would archive:\n%s", stdout)
 	}
 }

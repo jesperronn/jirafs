@@ -126,6 +126,7 @@ Flags:
   --template <path>  Use a user-supplied template file instead of a built-in.
   --prompt           Print the template plus instructions for an AI; no draft is written.
   --idea <text>      With --prompt: the idea the AI should turn into the issue.
+  --force            Overwrite the draft file if it already exists.
   --from <file|->    Create a draft from a filled document (- reads stdin).
 
 AI pipe:
@@ -182,6 +183,7 @@ func RunNew(args []string) int {
 	promptFlag := fs.Bool("prompt", false, "print the template plus AI instructions")
 	ideaFlag := fs.String("idea", "", "idea text to include in the prompt")
 	fromFlag := fs.String("from", "", "filled document to create a draft from (- for stdin)")
+	forceFlag := fs.Bool("force", false, "overwrite an existing draft file")
 	dryRunFlag := fs.Bool("dry-run", false, "print the target path and whether it would be overwritten; write nothing")
 
 	if err := parseFlags(fs, flagArgs); err != nil {
@@ -287,6 +289,16 @@ func RunNew(args []string) int {
 	}
 
 	path := filepath.Join(proj.LocalDirs[0], slugify(issue.Summary)+".md")
+	_, statErr := os.Stat(path)
+	exists := statErr == nil
+	if exists && !*forceFlag && *dryRunFlag {
+		fmt.Fprintf(newStdout, "would refuse: %s already exists\nto overwrite it run: jirafs new %s\n", path, shellJoin(append(withoutFlag(args, "--dry-run"), "--force")))
+		return 0
+	}
+	if exists && !*forceFlag {
+		fmt.Fprintf(newStderr, "jirafs new: %s already exists; refusing to overwrite\nto overwrite it run: jirafs new %s\nor choose a different --summary to get a different file name\n", path, shellJoin(append(append([]string{}, args...), "--force")))
+		return 1
+	}
 	if *dryRunFlag {
 		fmt.Fprintf(newStdout, "would %s %s\n", writeVerb(path), path)
 		dryRunDone(newStdout, "re-run the same jirafs new command without --dry-run")
@@ -296,7 +308,7 @@ func RunNew(args []string) int {
 		fmt.Fprintf(newStderr, "jirafs new: %v\n", err)
 		return 1
 	}
-	fmt.Fprintf(newStdout, "jirafs: created %s\n", path)
+	fmt.Fprintf(newStdout, "jirafs: created %s\nnext: edit it, then run: jirafs push %s\n", path, shellQuote(path))
 	return 0
 }
 
@@ -388,4 +400,30 @@ func retryHint(from string) string {
 		return `retry: jirafs new story --prompt --idea "..." | llm | jirafs new --from -`
 	}
 	return fmt.Sprintf("retry: fix the document, then run: jirafs new --from %s", from)
+}
+
+// shellQuote quotes s for a POSIX shell only when it needs it.
+func shellQuote(s string) string {
+	if s != "" && strings.Trim(s, "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_@%+=:,./-") == "" {
+		return s
+	}
+	return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'"
+}
+
+func shellJoin(args []string) string {
+	q := make([]string, len(args))
+	for i, a := range args {
+		q[i] = shellQuote(a)
+	}
+	return strings.Join(q, " ")
+}
+
+func withoutFlag(args []string, name string) []string {
+	var out []string
+	for _, a := range args {
+		if a != name {
+			out = append(out, a)
+		}
+	}
+	return out
 }
