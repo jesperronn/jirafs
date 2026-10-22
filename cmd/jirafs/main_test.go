@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"fmt"
 	"os"
 	"os/exec"
@@ -1287,23 +1288,43 @@ func TestSetupFailsOnUncreatableMirrorDirectory(t *testing.T) {
 	}
 }
 
+// ownedInProcess reports whether args dispatch to commands implemented in
+// cmd/jirafs itself (writing to the writers passed to run). The internal/cli
+// handlers write through unexported package-level os.Stdout/os.Stderr
+// captures that cmd/jirafs cannot redirect, so those still re-exec.
+func ownedInProcess(args []string) bool {
+	if len(args) == 0 {
+		return true
+	}
+	switch args[0] {
+	case "board", "init", "new", "push", "registry", "archive", "sync", "mirror", "export", "plan", "status", "doctor":
+		return false
+	}
+	return true
+}
+
+// runMainHelperWithHome runs the CLI with HOME pointed at home, in-process
+// when possible, otherwise by re-exec'ing the test binary.
 func runMainHelperWithHome(t *testing.T, home string, args ...string) helperOutput {
 	t.Helper()
-
-	cmd := exec.Command(os.Args[0], append([]string{"-test.run=TestMainHelperProcess", "--"}, args...)...)
-	env := os.Environ()
-	for i, e := range env {
-		if strings.HasPrefix(e, "HOME=") {
-			env[i] = "HOME=" + home
-			break
-		}
+	if !ownedInProcess(args) {
+		return runMainReexec(t, home, args...)
 	}
-	cmd.Env = append(env, "GO_WANT_HELPER_PROCESS=1")
+	t.Setenv("HOME", home)
+	t.Setenv("XDG_CONFIG_HOME", home)
+	var buf bytes.Buffer
+	code := run(args, &buf, &buf)
+	return helperOutput{stderr: buf.String(), exitCode: code}
+}
+
+func runMainReexec(t *testing.T, home string, args ...string) helperOutput {
+	t.Helper()
+	cmd := exec.Command(os.Args[0], append([]string{"-test.run=TestMainHelperProcess", "--"}, args...)...)
+	cmd.Env = append(os.Environ(), "GO_WANT_HELPER_PROCESS=1", "HOME="+home, "XDG_CONFIG_HOME="+home)
 	output, err := cmd.CombinedOutput()
 	if err == nil {
 		return helperOutput{stderr: string(output), exitCode: 0}
 	}
-
 	exitErr, ok := err.(*exec.ExitError)
 	if !ok {
 		t.Fatalf("helper process error = %v", err)
@@ -1311,11 +1332,22 @@ func runMainHelperWithHome(t *testing.T, home string, args ...string) helperOutp
 	return helperOutput{stderr: string(output), exitCode: exitErr.ExitCode()}
 }
 
+// TestRealExitCodes verifies main() really exits with the code run returns.
+func TestRealExitCodes(t *testing.T) {
+	for _, tc := range []struct {
+		args []string
+		want int
+	}{{[]string{"help"}, 0}, {[]string{"wat"}, 1}, {[]string{"use", "--bogus-flag"}, 2}} {
+		if got := runMainReexec(t, writeMinimalHome(t), tc.args...).exitCode; got != tc.want {
+			t.Fatalf("args %v: exit = %d, want %d", tc.args, got, tc.want)
+		}
+	}
+}
+
 func TestMainHelperProcess(t *testing.T) {
 	if os.Getenv("GO_WANT_HELPER_PROCESS") != "1" {
 		return
 	}
-
 	for i, arg := range os.Args {
 		if arg == "--" {
 			os.Args = append([]string{os.Args[0]}, os.Args[i+1:]...)
@@ -1323,7 +1355,6 @@ func TestMainHelperProcess(t *testing.T) {
 			return
 		}
 	}
-
 	main()
 }
 

@@ -2,8 +2,10 @@ package main
 
 import (
 	"bufio"
+	"errors"
 	"flag"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -17,50 +19,58 @@ import (
 var version = "dev"
 
 func main() {
-	if len(os.Args) < 2 {
-		printHelp()
-		os.Exit(0)
-	}
+	os.Exit(run(os.Args[1:], os.Stdout, os.Stderr))
+}
 
-	switch os.Args[1] {
-	case "help":
-		printHelp()
+// run dispatches one jirafs invocation and returns its exit code. It never
+// calls os.Exit. Output of cmd/jirafs's own commands goes to stdout/stderr;
+// the internal/cli handlers still write to the process-wide os.Stdout and
+// os.Stderr, which in-process tests redirect.
+func run(args []string, stdout, stderr io.Writer) int {
+	if len(args) < 1 {
+		printHelp(stderr)
+		return 0
+	}
+	rest := args[1:]
+	switch args[0] {
+	case "help", "--help", "-h":
+		printHelp(stderr)
+		return 0
 	case "--version", "-v":
-		fmt.Println("jirafs", version)
+		fmt.Fprintln(stdout, "jirafs", version)
+		return 0
 	case "board":
-		os.Exit(cli.RunBoard(os.Args[2:]))
+		return cli.RunBoard(rest)
 	case "init":
-		os.Exit(cli.RunInit(os.Args[2:]))
+		return cli.RunInit(rest)
 	case "new":
-		os.Exit(cli.RunNew(os.Args[2:]))
+		return cli.RunNew(rest)
 	case "push":
-		os.Exit(cli.RunPush(os.Args[2:]))
+		return cli.RunPush(rest)
 	case "registry":
-		os.Exit(cli.RunRegistry(os.Args[2:]))
+		return cli.RunRegistry(rest)
 	case "archive":
-		os.Exit(cli.RunArchive(os.Args[2:]))
+		return cli.RunArchive(rest)
 	case "setup":
-		os.Exit(runSetup(os.Args[2:]))
+		return runSetup(rest, stdout, stderr)
 	case "sync":
-		os.Exit(cli.RunSync(os.Args[2:]))
+		return cli.RunSync(rest)
 	case "use":
-		os.Exit(runUse(os.Args[2:]))
+		return runUse(rest, stdout, stderr)
 	case "mirror":
-		os.Exit(cli.RunMirror(os.Args[2:]))
+		return cli.RunMirror(rest)
 	case "export":
-		os.Exit(cli.RunExport(os.Args[2:]))
+		return cli.RunExport(rest)
 	case "plan":
-		os.Exit(cli.RunPlan(os.Args[2:]))
+		return cli.RunPlan(rest)
 	case "status":
-		os.Exit(cli.RunStatus(os.Args[2:]))
+		return cli.RunStatus(rest)
 	case "doctor":
-		os.Exit(cli.RunDoctor(os.Args[2:]))
-	case "--help", "-h":
-		printHelp()
+		return cli.RunDoctor(rest)
 	default:
-		fmt.Fprintf(os.Stderr, "jirafs: unknown command: %q\n\n", os.Args[1])
-		printHelp()
-		os.Exit(1)
+		fmt.Fprintf(stderr, "jirafs: unknown command: %q\n\n", args[0])
+		printHelp(stderr)
+		return 1
 	}
 }
 
@@ -73,32 +83,35 @@ func main() {
 // It loads the user's settings, validates the project exists, updates the
 // remembered current_project in state, writes it back, and prints a message.
 // Returns an exit code (0 on success, 1 on error).
-func runUse(args []string) int {
-	fs := flag.NewFlagSet("use", flag.ExitOnError)
+func runUse(args []string, stdout, stderr io.Writer) int {
+	fs := flag.NewFlagSet("use", flag.ContinueOnError)
+	fs.SetOutput(stderr)
 	project := fs.String("project", "", "project key to set as current")
 	clear := fs.Bool("clear", false, "clear the remembered current project")
 	if err := fs.Parse(args); err != nil {
-		fmt.Fprintf(os.Stderr, "jirafs use: invalid flags: %v\n", err)
-		return 1
+		if errors.Is(err, flag.ErrHelp) {
+			return 0
+		}
+		return 2
 	}
 
 	// --clear takes priority.
 	if *clear {
 		if *project != "" {
-			fmt.Fprintf(os.Stderr, "jirafs use: --project and --clear are mutually exclusive\n")
+			fmt.Fprintf(stderr, "jirafs use: --project and --clear are mutually exclusive\n")
 			return 1
 		}
 		s, err := config.Load()
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "jirafs use: cannot load settings: %v\n", err)
+			fmt.Fprintf(stderr, "jirafs use: cannot load settings: %v\n", err)
 			return 1
 		}
 		s.State.CurrentProject = ""
 		if err := s.SaveState(); err != nil {
-			fmt.Fprintf(os.Stderr, "jirafs use: cannot save state: %v\n", err)
+			fmt.Fprintf(stderr, "jirafs use: cannot save state: %v\n", err)
 			return 1
 		}
-		fmt.Println("jirafs: current project cleared")
+		fmt.Fprintln(stdout, "jirafs: current project cleared")
 		return 0
 	}
 
@@ -109,7 +122,7 @@ func runUse(args []string) int {
 	} else if len(fs.Args()) == 1 {
 		key = fs.Args()[0]
 	} else if len(fs.Args()) > 1 {
-		fmt.Fprintf(os.Stderr, "jirafs use: too many positional arguments\n")
+		fmt.Fprintf(stderr, "jirafs use: too many positional arguments\n")
 		return 1
 	}
 
@@ -118,26 +131,26 @@ func runUse(args []string) int {
 	if key == "" {
 		s, err := config.Load()
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "jirafs use: cannot load settings: %v\n", err)
+			fmt.Fprintf(stderr, "jirafs use: cannot load settings: %v\n", err)
 			return 1
 		}
 		if s.State.CurrentProject == "" {
-			fmt.Println("jirafs: no current project set")
+			fmt.Fprintln(stdout, "jirafs: no current project set")
 			if len(s.Projects) > 0 {
-				fmt.Fprintln(os.Stderr, "jirafs: available projects:")
+				fmt.Fprintln(stderr, "jirafs: available projects:")
 				for name := range s.Projects {
-					fmt.Fprintf(os.Stderr, "  - %s\n", name)
+					fmt.Fprintf(stderr, "  - %s\n", name)
 				}
 			}
 		} else {
-			fmt.Printf("jirafs: current project is %q\n", s.State.CurrentProject)
+			fmt.Fprintf(stdout, "jirafs: current project is %q\n", s.State.CurrentProject)
 			if len(s.Projects) > 1 {
-				fmt.Fprintln(os.Stderr, "jirafs: other projects:")
+				fmt.Fprintln(stderr, "jirafs: other projects:")
 				for name, proj := range s.Projects {
 					if name == s.State.CurrentProject {
 						continue
 					}
-					fmt.Fprintf(os.Stderr, "  - %s (key: %s)\n", name, proj.Key)
+					fmt.Fprintf(stderr, "  - %s (key: %s)\n", name, proj.Key)
 				}
 			}
 		}
@@ -146,22 +159,22 @@ func runUse(args []string) int {
 
 	s, err := config.Load()
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "jirafs use: cannot load settings: %v\n", err)
+		fmt.Fprintf(stderr, "jirafs use: cannot load settings: %v\n", err)
 		return 1
 	}
 
 	if _, ok := s.Projects[key]; !ok {
-		fmt.Fprintf(os.Stderr, "jirafs use: project %q not found in settings\n", key)
+		fmt.Fprintf(stderr, "jirafs use: project %q not found in settings\n", key)
 		return 1
 	}
 
 	s.State.CurrentProject = key
 	if err := s.SaveState(); err != nil {
-		fmt.Fprintf(os.Stderr, "jirafs use: cannot save state: %v\n", err)
+		fmt.Fprintf(stderr, "jirafs use: cannot save state: %v\n", err)
 		return 1
 	}
 
-	fmt.Printf("jirafs: current project set to %q\n", key)
+	fmt.Fprintf(stdout, "jirafs: current project set to %q\n", key)
 	return 0
 }
 
@@ -186,8 +199,9 @@ func runUse(args []string) int {
 // With --set-current, the setup command also records the project as the
 // remembered current project so the first export/refresh flow works
 // without extra flags.
-func runSetup(args []string) int {
-	fs := flag.NewFlagSet("setup", flag.ExitOnError)
+func runSetup(args []string, stdout, stderr io.Writer) int {
+	fs := flag.NewFlagSet("setup", flag.ContinueOnError)
+	fs.SetOutput(stderr)
 	projectName := fs.String("project", "", "settings key for the project entry")
 	projectKey := fs.String("key", "", "Jira project key (e.g. PLAT)")
 	instanceName := fs.String("instance", "", "settings key for the instance entry")
@@ -201,34 +215,36 @@ func runSetup(args []string) int {
 		return nil
 	})
 	if err := fs.Parse(args); err != nil {
-		fmt.Fprintf(os.Stderr, "jirafs setup: invalid flags: %v\n", err)
-		return 1
+		if errors.Is(err, flag.ErrHelp) {
+			return 0
+		}
+		return 2
 	}
 
 	if isInteractiveInput() {
 		reader := bufio.NewReader(os.Stdin)
-		promptMissingValue(reader, projectName, "project", "settings key for the project entry")
-		promptMissingValue(reader, projectKey, "key", "Jira project key (for example PLAT)")
-		promptMissingValue(reader, instanceName, "instance", "settings key for the Jira instance")
-		promptMissingValue(reader, baseURL, "base-url", "Jira base URL")
-		promptMissingValue(reader, authType, "auth-type", "auth type (basic, atlassian_api_token, bearer_token, oauth1; default atlassian_api_token)")
-		promptMissingValue(reader, mirrorDir, "mirror-dir", "local mirror directory path (default ~/jira/<project>)")
+		promptMissingValue(stderr, reader, projectName, "project", "settings key for the project entry")
+		promptMissingValue(stderr, reader, projectKey, "key", "Jira project key (for example PLAT)")
+		promptMissingValue(stderr, reader, instanceName, "instance", "settings key for the Jira instance")
+		promptMissingValue(stderr, reader, baseURL, "base-url", "Jira base URL")
+		promptMissingValue(stderr, reader, authType, "auth-type", "auth type (basic, atlassian_api_token, bearer_token, oauth1; default atlassian_api_token)")
+		promptMissingValue(stderr, reader, mirrorDir, "mirror-dir", "local mirror directory path (default ~/jira/<project>)")
 	}
 
 	defaultsUsed := applySetupDefaults(projectName, authType, mirrorDir)
 
 	if missing := missingSetupFlags(*projectName, *projectKey, *instanceName, *baseURL); len(missing) > 0 {
-		fmt.Fprintf(os.Stderr, "jirafs setup: missing required flags: %s\n", strings.Join(missing, ", "))
-		fmt.Fprintln(os.Stderr, "jirafs setup: pass them as flags or run setup interactively from a terminal")
+		fmt.Fprintf(stderr, "jirafs setup: missing required flags: %s\n", strings.Join(missing, ", "))
+		fmt.Fprintln(stderr, "jirafs setup: pass them as flags or run setup interactively from a terminal")
 		return 1
 	}
 	if *baseURL != "" && (!strings.HasPrefix(*baseURL, "http://") && !strings.HasPrefix(*baseURL, "https://")) {
-		fmt.Fprintf(os.Stderr, "jirafs setup: --base-url must start with http:// or https://\n")
+		fmt.Fprintf(stderr, "jirafs setup: --base-url must start with http:// or https://\n")
 		return 1
 	}
 
 	fmt.Fprintf(
-		os.Stderr,
+		stderr,
 		"jirafs setup: configuring project %q (key %q) on instance %q at %q using auth %q\n",
 		*projectName,
 		*projectKey,
@@ -237,14 +253,14 @@ func runSetup(args []string) int {
 		*authType,
 	)
 	for _, msg := range defaultsUsed {
-		fmt.Fprintf(os.Stderr, "jirafs setup: default %s\n", msg)
+		fmt.Fprintf(stderr, "jirafs setup: default %s\n", msg)
 	}
-	fmt.Fprintf(os.Stderr, "jirafs setup: ensuring mirror directory %q exists\n", *mirrorDir)
+	fmt.Fprintf(stderr, "jirafs setup: ensuring mirror directory %q exists\n", *mirrorDir)
 
 	// Create or validate the mirror directory before persisting settings.
 	if _, err := os.Stat(*mirrorDir); os.IsNotExist(err) || isNotADirectory(err) {
 		if err := os.MkdirAll(*mirrorDir, 0o755); err != nil {
-			fmt.Fprintf(os.Stderr, "jirafs setup: cannot create mirror directory %q: %v\n", *mirrorDir, err)
+			fmt.Fprintf(stderr, "jirafs setup: cannot create mirror directory %q: %v\n", *mirrorDir, err)
 			return 1
 		}
 	}
@@ -254,7 +270,7 @@ func runSetup(args []string) int {
 	if err != nil {
 		// If the file doesn't exist, proceed with a fresh settings.
 		if !config.IsSettingError(err, config.ErrMissingField) {
-			fmt.Fprintf(os.Stderr, "jirafs setup: cannot load settings: %v\n", err)
+			fmt.Fprintf(stderr, "jirafs setup: cannot load settings: %v\n", err)
 			return 1
 		}
 		// Missing file is OK — we'll create it.
@@ -266,15 +282,15 @@ func runSetup(args []string) int {
 	}
 
 	// Call SetupProject to record the instance and project.
-	fmt.Fprintln(os.Stderr, "jirafs setup: writing settings")
+	fmt.Fprintln(stderr, "jirafs setup: writing settings")
 	if err := s.SetupProject(*instanceName, *projectName, *projectKey, *baseURL, *authType, *mirrorDir, credentialRefs); err != nil {
-		fmt.Fprintf(os.Stderr, "jirafs setup: %v\n", err)
+		fmt.Fprintf(stderr, "jirafs setup: %v\n", err)
 		return 1
 	}
 
-	fmt.Fprintln(os.Stderr, "jirafs setup: ensuring default mirror config")
+	fmt.Fprintln(stderr, "jirafs setup: ensuring default mirror config")
 	if err := ensureDefaultMirror(*mirrorDir, *projectKey); err != nil {
-		fmt.Fprintf(os.Stderr, "jirafs setup: cannot initialize mirror config: %v\n", err)
+		fmt.Fprintf(stderr, "jirafs setup: cannot initialize mirror config: %v\n", err)
 		return 1
 	}
 
@@ -282,12 +298,12 @@ func runSetup(args []string) int {
 	if *setCurrent {
 		s.State.CurrentProject = *projectName
 		if err := s.SaveState(); err != nil {
-			fmt.Fprintf(os.Stderr, "jirafs setup: cannot save state: %v\n", err)
+			fmt.Fprintf(stderr, "jirafs setup: cannot save state: %v\n", err)
 			return 1
 		}
 	}
 
-	fmt.Printf("jirafs: setup complete — instance %q, project %q (key %q)\n", *instanceName, *projectName, *projectKey)
+	fmt.Fprintf(stdout, "jirafs: setup complete — instance %q, project %q (key %q)\n", *instanceName, *projectName, *projectKey)
 	return 0
 }
 
@@ -299,12 +315,12 @@ func isInteractiveInput() bool {
 	return info.Mode()&os.ModeCharDevice != 0
 }
 
-func promptMissingValue(reader *bufio.Reader, value *string, flagName, description string) {
+func promptMissingValue(stderr io.Writer, reader *bufio.Reader, value *string, flagName, description string) {
 	if strings.TrimSpace(*value) != "" {
 		return
 	}
 
-	fmt.Fprintf(os.Stderr, "jirafs setup: enter --%s (%s): ", flagName, description)
+	fmt.Fprintf(stderr, "jirafs setup: enter --%s (%s): ", flagName, description)
 	line, err := reader.ReadString('\n')
 	if err != nil {
 		return
@@ -382,11 +398,11 @@ func isNotADirectory(err error) bool {
 	return strings.Contains(err.Error(), "not a directory")
 }
 
-func printHelp() {
-	fmt.Fprintf(os.Stderr, "%s\n", color.BoldBlue(os.Stderr, "Usage:"))
-	fmt.Fprintf(os.Stderr, "  %s <command> [arguments]\n\n", color.Bold(os.Stderr, "jirafs"))
+func printHelp(stderr io.Writer) {
+	fmt.Fprintf(stderr, "%s\n", color.BoldBlue(stderr, "Usage:"))
+	fmt.Fprintf(stderr, "  %s <command> [arguments]\n\n", color.Bold(stderr, "jirafs"))
 
-	fmt.Fprintf(os.Stderr, "%s:\n", color.BoldGreen(os.Stderr, "Commands"))
+	fmt.Fprintf(stderr, "%s:\n", color.BoldGreen(stderr, "Commands"))
 	commands := [][2]string{
 		{"init", "initialize a new jirafs project in the current directory"},
 		{"export", "export Jira issues into local Markdown files"},
@@ -405,8 +421,8 @@ func printHelp() {
 		{"help", "show this help message"},
 	}
 	for _, cmd := range commands {
-		fmt.Fprintf(os.Stderr, "  %s  %s\n", color.Blue(os.Stderr, cmd[0]), color.Dim(os.Stderr, cmd[1]))
+		fmt.Fprintf(stderr, "  %s  %s\n", color.Blue(stderr, cmd[0]), color.Dim(stderr, cmd[1]))
 	}
 
-	fmt.Fprintf(os.Stderr, "\n%s\n", color.Cyan(os.Stderr, `Run "jirafs <command> --help" for more information about a command.`))
+	fmt.Fprintf(stderr, "\n%s\n", color.Cyan(stderr, `Run "jirafs <command> --help" for more information about a command.`))
 }
