@@ -107,6 +107,12 @@ func runPlanIssue(key, project, cwd string, settings *config.Settings) int {
 		return 1
 	}
 
+	// Frontmatter status is context; empty means "no change".
+	localIssue.Status = localIssue.Context.Status
+	if remote.Status == "" && localIssue.Status != "" {
+		fmt.Fprintf(planStderr, "jirafs plan: warning: remote status of %s is unknown; not planning a status change\n", key)
+	}
+
 	// Build the plan by comparing local and remote.
 	ops, _, err := plan.BuildPlan(localIssue, *remote)
 	if err != nil {
@@ -264,6 +270,10 @@ func runPlanList(settings *config.Settings, project, cwd string) int {
 		if err != nil {
 			// Remote issue not found or fetch error - skip.
 			continue
+		}
+
+		if remote.Status == "" && localIssue.Status != "" {
+			fmt.Fprintf(planStderr, "jirafs plan: %s: warning: remote status unknown; not planning a status change\n", filePath)
 		}
 
 		// Build the plan.

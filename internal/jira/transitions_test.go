@@ -40,7 +40,7 @@ func TestDoTransition(t *testing.T) {
 	}))
 	defer server.Close()
 
-	if err := NewJiraClient(server.URL).DoTransition(context.Background(), "PROJ-1", "11"); err != nil {
+	if err := NewJiraClient(server.URL).DoTransition(context.Background(), "PROJ-1", "11", nil); err != nil {
 		t.Fatal(err)
 	}
 	if gotMethod != "POST" || gotPath != "/rest/api/2/issue/PROJ-1/transitions" {
@@ -61,7 +61,7 @@ func TestTransitions_Errors(t *testing.T) {
 	if _, err := c.FetchTransitions(context.Background(), "PROJ-1"); err == nil {
 		t.Error("FetchTransitions: want error")
 	}
-	if err := c.DoTransition(context.Background(), "PROJ-1", "11"); err == nil {
+	if err := c.DoTransition(context.Background(), "PROJ-1", "11", nil); err == nil {
 		t.Error("DoTransition: want error")
 	}
 	if _, err := c.FetchTransitions(context.Background(), ""); err == nil {
@@ -78,12 +78,12 @@ func TestTransitions_StatusMapping(t *testing.T) {
 		if _, err := c.FetchTransitions(context.Background(), "PROJ-1"); err == nil {
 			t.Errorf("FetchTransitions %d: want error", code)
 		}
-		if err := c.DoTransition(context.Background(), "PROJ-1", "1"); err == nil {
+		if err := c.DoTransition(context.Background(), "PROJ-1", "1", nil); err == nil {
 			t.Errorf("DoTransition %d: want error", code)
 		}
 		server.Close()
 	}
-	if err := NewJiraClient("http://x").DoTransition(context.Background(), "", "1"); err == nil {
+	if err := NewJiraClient("http://x").DoTransition(context.Background(), "", "1", nil); err == nil {
 		t.Error("empty key: want error")
 	}
 }
@@ -93,7 +93,7 @@ func TestFakeTransitions(t *testing.T) {
 	tr := Transition{ID: "1", Name: "Go"}
 	tr.To.Name = "Done"
 	f.SetTransitions("K-1", []Transition{tr})
-	if err := f.DoTransition(nil, "K-1", "9"); err == nil {
+	if err := f.DoTransition(nil, "K-1", "9", nil); err == nil {
 		t.Error("unknown id: want error")
 	}
 	f.SetErr("transitions", NewUnknownErr("boom"))
@@ -101,7 +101,7 @@ func TestFakeTransitions(t *testing.T) {
 		t.Error("want fetch error")
 	}
 	f.SetErr("transition", NewUnknownErr("boom"))
-	if err := f.DoTransition(nil, "K-1", "1"); err == nil {
+	if err := f.DoTransition(nil, "K-1", "1", nil); err == nil {
 		t.Error("want do error")
 	}
 }
@@ -116,7 +116,7 @@ func TestFakeTransitions_Success(t *testing.T) {
 	if err != nil || len(ts) != 1 {
 		t.Fatalf("ts=%v err=%v", ts, err)
 	}
-	if err := f.DoTransition(nil, "K-1", "1"); err != nil {
+	if err := f.DoTransition(nil, "K-1", "1", nil); err != nil {
 		t.Fatal(err)
 	}
 	if got := f.DoneTransitions(); len(got) != 1 || got[0] != "K-1:1" {
@@ -129,7 +129,36 @@ func TestTransitions_TransportError(t *testing.T) {
 	if _, err := c.FetchTransitions(nil, "K-1"); err == nil {
 		t.Error("want error")
 	}
-	if err := c.DoTransition(nil, "K-1", "1"); err == nil {
+	if err := c.DoTransition(nil, "K-1", "1", nil); err == nil {
 		t.Error("want error")
+	}
+}
+
+func TestTransitionFieldsAndBody(t *testing.T) {
+	var gotQuery, gotBody string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotQuery = r.URL.RawQuery
+		if r.Method == "POST" {
+			b, _ := io.ReadAll(r.Body)
+			gotBody = string(b)
+			w.WriteHeader(http.StatusNoContent)
+			return
+		}
+		w.Write([]byte(`{"transitions":[{"id":"5","name":"Close","to":{"name":"Done"},"fields":{"resolution":{"required":true,"name":"Resolution"},"x":{"required":false,"name":"X"}}}]}`))
+	}))
+	defer server.Close()
+	c := NewJiraClient(server.URL)
+	ts, err := c.FetchTransitions(nil, "P-1")
+	if err != nil || gotQuery != "expand=transitions.fields" {
+		t.Fatalf("err=%v query=%q", err, gotQuery)
+	}
+	if rf := ts[0].RequiredFields(); len(rf) != 1 || rf[0].ID != "resolution" || rf[0].Name != "Resolution" {
+		t.Errorf("required = %+v", rf)
+	}
+	if err := c.DoTransition(nil, "P-1", "5", map[string]interface{}{"resolution": "Fixed"}); err != nil {
+		t.Fatal(err)
+	}
+	if gotBody != `{"fields":{"resolution":"Fixed"},"transition":{"id":"5"}}` {
+		t.Errorf("body = %s", gotBody)
 	}
 }

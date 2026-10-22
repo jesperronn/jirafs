@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net/http"
 	neturl "net/url"
+	"sort"
 )
 
 // Transition is a workflow transition available for an issue.
@@ -16,6 +17,29 @@ type Transition struct {
 	To   struct {
 		Name string `json:"name"`
 	} `json:"to"`
+	// Fields are the screen fields of the transition (expand=transitions.fields).
+	Fields map[string]TransitionField `json:"fields,omitempty"`
+}
+
+// TransitionField describes one field on a transition screen.
+type TransitionField struct {
+	Required bool   `json:"required"`
+	Name     string `json:"name"`
+}
+
+// RequiredField is a required transition field with its id.
+type RequiredField struct{ ID, Name string }
+
+// RequiredFields returns the required screen fields, sorted by id.
+func (t Transition) RequiredFields() []RequiredField {
+	var out []RequiredField
+	for id, f := range t.Fields {
+		if f.Required {
+			out = append(out, RequiredField{ID: id, Name: f.Name})
+		}
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].ID < out[j].ID })
+	return out
 }
 
 // FetchTransitions lists the transitions currently available for the issue
@@ -27,7 +51,7 @@ func (c *JiraClient) FetchTransitions(ctx context.Context, key string) ([]Transi
 	if key == "" {
 		return nil, NewNotFoundError("empty key")
 	}
-	url := fmt.Sprintf("%s/rest/api/2/issue/%s/transitions", c.baseURL, neturl.PathEscape(key))
+	url := fmt.Sprintf("%s/rest/api/2/issue/%s/transitions?expand=transitions.fields", c.baseURL, neturl.PathEscape(key))
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
 		return nil, NewTransportError("cannot create transitions request: " + err.Error())
@@ -61,7 +85,7 @@ func (c *JiraClient) FetchTransitions(ctx context.Context, key string) ([]Transi
 
 // DoTransition performs a transition via POST
 // /rest/api/2/issue/{key}/transitions; Jira answers 204 with no body.
-func (c *JiraClient) DoTransition(ctx context.Context, key, transitionID string) error {
+func (c *JiraClient) DoTransition(ctx context.Context, key, transitionID string, fields map[string]interface{}) error {
 	if ctx == nil {
 		ctx = context.Background()
 	}
@@ -69,9 +93,13 @@ func (c *JiraClient) DoTransition(ctx context.Context, key, transitionID string)
 		return NewNotFoundError("empty key")
 	}
 	url := fmt.Sprintf("%s/rest/api/2/issue/%s/transitions", c.baseURL, neturl.PathEscape(key))
-	body, err := json.Marshal(map[string]interface{}{
+	payload := map[string]interface{}{
 		"transition": map[string]string{"id": transitionID},
-	})
+	}
+	if len(fields) > 0 {
+		payload["fields"] = fields
+	}
+	body, err := json.Marshal(payload)
 	if err != nil {
 		return NewUnknownErr("cannot marshal transition request: " + err.Error())
 	}

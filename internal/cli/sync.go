@@ -119,6 +119,10 @@ func runSyncIssue(args []string, settings *config.Settings, resolver *context.Re
 		localIssue.Status = remote.Status
 	}
 
+	if remote.Status == "" && localIssue.Context.Status != "" {
+		fmt.Fprintf(syncStderr, "jirafs sync: warning: remote status of %s is unknown; not changing status\n", key)
+	}
+
 	// Build the plan by comparing local and remote.
 	ops, _, err := plan.BuildPlan(localIssue, *remote)
 	if err != nil {
@@ -154,6 +158,7 @@ func runSyncIssue(args []string, settings *config.Settings, resolver *context.Re
 	// A status change needs the transitions API. Resolve it before anything
 	// is written so a missing transition fails without a partial update.
 	var statusTr *jira.Transition
+	var transitionFields map[string]interface{}
 	for _, op := range ops {
 		if op.Field != schema.EditableFieldStatus {
 			continue
@@ -166,6 +171,21 @@ func runSyncIssue(args []string, settings *config.Settings, resolver *context.Re
 		statusTr = findTransition(transitions, op.Value)
 		if statusTr == nil {
 			fmt.Fprint(syncStderr, noTransitionMessage(key, remote.Status, op.Value, transitions, localPath))
+			return 1
+		}
+		var missing []jira.RequiredField
+		for _, rf := range statusTr.RequiredFields() {
+			if v, ok := localIssue.CustomFields[rf.ID]; ok && v != nil && v != "" {
+				if transitionFields == nil {
+					transitionFields = map[string]interface{}{}
+				}
+				transitionFields[rf.ID] = v
+			} else {
+				missing = append(missing, rf)
+			}
+		}
+		if len(missing) > 0 {
+			fmt.Fprint(syncStderr, gatedTransitionMessage(key, statusTr, missing, localPath))
 			return 1
 		}
 	}
@@ -194,8 +214,8 @@ func runSyncIssue(args []string, settings *config.Settings, resolver *context.Re
 	}
 
 	if statusTr != nil {
-		if err := client.DoTransition(nil, key, statusTr.ID); err != nil {
-			fmt.Fprintf(syncStderr, "jirafs sync: fields updated, but status transition %q failed: %v\n", statusTr.Name, err)
+		if err := client.DoTransition(nil, key, statusTr.ID, transitionFields); err != nil {
+			fmt.Fprintf(syncStderr, "jirafs sync: fields updated, but status transition %q failed (the field update was already applied): %v\n", statusTr.Name, err)
 			return 1
 		}
 	}
@@ -240,6 +260,19 @@ func noTransitionMessage(key, from, target string, ts []jira.Transition, localPa
 		}
 	}
 	fmt.Fprintf(&b, "fix: set status in %s to one of the above, or revert it: jirafs sync %s --dry-run\n", localPath, key)
+	return b.String()
+}
+
+// gatedTransitionMessage explains that the transition needs screen fields
+// the issue has no value for, with a copy-pasteable next step.
+func gatedTransitionMessage(key string, tr *jira.Transition, missing []jira.RequiredField, localPath string) string {
+	var b strings.Builder
+	fmt.Fprintf(&b, "jirafs sync: transition %q (to %q) on %s requires fields with no value; nothing was written\n", tr.Name, tr.To.Name, key)
+	b.WriteString("required fields:\n")
+	for _, f := range missing {
+		fmt.Fprintf(&b, "  %s (%s)\n", f.ID, f.Name)
+	}
+	fmt.Fprintf(&b, "fix: add the value(s) under custom_fields in %s, then run: jirafs sync %s --dry-run\n", localPath, key)
 	return b.String()
 }
 

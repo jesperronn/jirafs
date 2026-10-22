@@ -21,12 +21,14 @@ type FakeTransport struct {
 	// Registry data for registry refresh tests.
 	comments    map[string][]schema.Comment
 	statuses    []StatusEntry
-	sprints     map[string][]SprintEntry     // projectKey -> sprints
-	fixVersions map[string][]FixVersionEntry // projectKey -> versions
-	createMeta  map[string][]CreateMetaField // project/type -> fields
-	transitions map[string][]Transition      // key -> available transitions
-	done        []string                     // "KEY:transitionID" performed
-	created     int                          // issues created via CreateIssue
+	sprints     map[string][]SprintEntry          // projectKey -> sprints
+	fixVersions map[string][]FixVersionEntry      // projectKey -> versions
+	createMeta  map[string][]CreateMetaField      // project/type -> fields
+	transitions map[string][]Transition           // key -> available transitions
+	done        []string                          // "KEY:transitionID" performed
+	doneFields  map[string]map[string]interface{} // "KEY:ID" -> fields posted
+	fetchedTr   int                               // FetchTransitions calls
+	created     int                               // issues created via CreateIssue
 }
 
 // NewFakeTransport creates a fake transport with empty state.
@@ -307,10 +309,25 @@ func (f *FakeTransport) DoneTransitions() []string {
 	return append([]string(nil), f.done...)
 }
 
-// FetchTransitions returns the transitions registered for the issue.
-func (f *FakeTransport) FetchTransitions(_ context.Context, key string) ([]Transition, error) {
+// DoneFields returns the fields posted with the transition "KEY:ID".
+func (f *FakeTransport) DoneFields(keyID string) map[string]interface{} {
 	f.mu.RLock()
 	defer f.mu.RUnlock()
+	return f.doneFields[keyID]
+}
+
+// FetchTransitionsCalls returns how many times FetchTransitions was called.
+func (f *FakeTransport) FetchTransitionsCalls() int {
+	f.mu.RLock()
+	defer f.mu.RUnlock()
+	return f.fetchedTr
+}
+
+// FetchTransitions returns the transitions registered for the issue.
+func (f *FakeTransport) FetchTransitions(_ context.Context, key string) ([]Transition, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.fetchedTr++
 	if f.errOn == "transitions" {
 		return nil, f.err
 	}
@@ -318,7 +335,7 @@ func (f *FakeTransport) FetchTransitions(_ context.Context, key string) ([]Trans
 }
 
 // DoTransition records the transition and moves the issue to its target status.
-func (f *FakeTransport) DoTransition(_ context.Context, key, id string) error {
+func (f *FakeTransport) DoTransition(_ context.Context, key, id string, fields map[string]interface{}) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	if f.errOn == "transition" {
@@ -327,6 +344,10 @@ func (f *FakeTransport) DoTransition(_ context.Context, key, id string) error {
 	for _, t := range f.transitions[key] {
 		if t.ID == id {
 			f.done = append(f.done, key+":"+id)
+			if f.doneFields == nil {
+				f.doneFields = make(map[string]map[string]interface{})
+			}
+			f.doneFields[key+":"+id] = fields
 			if is := f.issues[key]; is != nil {
 				is.Status = t.To.Name
 			}

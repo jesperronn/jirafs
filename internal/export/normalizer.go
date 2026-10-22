@@ -152,6 +152,9 @@ func NormalizeContext(issue *schema.Issue, fields map[string]interface{}, epicLi
 	}
 	c := &issue.Context
 	c.Status = nestedName(fields["status"])
+	// The remote status (fields.status.name) is also the issue status that
+	// plan and sync compare against the local frontmatter.
+	issue.Status = c.Status
 	c.Priority = nestedName(fields["priority"])
 	c.Reporter = userName(fields["reporter"])
 	if s, ok := fields["created"].(string); ok {

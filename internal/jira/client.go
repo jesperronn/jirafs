@@ -94,7 +94,7 @@ type Client interface {
 	FetchTransitions(ctx context.Context, key string) ([]Transition, error)
 
 	// DoTransition performs the transition with the given id on the issue.
-	DoTransition(ctx context.Context, key, transitionID string) error
+	DoTransition(ctx context.Context, key, transitionID string, fields map[string]interface{}) error
 
 	// CreateIssue creates a new issue in the project named by
 	// issue.Identity.Project and returns its new key.

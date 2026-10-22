@@ -1800,3 +1800,17 @@ func TestMapHTTPErrMessages(t *testing.T) {
 		})
 	}
 }
+
+func TestFetchIssue_PopulatesRemoteStatus(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte(`{"key":"P-1","fields":{"summary":"S","status":{"name":"Open"},"issuetype":{"name":"Task"}}}`))
+	}))
+	defer server.Close()
+	got, err := NewJiraClient(server.URL).FetchIssue(nil, "P-1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Status != "Open" {
+		t.Errorf("Status = %q, want Open", got.Status)
+	}
+}

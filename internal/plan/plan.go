@@ -58,7 +58,8 @@ func BuildPlan(local, remote schema.Issue) ([]schema.PlanOperation, []schema.Con
 	}
 
 	// Compare status.
-	if local.Status != remote.Status {
+	// A status change needs a known remote status: never transition blindly.
+	if remote.Status != "" && local.Status != "" && !strings.EqualFold(local.Status, remote.Status) {
 		ops = append(ops, schema.PlanOperation{
 			Field: schema.EditableFieldStatus,
 			Type:  schema.OpSet,
