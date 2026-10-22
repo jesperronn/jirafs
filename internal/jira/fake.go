@@ -24,6 +24,8 @@ type FakeTransport struct {
 	sprints     map[string][]SprintEntry     // projectKey -> sprints
 	fixVersions map[string][]FixVersionEntry // projectKey -> versions
 	createMeta  map[string][]CreateMetaField // project/type -> fields
+	transitions map[string][]Transition      // key -> available transitions
+	done        []string                     // "KEY:transitionID" performed
 	created     int                          // issues created via CreateIssue
 }
 
@@ -286,4 +288,50 @@ func (f *FakeTransport) FetchComments(_ context.Context, key string, limit int) 
 		return all[:limit], len(all), nil
 	}
 	return all, len(all), nil
+}
+
+// SetTransitions registers the transitions available for an issue.
+func (f *FakeTransport) SetTransitions(key string, ts []Transition) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.transitions == nil {
+		f.transitions = make(map[string][]Transition)
+	}
+	f.transitions[key] = ts
+}
+
+// DoneTransitions returns the performed transitions as "KEY:ID" strings.
+func (f *FakeTransport) DoneTransitions() []string {
+	f.mu.RLock()
+	defer f.mu.RUnlock()
+	return append([]string(nil), f.done...)
+}
+
+// FetchTransitions returns the transitions registered for the issue.
+func (f *FakeTransport) FetchTransitions(_ context.Context, key string) ([]Transition, error) {
+	f.mu.RLock()
+	defer f.mu.RUnlock()
+	if f.errOn == "transitions" {
+		return nil, f.err
+	}
+	return append([]Transition(nil), f.transitions[key]...), nil
+}
+
+// DoTransition records the transition and moves the issue to its target status.
+func (f *FakeTransport) DoTransition(_ context.Context, key, id string) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.errOn == "transition" {
+		return f.err
+	}
+	for _, t := range f.transitions[key] {
+		if t.ID == id {
+			f.done = append(f.done, key+":"+id)
+			if is := f.issues[key]; is != nil {
+				is.Status = t.To.Name
+			}
+			return nil
+		}
+	}
+	return NewNotFoundError("transition " + id)
 }

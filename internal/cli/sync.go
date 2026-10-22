@@ -7,6 +7,7 @@ import (
 	"io"
 	"os"
 	"sort"
+	"strings"
 
 	"github.com/jirafs/jirafs/internal/color"
 	"github.com/jirafs/jirafs/internal/config"
@@ -111,6 +112,13 @@ func runSyncIssue(args []string, settings *config.Settings, resolver *context.Re
 		return 1
 	}
 
+	// The local status is the frontmatter `status:` value (parsed into
+	// Context). A missing status means "no change", never a status edit.
+	localIssue.Status = localIssue.Context.Status
+	if localIssue.Status == "" {
+		localIssue.Status = remote.Status
+	}
+
 	// Build the plan by comparing local and remote.
 	ops, _, err := plan.BuildPlan(localIssue, *remote)
 	if err != nil {
@@ -143,9 +151,33 @@ func runSyncIssue(args []string, settings *config.Settings, resolver *context.Re
 		return ops[i].Field < ops[j].Field
 	})
 
+	// A status change needs the transitions API. Resolve it before anything
+	// is written so a missing transition fails without a partial update.
+	var statusTr *jira.Transition
+	for _, op := range ops {
+		if op.Field != schema.EditableFieldStatus {
+			continue
+		}
+		transitions, err := client.FetchTransitions(nil, key)
+		if err != nil {
+			fmt.Fprintf(syncStderr, "jirafs sync: cannot fetch transitions for %s: %v\n", key, err)
+			return 1
+		}
+		statusTr = findTransition(transitions, op.Value)
+		if statusTr == nil {
+			fmt.Fprint(syncStderr, noTransitionMessage(key, remote.Status, op.Value, transitions, localPath))
+			return 1
+		}
+	}
+
 	fmt.Fprintf(syncStdout, "jirafs sync: %d operation(s) for issue %s in %s:\n",
 		len(ops), key, localPath)
 	for _, op := range ops {
+		if op.Field == schema.EditableFieldStatus && statusTr != nil {
+			fmt.Fprintf(syncStdout, "  transition status: %s \u2192 %s (via %q)\n",
+				remote.Status, statusTr.To.Name, statusTr.Name)
+			continue
+		}
 		fmt.Fprintf(syncStdout, "  %s %s = %s\n", op.Type, op.Field, op.Value)
 	}
 
@@ -161,6 +193,13 @@ func runSyncIssue(args []string, settings *config.Settings, resolver *context.Re
 		return 1
 	}
 
+	if statusTr != nil {
+		if err := client.DoTransition(nil, key, statusTr.ID); err != nil {
+			fmt.Fprintf(syncStderr, "jirafs sync: fields updated, but status transition %q failed: %v\n", statusTr.Name, err)
+			return 1
+		}
+	}
+
 	// Update the remote metadata in the result with the updated remote.
 	result.Remote.RemoteMetadata = updatedRemote.RemoteMetadata
 
@@ -174,6 +213,34 @@ func runSyncIssue(args []string, settings *config.Settings, resolver *context.Re
 
 	fmt.Fprintln(syncStdout, "jirafs sync: applied "+fmt.Sprint(len(ops))+" operation(s) successfully")
 	return 0
+}
+
+// findTransition returns the transition whose target status name matches
+// target case-insensitively, or nil.
+func findTransition(ts []jira.Transition, target string) *jira.Transition {
+	for i := range ts {
+		if strings.EqualFold(ts[i].To.Name, target) {
+			return &ts[i]
+		}
+	}
+	return nil
+}
+
+// noTransitionMessage explains that no transition leads to target and lists
+// the reachable statuses with a copy-pasteable next step.
+func noTransitionMessage(key, from, target string, ts []jira.Transition, localPath string) string {
+	var b strings.Builder
+	fmt.Fprintf(&b, "jirafs sync: cannot change status of %s from %q to %q: no available Jira transition leads to it\n", key, from, target)
+	if len(ts) == 0 {
+		b.WriteString("available target statuses: (none)\n")
+	} else {
+		b.WriteString("available target statuses:\n")
+		for _, t := range ts {
+			fmt.Fprintf(&b, "  %s (via %q)\n", t.To.Name, t.Name)
+		}
+	}
+	fmt.Fprintf(&b, "fix: set status in %s to one of the above, or revert it: jirafs sync %s --dry-run\n", localPath, key)
+	return b.String()
 }
 
 // writeUpdatedLocalIssue writes the updated remote issue back to the local

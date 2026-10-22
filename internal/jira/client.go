@@ -89,6 +89,13 @@ type Client interface {
 	// to Jira after validating and applying a plan.
 	UpdateIssue(ctx context.Context, key string, issue *schema.Issue) (*schema.Issue, error)
 
+	// FetchTransitions returns the workflow transitions currently available
+	// for the issue.
+	FetchTransitions(ctx context.Context, key string) ([]Transition, error)
+
+	// DoTransition performs the transition with the given id on the issue.
+	DoTransition(ctx context.Context, key, transitionID string) error
+
 	// CreateIssue creates a new issue in the project named by
 	// issue.Identity.Project and returns its new key.
 	CreateIssue(ctx context.Context, issue *schema.Issue) (string, error)

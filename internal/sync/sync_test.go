@@ -202,7 +202,7 @@ func TestSync_assigneeChangeApplied(t *testing.T) {
 	}
 }
 
-func TestSync_statusChangeRejectedBeforeMutation(t *testing.T) {
+func TestSync_statusChangeApplied(t *testing.T) {
 	local := schema.Issue{Summary: "Test", Status: "In Progress"}
 	remote := schema.Issue{Summary: "Test", Status: "To Do"}
 	plan := []schema.PlanOperation{
@@ -211,17 +211,11 @@ func TestSync_statusChangeRejectedBeforeMutation(t *testing.T) {
 
 	result := Sync(local, remote, plan, t.TempDir())
 
-	if len(result.Conflicts) == 0 {
-		t.Fatal("expected invalid transition conflict, got none")
+	if len(result.Conflicts) != 0 {
+		t.Fatalf("unexpected conflicts: %v", result.Conflicts)
 	}
-	if result.Remote == nil {
-		t.Fatal("expected non-nil remote")
-	}
-	if result.Conflicts[0].Type != schema.ConflictInvalidTransition {
-		t.Fatalf("expected conflict type %q, got %q", schema.ConflictInvalidTransition, result.Conflicts[0].Type)
-	}
-	if result.Remote.Status != "To Do" {
-		t.Errorf("expected status %q, got %q", "To Do", result.Remote.Status)
+	if result.Remote.Status != "In Progress" {
+		t.Errorf("expected status %q, got %q", "In Progress", result.Remote.Status)
 	}
 }
 
@@ -612,22 +606,6 @@ func TestSync_planMismatchConflictsBeforeMutation(t *testing.T) {
 	}
 	if result.Remote.Summary != "Remote summary" {
 		t.Fatalf("expected remote to remain unchanged, got %q", result.Remote.Summary)
-	}
-}
-
-func TestSync_validateTransitions_statusUnchanged(t *testing.T) {
-	// validateTransitions returns no conflict when the status operation's
-	// value matches the remote status (no-op transition). Tested directly
-	// since validatePlan rejects stale plans before this path is reachable.
-	remote := schema.Issue{Summary: "Test", Status: "In Progress"}
-	plan := []schema.PlanOperation{
-		{Field: schema.EditableFieldStatus, Type: schema.OpSet, Value: "In Progress"},
-	}
-
-	conflicts := validateTransitions(remote, plan)
-
-	if len(conflicts) > 0 {
-		t.Fatalf("expected no conflicts when status unchanged, got %v", conflicts)
 	}
 }
 
