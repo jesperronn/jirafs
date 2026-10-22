@@ -47,7 +47,7 @@ func TestFetchExportsCustomFieldsProjectAndNames(t *testing.T) {
 	defer srv.Close()
 	c := newCreateClient(srv.URL)
 	ids := []string{"customfield_12601", "customfield_12602", "customfield_12603", "customfield_12604", "customfield_12605", "customfield_12606"}
-	c.SetCustomFields(ids)
+	c.customFields = ids
 	issue, err := c.FetchIssue(context.Background(), "ABC-1")
 	if err != nil {
 		t.Fatal(err)
@@ -131,7 +131,7 @@ func TestSearchExpandsNamesAndExportsCustomFields(t *testing.T) {
 	}))
 	defer srv.Close()
 	c := newCreateClient(srv.URL)
-	c.SetCustomFields([]string{"customfield_12601"})
+	c.customFields = []string{"customfield_12601"}
 	issues, _, err := c.SearchIssues(context.Background(), "my-issues")
 	if err != nil || len(issues) != 1 {
 		t.Fatal(err)

@@ -607,7 +607,7 @@ func TestResolveSyncContext_NoProject(t *testing.T) {
 	}
 }
 
-// TestBuildSyncClient_Success verifies that buildSyncClient
+// TestBuildSyncClient_Success verifies that newJiraClient
 // creates a valid Jira client from settings.
 func TestBuildSyncClient_Success(t *testing.T) {
 	tmpDir := t.TempDir()
@@ -625,16 +625,16 @@ func TestBuildSyncClient_Success(t *testing.T) {
 		},
 	}
 
-	client, err := buildSyncClient(settings, &context.Context{Instance: "default"}, ".")
+	client, err := newJiraClient(settings, &context.Context{Instance: "default"}, ".")
 	if err != nil {
-		t.Fatalf("buildSyncClient: %v", err)
+		t.Fatalf("newJiraClient: %v", err)
 	}
 	if client == nil {
 		t.Fatal("expected non-nil client")
 	}
 }
 
-// TestBuildSyncClient_CredentialError verifies that buildSyncClient
+// TestBuildSyncClient_CredentialError verifies that newJiraClient
 // returns an error when the instance has no credentials configured.
 func TestBuildSyncClient_CredentialError(t *testing.T) {
 	_ = t.TempDir()
@@ -648,7 +648,7 @@ func TestBuildSyncClient_CredentialError(t *testing.T) {
 		},
 	}
 
-	_, err := buildSyncClient(settings, &context.Context{Instance: "default"}, ".")
+	_, err := newJiraClient(settings, &context.Context{Instance: "default"}, ".")
 	if err == nil {
 		t.Fatal("expected error for instance with no credentials")
 	}

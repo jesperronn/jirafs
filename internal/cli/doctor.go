@@ -18,7 +18,7 @@ import (
 var (
 	doctorStdout        io.Writer = os.Stdout
 	doctorStderr        io.Writer = os.Stderr
-	doctorClientFactory           = buildDoctorClient
+	doctorClientFactory           = newJiraClient
 )
 
 var doctorVerbose bool
@@ -160,17 +160,6 @@ func BuildDoctorSnapshot(settings *config.Settings, cwd string) DoctorSnapshot {
 	}
 
 	return dsnap
-}
-
-func buildDoctorClient(settings *config.Settings, projCtx *jcontext.Context, cwd string) (jira.Client, error) {
-	creds, err := settings.ResolveInstanceCredentials(projCtx.Instance)
-	if err != nil {
-		return nil, err
-	}
-	client := jira.NewJiraClient(creds.BaseURL)
-	client.SetCredentials(creds)
-	configureClientFields(client, settings, projCtx.Name)
-	return client, nil
 }
 
 // RunDoctor dispatches the `jirafs doctor` subcommand. It loads settings,
@@ -344,15 +333,6 @@ func projectEpicLinkField(settings *config.Settings, project string) string {
 		return ""
 	}
 	return settings.Projects[project].EpicLinkField
-}
-
-// configureClientFields applies the per-project field settings (epic link and
-// exported custom fields) to client.
-func configureClientFields(client *jira.JiraClient, settings *config.Settings, project string) {
-	client.SetEpicLinkField(jira.ResolveEpicLinkField(projectEpicLinkField(settings, project)))
-	if settings != nil {
-		client.SetCustomFields(settings.Projects[project].CustomFields)
-	}
 }
 
 // epicLinkReport describes the effective epic link field for the Config

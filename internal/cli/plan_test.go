@@ -1084,7 +1084,7 @@ func TestRunPlan_LocalIssueUnparseable(t *testing.T) {
 	}
 }
 
-// TestBuildPlanClient_Success verifies that buildPlanClient
+// TestBuildPlanClient_Success verifies that newJiraClient
 // creates a valid Jira client from settings.
 func TestBuildPlanClient_Success(t *testing.T) {
 	tmpDir := t.TempDir()
@@ -1102,9 +1102,9 @@ func TestBuildPlanClient_Success(t *testing.T) {
 		},
 	}
 
-	client, err := buildPlanClient(settings, &context.Context{Instance: "default"}, ".")
+	client, err := newJiraClient(settings, &context.Context{Instance: "default"}, ".")
 	if err != nil {
-		t.Fatalf("buildPlanClient: %v", err)
+		t.Fatalf("newJiraClient: %v", err)
 	}
 	if client == nil {
 		t.Fatal("expected non-nil client")
@@ -1159,7 +1159,7 @@ func TestResolvePlanContext_NoProject(t *testing.T) {
 	}
 }
 
-// TestBuildPlanClient_CredentialError verifies that buildPlanClient
+// TestBuildPlanClient_CredentialError verifies that newJiraClient
 // returns an error when the instance has no credentials configured.
 func TestBuildPlanClient_CredentialError(t *testing.T) {
 	_ = t.TempDir()
@@ -1173,7 +1173,7 @@ func TestBuildPlanClient_CredentialError(t *testing.T) {
 		},
 	}
 
-	_, err := buildPlanClient(settings, &context.Context{Instance: "default"}, ".")
+	_, err := newJiraClient(settings, &context.Context{Instance: "default"}, ".")
 	if err == nil {
 		t.Fatal("expected error for instance with no credentials")
 	}

@@ -316,7 +316,7 @@ func TestRunExportIssue_MinimalIssue(t *testing.T) {
 	}
 }
 
-// TestBuildExportClient_Success verifies that buildExportClient
+// TestBuildExportClient_Success verifies that newJiraClient
 // creates a valid Jira client from settings.
 func TestBuildExportClient_Success(t *testing.T) {
 	tmpDir := t.TempDir()
@@ -334,9 +334,9 @@ func TestBuildExportClient_Success(t *testing.T) {
 		},
 	}
 
-	client, err := buildExportClient(settings, &context.Context{Instance: "default"}, ".")
+	client, err := newJiraClient(settings, &context.Context{Instance: "default"}, ".")
 	if err != nil {
-		t.Fatalf("buildExportClient: %v", err)
+		t.Fatalf("newJiraClient: %v", err)
 	}
 	if client == nil {
 		t.Fatal("expected non-nil client")
@@ -389,7 +389,7 @@ func TestResolveExportContext_NoProject(t *testing.T) {
 	}
 }
 
-// TestBuildExportClient_CredentialError verifies that buildExportClient
+// TestBuildExportClient_CredentialError verifies that newJiraClient
 // returns an error when the instance has no credentials configured.
 func TestBuildExportClient_CredentialError(t *testing.T) {
 	_ = t.TempDir()
@@ -403,7 +403,7 @@ func TestBuildExportClient_CredentialError(t *testing.T) {
 		},
 	}
 
-	_, err := buildExportClient(settings, &context.Context{Instance: "default"}, ".")
+	_, err := newJiraClient(settings, &context.Context{Instance: "default"}, ".")
 	if err == nil {
 		t.Fatal("expected error for instance with no credentials")
 	}

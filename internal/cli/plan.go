@@ -13,7 +13,6 @@ import (
 	"github.com/jirafs/jirafs/internal/color"
 	"github.com/jirafs/jirafs/internal/config"
 	"github.com/jirafs/jirafs/internal/context"
-	"github.com/jirafs/jirafs/internal/jira"
 	"github.com/jirafs/jirafs/internal/plan"
 	"github.com/jirafs/jirafs/internal/schema"
 )
@@ -21,7 +20,7 @@ import (
 var (
 	planStdout        io.Writer = os.Stdout
 	planStderr        io.Writer = os.Stderr
-	planClientFactory           = buildPlanClient
+	planClientFactory           = newJiraClient
 )
 
 // RunPlan dispatches the `jirafs plan` subcommand. It resolves the project
@@ -314,17 +313,6 @@ func runPlanList(settings *config.Settings, project, cwd string) int {
 	}
 
 	return 0
-}
-
-func buildPlanClient(settings *config.Settings, ctx *context.Context, cwd string) (jira.Client, error) {
-	creds, err := settings.ResolveInstanceCredentials(ctx.Instance)
-	if err != nil {
-		return nil, err
-	}
-	client := jira.NewJiraClient(creds.BaseURL)
-	client.SetCredentials(creds)
-	configureClientFields(client, settings, ctx.Name)
-	return client, nil
 }
 
 // printPlanHelp prints usage information for the plan subcommand.

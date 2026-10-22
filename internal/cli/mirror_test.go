@@ -858,9 +858,9 @@ func TestBuildMirrorClient_Success(t *testing.T) {
 		},
 	}
 
-	client, err := buildMirrorClient(settings, &context.Context{Instance: "default"}, ".")
+	client, err := newJiraClient(settings, &context.Context{Instance: "default"}, ".")
 	if err != nil {
-		t.Fatalf("buildMirrorClient: %v", err)
+		t.Fatalf("newJiraClient: %v", err)
 	}
 	if client == nil {
 		t.Fatal("expected non-nil client")

@@ -19,7 +19,7 @@ import (
 var (
 	exportStdout        io.Writer = os.Stdout
 	exportStderr        io.Writer = os.Stderr
-	exportClientFactory           = buildExportClient
+	exportClientFactory           = newJiraClient
 )
 
 // RunExport dispatches the `jirafs export` subcommand. It supports:
@@ -183,17 +183,6 @@ func resolveExportContext(settings *config.Settings, project, cwd string) (*cont
 		return nil, false
 	}
 	return ctx, true
-}
-
-func buildExportClient(settings *config.Settings, ctx *context.Context, cwd string) (jira.Client, error) {
-	creds, err := settings.ResolveInstanceCredentials(ctx.Instance)
-	if err != nil {
-		return nil, err
-	}
-	client := jira.NewJiraClient(creds.BaseURL)
-	client.SetCredentials(creds)
-	configureClientFields(client, settings, ctx.Name)
-	return client, nil
 }
 
 // printExportHelp prints usage information for the export subcommand.

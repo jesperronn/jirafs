@@ -35,7 +35,7 @@ type MirrorHandler struct {
 var (
 	mirrorStdout          io.Writer = os.Stdout
 	mirrorStderr          io.Writer = os.Stderr
-	mirrorClientFactory             = buildMirrorClient
+	mirrorClientFactory             = newJiraClient
 	archiveServiceFactory           = buildArchiveService
 )
 
@@ -409,17 +409,6 @@ func saveMirrorYAML(path string, m *mirror.Mirror) error {
 		return fmt.Errorf("write mirror file %s: %w", path, err)
 	}
 	return nil
-}
-
-func buildMirrorClient(settings *config.Settings, ctx *context.Context, cwd string) (jira.Client, error) {
-	creds, err := settings.ResolveInstanceCredentials(ctx.Instance)
-	if err != nil {
-		return nil, err
-	}
-	client := jira.NewJiraClient(creds.BaseURL)
-	client.SetCredentials(creds)
-	configureClientFields(client, settings, ctx.Name)
-	return client, nil
 }
 
 func buildArchiveService(settings *config.Settings, ctx *context.Context, cwd string) (archive.Service, error) {

@@ -20,7 +20,7 @@ import (
 var (
 	pushStdout        io.Writer = os.Stdout
 	pushStderr        io.Writer = os.Stderr
-	pushClientFactory           = buildSyncClient
+	pushClientFactory           = newJiraClient
 	pushNow                     = time.Now
 )
 

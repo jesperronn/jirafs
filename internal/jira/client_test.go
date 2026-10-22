@@ -1744,7 +1744,7 @@ func TestFetchIssueRequestsExplicitFieldsAndNormalizesContext(t *testing.T) {
 	defer server.Close()
 
 	client := NewJiraClient(server.URL)
-	client.SetEpicLinkField("customfield_10014")
+	client.epicLinkField = "customfield_10014"
 	issue, err := client.FetchIssue(context.Background(), "SKOLELOGIN-18312")
 	if err != nil {
 		t.Fatal(err)

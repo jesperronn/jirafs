@@ -21,7 +21,7 @@ import (
 var (
 	syncStdout        io.Writer = os.Stdout
 	syncStderr        io.Writer = os.Stderr
-	syncClientFactory           = buildSyncClient
+	syncClientFactory           = newJiraClient
 )
 
 // RunSync dispatches the `jirafs sync` subcommand. When an issue key is
@@ -307,17 +307,6 @@ func resolveSyncContext(settings *config.Settings, resolver *context.Resolver) (
 		return nil, false
 	}
 	return ctx, true
-}
-
-func buildSyncClient(settings *config.Settings, ctx *context.Context, cwd string) (jira.Client, error) {
-	creds, err := settings.ResolveInstanceCredentials(ctx.Instance)
-	if err != nil {
-		return nil, err
-	}
-	client := jira.NewJiraClient(creds.BaseURL)
-	client.SetCredentials(creds)
-	configureClientFields(client, settings, ctx.Name)
-	return client, nil
 }
 
 // printSyncHelp prints usage information for the sync subcommand.

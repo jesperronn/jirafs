@@ -8,14 +8,12 @@ import (
 	"crypto/tls"
 	"encoding/json"
 	"fmt"
-	"github.com/jirafs/jirafs/internal/netguard"
 	"io"
 	"net/http"
 	neturl "net/url"
 	"os"
 	"sort"
 	"strings"
-	"testing"
 
 	"github.com/jirafs/jirafs/internal/config"
 	"github.com/jirafs/jirafs/internal/export"
@@ -241,17 +239,6 @@ func ResolveEpicLinkField(setting string) string {
 	return strings.TrimSpace(setting)
 }
 
-// SetEpicLinkField configures the custom field id used for the epic link.
-func (c *JiraClient) SetEpicLinkField(id string) {
-	c.epicLinkField = id
-}
-
-// SetCustomFields configures the custom field ids fetched and exported into
-// the issue's custom_fields map.
-func (c *JiraClient) SetCustomFields(ids []string) {
-	c.customFields = ids
-}
-
 // issueFields returns the explicit list of fields requested from Jira for
 // both single-issue fetches and searches.
 func (c *JiraClient) issueFields() []string {
@@ -277,21 +264,50 @@ func (c *JiraClient) SetCredentials(creds config.ResolvedInstanceCredentials) {
 	c.credential = creds
 }
 
-// NewJiraClient creates a new JiraClient for the given base URL.
-// The client uses a default HTTP transport with TLS configured to accept
-// any certificate (useful for self-signed certs in dev environments).
-func NewJiraClient(baseURL string) *JiraClient {
-	var rt http.RoundTripper = &http.Transport{
+// Option configures a JiraClient at construction time.
+type Option func(*JiraClient)
+
+// WithTransport sets the HTTP transport used for all requests.
+func WithTransport(rt http.RoundTripper) Option {
+	return func(c *JiraClient) { c.httpClient = &http.Client{Transport: rt} }
+}
+
+// WithEpicLinkField sets the custom field id used for the epic link.
+func WithEpicLinkField(id string) Option {
+	return func(c *JiraClient) { c.epicLinkField = id }
+}
+
+// WithCustomFields sets the custom field ids fetched and exported into the
+// issue's custom_fields map.
+func WithCustomFields(ids []string) Option {
+	return func(c *JiraClient) { c.customFields = ids }
+}
+
+// defaultTransport returns the transport used when WithTransport is absent.
+// Production gets a plain transport that accepts any certificate (useful for
+// self-signed certs in dev environments). If http.DefaultTransport has been
+// replaced by something other than *http.Transport (the test harness wraps it
+// with a loopback-only guard), that replacement is used so the guard applies.
+func defaultTransport() http.RoundTripper {
+	if _, ok := http.DefaultTransport.(*http.Transport); !ok {
+		return http.DefaultTransport
+	}
+	return &http.Transport{
 		TLSClientConfig: &tls.Config{InsecureSkipVerify: true}, //nolint:gosec
 	}
-	if testing.Testing() {
-		rt = netguard.Wrap(rt) // tests may only talk to loopback
-	}
-	return &JiraClient{
+}
+
+// NewJiraClient creates a new JiraClient for the given base URL.
+func NewJiraClient(baseURL string, opts ...Option) *JiraClient {
+	c := &JiraClient{
 		baseURL:       baseURL,
 		epicLinkField: strings.TrimSpace(os.Getenv(EpicLinkFieldEnv)),
-		httpClient:    &http.Client{Transport: rt},
+		httpClient:    &http.Client{Transport: defaultTransport()},
 	}
+	for _, o := range opts {
+		o(c)
+	}
+	return c
 }
 
 // FetchIssue retrieves a single issue by its key from the Jira REST API.
