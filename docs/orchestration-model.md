@@ -186,7 +186,8 @@ Report back with:
 
 ## Integration Rule
 
-Builder-complete does not mean merge-ready.
+Builder-complete does not mean merge-ready. `bin/handoff` only rebases and
+verifies; the orchestrator (or user) performs the merge.
 
 A change becomes merge-ready only after the orchestrator confirms:
 

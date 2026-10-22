@@ -93,6 +93,8 @@ Use the standard handoff shape from
 
 ### Handoff Rules
 
+- `bin/handoff` only rebases the branch onto `main` and runs `bin/verify`; it
+  never merges. The user or orchestrator performs the merge.
 - Do not say "mostly done" without naming the unfinished edge cases.
 - Do not imply verification that was not actually run.
 - If you had to stop before full verification, label the handoff as partial and

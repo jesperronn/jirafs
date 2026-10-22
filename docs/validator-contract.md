@@ -94,7 +94,9 @@ Prefer validator output that names:
 
 ## Builder Reporting Requirement
 
-Every builder handoff must include a validation block with:
+Builders run `bin/handoff` (rebase onto `main` + verify; it never merges) and
+report its final status line. Every builder handoff must include a validation
+block with:
 
 - exact command lines
 - pass or fail result for each command

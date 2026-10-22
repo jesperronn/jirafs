@@ -142,6 +142,9 @@ or update the architecture docs in the same change set.
 
 ## Pre-Merge Checks
 
+`bin/handoff` rebases onto `main` and re-runs `bin/verify` but never merges;
+the user or orchestrator merges afterwards.
+
 Before merge, the change owner must confirm:
 
 - all required checks passed on the final diff

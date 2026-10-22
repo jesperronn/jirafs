@@ -7,6 +7,8 @@
 - The active ralph loop lives in `ralphs/execute-tasks/`; tasks are files
   under `tasks/` and move to `tasks/done/` when complete.
 - Before reporting a task commit ready for integration, run `bin/handoff`.
+  It only rebases the branch onto `main` and runs `bin/verify`; it never
+  merges or moves `main`. The user or orchestrator merges.
 - Report the task filename, commit hash, verify result, and the
   `clean|done|blocked` line from `bin/handoff`.
 - When `jirafs` prints a "useful next step" or similar troubleshooting hint,

@@ -2,113 +2,48 @@
 
 set -euo pipefail
 
-# Hand off the current branch to `main` by fast-forwarding the main ref.
-# Called at the end of one ralph iteration in `ralphs/execute-tasks/`.
+# Prepare the current branch for integration: rebase it onto `main` and run
+# bin/verify. This script NEVER merges, fast-forwards, or updates the main
+# ref; merging is done by the user or orchestrator.
 #
-# Flow:
-#   1. Refuse on dirty worktree, on main itself, or on detached HEAD.
-#   2. Short-circuit if HEAD == main (no work to merge).
-#   3. Acquire a repo-wide lock so parallel worktrees serialize.
-#   4. Try ff-merge via `git update-ref` (no checkout of main needed).
-#   5. On non-ff: rebase main into HEAD; re-run bin/verify; ff-merge again.
-#   6. On rebase conflict: abort the rebase so the worktree returns to a
-#      clean state, then exit with `blocked:`.
-#
-# Output line is the loop's status signal:
-#   clean: no new commits
-#   done: <reason>
-#   blocked: <reason>
-
-LOCK_TIMEOUT_SECS=300
+# Final line is the status signal:
+#   clean: nothing ahead of main
+#   done: rebased onto main at <sha>, verified; ready to merge: <command>
+#   blocked: <reason>   (rebase aborted, worktree left clean)
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "${REPO_ROOT}"
-
-# --- Pre-flight ---------------------------------------------------------
 
 if ! git diff --quiet || ! git diff --cached --quiet; then
   echo "blocked: worktree has uncommitted changes"
   exit 1
 fi
 
-current_branch="$(git symbolic-ref --quiet --short HEAD || true)"
-if [ -z "${current_branch}" ]; then
+branch="$(git symbolic-ref --quiet --short HEAD || true)"
+if [ -z "${branch}" ]; then
   echo "blocked: HEAD is detached"
   exit 1
 fi
-if [ "${current_branch}" = "main" ]; then
+if [ "${branch}" = "main" ]; then
   echo "blocked: refusing to hand off main to itself"
   exit 1
 fi
 
-MAIN_SHA="$(git rev-parse main)"
-HEAD_SHA="$(git rev-parse HEAD)"
-
-if [ "${HEAD_SHA}" = "${MAIN_SHA}" ]; then
-  echo "clean: no new commits"
+if [ "$(git rev-list --count main..HEAD)" = "0" ]; then
+  echo "clean: nothing ahead of main"
   exit 0
 fi
 
-# --- Repo-wide lock -----------------------------------------------------
-#
-# Parallel worktrees share one main ref via the common .git dir, so a
-# mkdir-based lock serializes all handoffs across worktrees.
-
-common_git="$(git rev-parse --git-common-dir)"
-case "${common_git}" in
-  /*) ;;
-  *)  common_git="$(cd "${common_git}" && pwd)" ;;
-esac
-lock_dir="${common_git}/handoff.lock"
-
-waited=0
-while ! mkdir "${lock_dir}" 2>/dev/null; do
-  if [ "${waited}" -ge "${LOCK_TIMEOUT_SECS}" ]; then
-    echo "blocked: timed out after ${LOCK_TIMEOUT_SECS}s waiting for ${lock_dir}"
-    echo "blocked: if no other handoff is running, remove the directory manually" >&2
-    exit 1
-  fi
-  if [ "${waited}" -eq 0 ]; then
-    echo "handoff: another handoff is running — waiting on ${lock_dir}" >&2
-  fi
-  sleep 1
-  waited=$((waited + 1))
-done
-trap 'rmdir "${lock_dir}" 2>/dev/null || true' EXIT
-
-# --- Try ff-merge -------------------------------------------------------
-
-merge_ff() {
-  # Move main to HEAD without checking it out, only if it's a fast-forward.
-  if git merge-base --is-ancestor main HEAD; then
-    git update-ref refs/heads/main HEAD
-    return 0
-  fi
-  return 1
-}
-
-if merge_ff; then
-  echo "done: fast-forward merged to main"
-  exit 0
-fi
-
-# --- Main moved ahead: rebase, re-verify, retry -------------------------
-
-if ! git rebase main; then
+if ! git rebase main >/dev/null 2>&1; then
   git rebase --abort >/dev/null 2>&1 || true
-  echo "blocked: rebase conflict"
+  echo "blocked: rebase onto main conflicted; rebase aborted, tree clean. Resolve with: git rebase main"
   exit 1
 fi
 
 if ! bin/verify; then
-  echo "blocked: bin/verify failed after rebase"
+  echo "blocked: bin/verify failed after rebase onto main; fix and re-run bin/handoff"
   exit 1
 fi
 
-if merge_ff; then
-  echo "done: fast-forward merged to main after rebase"
-  exit 0
-fi
-
-echo "blocked: merge failed after rebase"
-exit 1
+sha="$(git rev-parse --short HEAD)"
+echo "done: rebased onto main at ${sha}, verified; ready to merge: git merge --ff-only ${branch}"

@@ -2,7 +2,8 @@
 
 ## Goal
 
-These packets are the next concrete handoff units for implementation agents.
+These packets are the next concrete handoff units for implementation agents. Agents finish with `bin/handoff`, which rebases
+onto `main` and verifies but never merges.
 
 Each packet is:
 
