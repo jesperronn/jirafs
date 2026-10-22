@@ -168,6 +168,11 @@ func NormalizeContext(issue *schema.Issue, fields map[string]interface{}, epicLi
 			}
 		}
 	}
+	if p, ok := fields["project"].(map[string]interface{}); ok {
+		if k, _ := p["key"].(string); k != "" {
+			issue.Identity.Project = schema.TypedRef{Type: schema.RefProject, Value: k}
+		}
+	}
 	c.Parent = ""
 	if p, ok := fields["parent"].(map[string]interface{}); ok {
 		if k, ok := p["key"].(string); ok {
@@ -202,4 +207,64 @@ func userName(v interface{}) string {
 		}
 	}
 	return ""
+}
+
+// NormalizeCustomFieldValues extracts the listed custom fields from a Jira
+// fields map into issue.CustomFields in the shape drafts use for create:
+// option objects become {value: ...}, strings stay strings, nulls and empty
+// lists are omitted. names (id to display name) is stored read-only in
+// issue.Context.CustomFieldNames for the listed ids.
+func NormalizeCustomFieldValues(issue *schema.Issue, fields map[string]interface{}, ids []string, names map[string]string) {
+	if fields == nil || len(ids) == 0 {
+		return
+	}
+	issue.CustomFields = nil
+	issue.Context.CustomFieldNames = nil
+	for _, id := range ids {
+		if v, ok := normalizeCustomValue(fields[id]); ok {
+			if issue.CustomFields == nil {
+				issue.CustomFields = map[string]interface{}{}
+			}
+			issue.CustomFields[id] = v
+		}
+		if n := names[id]; n != "" {
+			if issue.Context.CustomFieldNames == nil {
+				issue.Context.CustomFieldNames = map[string]string{}
+			}
+			issue.Context.CustomFieldNames[id] = n
+		}
+	}
+}
+
+func normalizeCustomValue(v interface{}) (interface{}, bool) {
+	switch t := v.(type) {
+	case nil:
+		return nil, false
+	case float64:
+		if t == float64(int64(t)) {
+			return int64(t), true
+		}
+		return t, true
+	case []interface{}:
+		out := make([]interface{}, 0, len(t))
+		for _, e := range t {
+			if n, ok := normalizeCustomValue(e); ok {
+				out = append(out, n)
+			}
+		}
+		if len(out) == 0 {
+			return nil, false
+		}
+		return out, true
+	case map[string]interface{}:
+		if val, ok := t["value"].(string); ok {
+			return map[string]interface{}{"value": val}, true
+		}
+		if name, ok := t["name"].(string); ok {
+			return map[string]interface{}{"name": name}, true
+		}
+		return t, true
+	default:
+		return v, true
+	}
 }

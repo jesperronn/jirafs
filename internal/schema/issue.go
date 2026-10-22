@@ -16,6 +16,10 @@ const (
 	EditableFieldFixVersions EditableField = "fix_versions"
 	EditableFieldParent      EditableField = "parent"
 	EditableFieldEpic        EditableField = "epic"
+	EditableFieldPriority    EditableField = "priority"
+	// EditableFieldCustomFields covers the custom_fields map; a plan operation
+	// value is the JSON object of the changed customfield_NNNNN entries.
+	EditableFieldCustomFields EditableField = "custom_fields"
 )
 
 // PermissionCategory represents a permission category for issue fields.
@@ -150,6 +154,9 @@ type IssueContext struct {
 	Components []string
 	Parent     string
 	EpicLink   string
+	// CustomFieldNames maps customfield ids to their Jira display names
+	// (read-only, for discoverability).
+	CustomFieldNames map[string]string
 }
 
 // Comment is a single read-only Jira comment.
@@ -174,8 +181,12 @@ type Issue struct {
 	FixVersions    []string
 	Epic           string
 	LinkedIssues   []LinkedIssue `yaml:"linked_issues,omitempty"`
-	// CustomFields holds customfield_NNNNN values sent on create only.
+	// CustomFields holds customfield_NNNNN values (create and update).
 	CustomFields map[string]interface{}
+	// ClearFields names list fields ("labels", "fixVersions") that were
+	// emptied relative to the base; ToFieldsMap then emits them as [] so the
+	// update clears them. Never rendered or parsed.
+	ClearFields []string
 	// Context is read-only Jira metadata; plan and push ignore it.
 	Context IssueContext
 	// Subtasks lists the issue's sub-tasks. Read-only; plan and push ignore
@@ -223,6 +234,11 @@ func (i Issue) ToFieldsMap() map[string]interface{} {
 	}
 	if len(i.Labels) > 0 {
 		fields["labels"] = i.Labels
+	} else if i.cleared("labels") {
+		fields["labels"] = []string{}
+	}
+	if i.Context.Priority != "" {
+		fields["priority"] = map[string]string{"name": i.Context.Priority}
 	}
 	if i.Assignee != nil {
 		fields["assignee"] = map[string]string{"name": *i.Assignee}
@@ -241,6 +257,8 @@ func (i Issue) ToFieldsMap() map[string]interface{} {
 			versions[idx] = map[string]string{"name": v}
 		}
 		fields["fixVersions"] = versions
+	} else if i.cleared("fixVersions") {
+		fields["fixVersions"] = []map[string]string{}
 	}
 	if len(i.LinkedIssues) > 0 {
 		links := make([]map[string]interface{}, len(i.LinkedIssues))
@@ -258,4 +276,13 @@ func (i Issue) ToFieldsMap() map[string]interface{} {
 	}
 
 	return fields
+}
+
+func (i Issue) cleared(field string) bool {
+	for _, f := range i.ClearFields {
+		if f == field {
+			return true
+		}
+	}
+	return false
 }

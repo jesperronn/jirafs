@@ -161,6 +161,10 @@ func parseFrontmatter(frontmatter string) (*schema.Issue, *schema.ParseError) {
 		}
 	}
 
+	if priority, ok := raw["priority"].(string); ok {
+		issue.Context.Priority = priority
+	}
+
 	cf, cfErr := schema.NormalizeCustomFields(raw["custom_fields"])
 	if cfErr != nil {
 		return nil, &schema.ParseError{Kind: schema.ErrKindInvalidYAML, Msg: cfErr.Error()}

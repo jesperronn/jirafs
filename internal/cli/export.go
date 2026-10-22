@@ -192,7 +192,7 @@ func buildExportClient(settings *config.Settings, ctx *context.Context, cwd stri
 	}
 	client := jira.NewJiraClient(creds.BaseURL)
 	client.SetCredentials(creds)
-	client.SetEpicLinkField(jira.ResolveEpicLinkField(projectEpicLinkField(settings, ctx.Name)))
+	configureClientFields(client, settings, ctx.Name)
 	return client, nil
 }
 

@@ -94,3 +94,10 @@ schema_version: "1.0"
 		assert.Equal(t, "1.0", issue.MachineOwned.SchemaVersion)
 	})
 }
+
+func TestParseDraftPriority(t *testing.T) {
+	issue, err := ParseIssue("---\ntype: story\nsummary: x\npriority: High\n---\n")
+	if err != nil || issue.Context.Priority != "High" {
+		t.Fatalf("%v %+v", err, issue)
+	}
+}

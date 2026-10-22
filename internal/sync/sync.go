@@ -1,6 +1,7 @@
 package sync
 
 import (
+	"encoding/json"
 	"os"
 
 	"github.com/jirafs/jirafs/internal/plan"
@@ -160,6 +161,16 @@ func applyOp(remote *schema.Issue, op schema.PlanOperation) {
 		remote.Description = op.Value
 	case schema.EditableFieldLabels:
 		remote.Labels = splitValues(op.Value)
+		if len(remote.Labels) == 0 {
+			remote.ClearFields = append(remote.ClearFields, "labels")
+		}
+	case schema.EditableFieldPriority:
+		remote.Context.Priority = op.Value
+	case schema.EditableFieldCustomFields:
+		var changed map[string]interface{}
+		if json.Unmarshal([]byte(op.Value), &changed) == nil {
+			remote.CustomFields = schema.MergeCustomFields(remote.CustomFields, changed)
+		}
 	case schema.EditableFieldAssignee:
 		remote.Assignee = strPtr(op.Value)
 	case schema.EditableFieldStatus:
@@ -168,6 +179,9 @@ func applyOp(remote *schema.Issue, op schema.PlanOperation) {
 		remote.Sprint = op.Value
 	case schema.EditableFieldFixVersions:
 		remote.FixVersions = splitValues(op.Value)
+		if len(remote.FixVersions) == 0 {
+			remote.ClearFields = append(remote.ClearFields, "fixVersions")
+		}
 	}
 }
 

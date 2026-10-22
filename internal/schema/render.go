@@ -2,6 +2,7 @@ package schema
 
 import (
 	"fmt"
+	"sort"
 	"strings"
 	"time"
 )
@@ -74,6 +75,18 @@ func RenderIssue(i Issue) string {
 	}
 	if c.EpicLink != "" {
 		sb.WriteString("epic_link: " + quoteScalar(c.EpicLink) + "\n")
+	}
+
+	if len(c.CustomFieldNames) > 0 {
+		ids := make([]string, 0, len(c.CustomFieldNames))
+		for id := range c.CustomFieldNames {
+			ids = append(ids, id)
+		}
+		sort.Strings(ids)
+		sb.WriteString("custom_field_names:\n")
+		for _, id := range ids {
+			sb.WriteString("  " + id + ": " + quoteScalar(c.CustomFieldNames[id]) + "\n")
+		}
 	}
 
 	// 4. Editable fields.

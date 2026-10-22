@@ -310,7 +310,7 @@ func buildPlanClient(settings *config.Settings, ctx *context.Context, cwd string
 	}
 	client := jira.NewJiraClient(creds.BaseURL)
 	client.SetCredentials(creds)
-	client.SetEpicLinkField(jira.ResolveEpicLinkField(projectEpicLinkField(settings, ctx.Name)))
+	configureClientFields(client, settings, ctx.Name)
 	return client, nil
 }
 

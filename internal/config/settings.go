@@ -32,6 +32,9 @@ type Project struct {
 	// EpicLinkField is the Jira custom field id holding the epic link,
 	// e.g. "customfield_10014". Optional.
 	EpicLinkField string `toml:"epic_link_field"`
+	// CustomFields lists customfield_NNNNN ids to fetch and export into the
+	// issue frontmatter custom_fields map. Optional.
+	CustomFields []string `toml:"custom_fields"`
 	// CreateDefaults are customfield_NNNNN values merged under a draft's own
 	// custom_fields when creating issues (push --apply). Optional.
 	CreateDefaults map[string]interface{} `toml:"create_defaults"`
@@ -259,6 +262,7 @@ func (s *Settings) expandPaths() error {
 			LocalDirs:      expandedDirs,
 			DefaultUser:    proj.DefaultUser,
 			EpicLinkField:  proj.EpicLinkField,
+			CustomFields:   proj.CustomFields,
 			CreateDefaults: proj.CreateDefaults,
 		}
 	}

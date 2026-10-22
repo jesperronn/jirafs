@@ -169,7 +169,7 @@ func buildDoctorClient(settings *config.Settings, projCtx *jcontext.Context, cwd
 	}
 	client := jira.NewJiraClient(creds.BaseURL)
 	client.SetCredentials(creds)
-	client.SetEpicLinkField(jira.ResolveEpicLinkField(projectEpicLinkField(settings, projCtx.Name)))
+	configureClientFields(client, settings, projCtx.Name)
 	return client, nil
 }
 
@@ -344,6 +344,15 @@ func projectEpicLinkField(settings *config.Settings, project string) string {
 		return ""
 	}
 	return settings.Projects[project].EpicLinkField
+}
+
+// configureClientFields applies the per-project field settings (epic link and
+// exported custom fields) to client.
+func configureClientFields(client *jira.JiraClient, settings *config.Settings, project string) {
+	client.SetEpicLinkField(jira.ResolveEpicLinkField(projectEpicLinkField(settings, project)))
+	if settings != nil {
+		client.SetCustomFields(settings.Projects[project].CustomFields)
+	}
 }
 
 // epicLinkReport describes the effective epic link field for the Config

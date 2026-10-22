@@ -2,6 +2,7 @@
 package plan
 
 import (
+	"encoding/json"
 	"sort"
 	"strings"
 
@@ -83,7 +84,49 @@ func BuildPlan(local, remote schema.Issue) ([]schema.PlanOperation, []schema.Con
 		})
 	}
 
+	// Compare priority; an empty local priority means "not set locally".
+	if local.Context.Priority != "" && local.Context.Priority != remote.Context.Priority {
+		ops = append(ops, schema.PlanOperation{
+			Field: schema.EditableFieldPriority,
+			Type:  schema.OpSet,
+			Value: local.Context.Priority,
+		})
+	}
+
+	// Compare custom fields: only keys present locally, only when changed.
+	if changed := ChangedCustomFields(local.CustomFields, remote.CustomFields); len(changed) > 0 {
+		if b, err := json.Marshal(changed); err == nil {
+			ops = append(ops, schema.PlanOperation{
+				Field: schema.EditableFieldCustomFields,
+				Type:  schema.OpSet,
+				Value: string(b),
+			})
+		}
+	}
+
 	return ops, conflicts, nil
+}
+
+// ChangedCustomFields returns the entries of local whose JSON form differs
+// from the same key in remote. Nil when nothing changed.
+func ChangedCustomFields(local, remote map[string]interface{}) map[string]interface{} {
+	var out map[string]interface{}
+	for k, lv := range local {
+		lb, _ := json.Marshal(lv)
+		rv, ok := remote[k]
+		rb, _ := json.Marshal(rv)
+		if ok && string(lb) == string(rb) {
+			continue
+		}
+		if !ok && string(lb) == "null" {
+			continue
+		}
+		if out == nil {
+			out = map[string]interface{}{}
+		}
+		out[k] = lv
+	}
+	return out
 }
 
 // labelsToString converts a slice of labels to a comma-separated string.

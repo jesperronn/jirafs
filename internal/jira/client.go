@@ -123,6 +123,7 @@ type jiraIssueResponse struct {
 	ID     string                 `json:"id"`
 	Key    string                 `json:"key"`
 	Fields map[string]interface{} `json:"fields"`
+	Names  map[string]string      `json:"names"`
 }
 
 // searchResponse is the JSON structure returned by the Jira REST API
@@ -132,6 +133,7 @@ type searchResponse struct {
 	MaxResults int                 `json:"maxResults"`
 	Total      int                 `json:"total"`
 	Issues     []jiraIssueResponse `json:"issues"`
+	Names      map[string]string   `json:"names"`
 }
 
 // statusesResponse is the JSON structure returned by the status API.
@@ -219,6 +221,8 @@ type JiraClient struct {
 	// epicLinkField is the custom field id holding the epic link
 	// (e.g. "customfield_10014"); empty when not configured.
 	epicLinkField string
+	// customFields lists extra custom field ids to fetch and export.
+	customFields []string
 }
 
 // EpicLinkFieldEnv names the environment variable that configures the
@@ -240,16 +244,27 @@ func (c *JiraClient) SetEpicLinkField(id string) {
 	c.epicLinkField = id
 }
 
+// SetCustomFields configures the custom field ids fetched and exported into
+// the issue's custom_fields map.
+func (c *JiraClient) SetCustomFields(ids []string) {
+	c.customFields = ids
+}
+
 // issueFields returns the explicit list of fields requested from Jira for
 // both single-issue fetches and searches.
 func (c *JiraClient) issueFields() []string {
 	fields := []string{
 		"summary", "description", "labels", "assignee", "status", "issuetype",
 		"issuelinks", "priority", "reporter", "created", "updated",
-		"components", "parent", "fixVersions", "subtasks",
+		"components", "parent", "fixVersions", "subtasks", "project",
 	}
 	if c.epicLinkField != "" {
 		fields = append(fields, c.epicLinkField)
+	}
+	for _, id := range c.customFields {
+		if id != c.epicLinkField {
+			fields = append(fields, id)
+		}
 	}
 	return fields
 }
@@ -284,7 +299,7 @@ func (c *JiraClient) FetchIssue(ctx context.Context, key string) (*schema.Issue,
 		return nil, NewNotFoundError("empty key")
 	}
 
-	url := fmt.Sprintf("%s/rest/api/2/issue/%s?fields=%s", c.baseURL, key, neturl.QueryEscape(strings.Join(c.issueFields(), ",")))
+	url := fmt.Sprintf("%s/rest/api/2/issue/%s?expand=names&fields=%s", c.baseURL, key, neturl.QueryEscape(strings.Join(c.issueFields(), ",")))
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
 		return nil, NewTransportError("cannot create request: " + err.Error())
@@ -340,6 +355,7 @@ func (c *JiraClient) FetchIssue(ctx context.Context, key string) (*schema.Issue,
 		export.NormalizeIssue(issue, jr.Fields)
 		export.NormalizeLinkedIssues(issue, jr.Fields)
 		export.NormalizeContext(issue, jr.Fields, c.epicLinkField)
+		export.NormalizeCustomFieldValues(issue, jr.Fields, c.customFields, jr.Names)
 	}
 
 	return issue, nil
@@ -380,6 +396,9 @@ func (c *JiraClient) SearchIssues(ctx context.Context, scope string) ([]*schema.
 			"maxResults": pageSize,
 			"fields":     fields,
 			"startAt":    startAt,
+		}
+		if len(c.customFields) > 0 {
+			body["expand"] = []string{"names"}
 		}
 		payload, err := json.Marshal(body)
 		if err != nil {
@@ -448,6 +467,7 @@ func (c *JiraClient) SearchIssues(ctx context.Context, scope string) ([]*schema.
 				export.NormalizeIssue(issue, ir.Fields)
 				export.NormalizeLinkedIssues(issue, ir.Fields)
 				export.NormalizeContext(issue, ir.Fields, c.epicLinkField)
+				export.NormalizeCustomFieldValues(issue, ir.Fields, c.customFields, sr.Names)
 			}
 			issues = append(issues, issue)
 		}

@@ -244,14 +244,15 @@ func ParseIssue(content string) (Issue, *ParseError) {
 
 	// Parse read-only Jira context.
 	var rawContext struct {
-		Status     string   `yaml:"status"`
-		Priority   string   `yaml:"priority"`
-		Reporter   string   `yaml:"reporter"`
-		Created    string   `yaml:"created"`
-		Updated    string   `yaml:"updated"`
-		Components []string `yaml:"components"`
-		Parent     string   `yaml:"parent"`
-		EpicLink   string   `yaml:"epic_link"`
+		Status           string            `yaml:"status"`
+		Priority         string            `yaml:"priority"`
+		Reporter         string            `yaml:"reporter"`
+		Created          string            `yaml:"created"`
+		Updated          string            `yaml:"updated"`
+		Components       []string          `yaml:"components"`
+		Parent           string            `yaml:"parent"`
+		EpicLink         string            `yaml:"epic_link"`
+		CustomFieldNames map[string]string `yaml:"custom_field_names"`
 	}
 	_ = yaml.Unmarshal([]byte(frontmatter), &rawContext)
 	issue.Context = IssueContext{
@@ -259,6 +260,7 @@ func ParseIssue(content string) (Issue, *ParseError) {
 		Reporter: rawContext.Reporter, Created: rawContext.Created,
 		Updated: rawContext.Updated, Components: rawContext.Components,
 		Parent: rawContext.Parent, EpicLink: rawContext.EpicLink,
+		CustomFieldNames: rawContext.CustomFieldNames,
 	}
 
 	// Populate Sections from body when present.

@@ -610,3 +610,27 @@ func TestParseIssue_LegacyLinkedIssueType(t *testing.T) {
 		t.Errorf("LinkedIssues = %+v", got.LinkedIssues)
 	}
 }
+
+func TestCustomFieldNamesAndFieldsMapRoundTrip(t *testing.T) {
+	i := Issue{Summary: "s", Context: IssueContext{Priority: "High", CustomFieldNames: map[string]string{"customfield_2": "B", "customfield_1": "A"}},
+		CustomFields: map[string]interface{}{"customfield_1": "x"}}
+	out := RenderIssue(i)
+	got, err := ParseIssue(out)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Context.CustomFieldNames["customfield_2"] != "B" || got.Context.Priority != "High" || got.CustomFields["customfield_1"] != "x" {
+		t.Errorf("%+v\n%s", got, out)
+	}
+	i.ClearFields = []string{"labels", "fixVersions"}
+	f := i.ToFieldsMap()
+	if l, ok := f["labels"].([]string); !ok || len(l) != 0 {
+		t.Errorf("labels %v", f["labels"])
+	}
+	if _, ok := f["fixVersions"]; !ok {
+		t.Error("fixVersions not emitted")
+	}
+	if f["priority"].(map[string]string)["name"] != "High" {
+		t.Error("priority")
+	}
+}
