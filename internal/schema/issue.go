@@ -183,9 +183,9 @@ type Issue struct {
 	LinkedIssues   []LinkedIssue `yaml:"linked_issues,omitempty"`
 	// CustomFields holds customfield_NNNNN values (create and update).
 	CustomFields map[string]interface{}
-	// ClearFields names list fields ("labels", "fixVersions") that were
-	// emptied relative to the base; ToFieldsMap then emits them as [] so the
-	// update clears them. Never rendered or parsed.
+	// ClearFields names fields changed relative to the base: "labels" and
+	// "fixVersions" emptied (ToFieldsMap then emits [] so the update clears
+	// them) and "priority" changed (UpdateIssue sends priority only then). Never rendered or parsed.
 	ClearFields []string
 	// Context is read-only Jira metadata; plan and push ignore it.
 	Context IssueContext
@@ -286,3 +286,6 @@ func (i Issue) cleared(field string) bool {
 	}
 	return false
 }
+
+// PriorityChanged reports whether sync marked priority as changed.
+func (i Issue) PriorityChanged() bool { return i.cleared("priority") }

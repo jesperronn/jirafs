@@ -17,7 +17,7 @@ func TestApplyOpPriorityCustomFieldsAndClears(t *testing.T) {
 	} {
 		applyOp(&r, op)
 	}
-	if r.Context.Priority != "Low" || len(r.CustomFields) != 2 || len(r.ClearFields) != 2 {
+	if r.Context.Priority != "Low" || len(r.CustomFields) != 2 || len(r.ClearFields) != 3 {
 		t.Errorf("%+v", r)
 	}
 }

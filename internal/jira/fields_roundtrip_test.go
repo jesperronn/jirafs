@@ -143,3 +143,21 @@ func TestSearchExpandsNamesAndExportsCustomFields(t *testing.T) {
 		t.Error("expand missing")
 	}
 }
+
+func TestUpdateSendsPriorityOnlyWhenChanged(t *testing.T) {
+	var bodies []map[string]interface{}
+	var urls []string
+	srv := fieldsServer(t, &bodies, &urls)
+	defer srv.Close()
+	c := newCreateClient(srv.URL)
+	i := &schema.Issue{Summary: "s", Context: schema.IssueContext{Priority: "High"}}
+	_, _ = c.UpdateIssue(context.Background(), "ABC-1", i)
+	i.ClearFields = []string{"priority"}
+	_, _ = c.UpdateIssue(context.Background(), "ABC-1", i)
+	if _, ok := bodies[0]["fields"].(map[string]interface{})["priority"]; ok {
+		t.Error("unchanged priority sent")
+	}
+	if _, ok := bodies[1]["fields"].(map[string]interface{})["priority"]; !ok {
+		t.Error("changed priority not sent")
+	}
+}

@@ -166,6 +166,7 @@ func applyOp(remote *schema.Issue, op schema.PlanOperation) {
 		}
 	case schema.EditableFieldPriority:
 		remote.Context.Priority = op.Value
+		remote.ClearFields = append(remote.ClearFields, "priority")
 	case schema.EditableFieldCustomFields:
 		var changed map[string]interface{}
 		if json.Unmarshal([]byte(op.Value), &changed) == nil {

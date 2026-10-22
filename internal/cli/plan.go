@@ -250,6 +250,9 @@ func runPlanList(settings *config.Settings, project, cwd string) int {
 			continue
 		}
 
+		// Frontmatter status is context; empty means "no change".
+		localIssue.Status = localIssue.Context.Status
+
 		// Fetch the remote issue.
 		client, err := planClientFactory(settings, ctx, cwd)
 		if err != nil {

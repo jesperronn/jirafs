@@ -633,6 +633,9 @@ func (c *JiraClient) UpdateIssue(ctx context.Context, key string, issue *schema.
 	fields := issue.ToFieldsMap()
 	delete(fields, "status")
 	delete(fields, "customfield_sprint")
+	if !issue.PriorityChanged() {
+		delete(fields, "priority")
+	}
 	for k, v := range issue.CustomFields {
 		fields[k] = v
 	}
