@@ -4,6 +4,7 @@ package mirror
 import (
 	"fmt"
 	"strings"
+	"time"
 
 	"gopkg.in/yaml.v3"
 
@@ -114,6 +115,60 @@ type Scope struct {
 	// Project is the project key a component scope belongs to. It is only
 	// used by component scopes.
 	Project string `yaml:"project,omitempty"`
+	// LastSynced is the RFC3339 time a refresh of this scope last finished
+	// without failures. It is the cursor for incremental refreshes.
+	LastSynced string `yaml:"last_synced,omitempty"`
+}
+
+// cursorOverlap is subtracted from the cursor to tolerate clock skew between
+// this machine and Jira.
+const cursorOverlap = time.Minute
+
+// jqlTimeLayout is the date format JQL accepts for "updated >= ...".
+const jqlTimeLayout = "2006/01/02 15:04"
+
+// Cursor returns the parsed LastSynced time. ok is false when no valid
+// cursor is recorded.
+func (s Scope) Cursor() (time.Time, bool) {
+	if s.LastSynced == "" {
+		return time.Time{}, false
+	}
+	t, err := time.Parse(time.RFC3339, s.LastSynced)
+	if err != nil {
+		return time.Time{}, false
+	}
+	return t, true
+}
+
+// SearchJQL returns the JQL a refresh sends: the scope JQL, narrowed to
+// issues updated since the cursor (minus a one minute overlap) when the scope
+// has one. Any trailing ORDER BY clause is kept outside the wrapper.
+func (s Scope) SearchJQL() (string, error) {
+	jql, err := s.JQL()
+	if err != nil {
+		return "", err
+	}
+	cursor, ok := s.Cursor()
+	if !ok {
+		return jql, nil
+	}
+	cond, order := splitOrderBy(jql)
+	since := cursor.Add(-cursorOverlap).Local().Format(jqlTimeLayout)
+	out := "(" + cond + ") AND updated >= \"" + since + "\""
+	if order != "" {
+		out += " " + order
+	}
+	return out, nil
+}
+
+// splitOrderBy separates a trailing ORDER BY clause from the JQL condition.
+func splitOrderBy(jql string) (cond, order string) {
+	lower := strings.ToLower(jql)
+	idx := strings.LastIndex(lower, " order by ")
+	if idx < 0 {
+		return strings.TrimSpace(jql), ""
+	}
+	return strings.TrimSpace(jql[:idx]), strings.TrimSpace(jql[idx:])
 }
 
 // BuiltinScopeJQL returns the JQL for a built-in scope name that works
@@ -200,6 +255,21 @@ type Mirror struct {
 	// at the last export, refresh or sync. status compares it with the local
 	// file to detect that Jira moved on, without any network access.
 	RemoteUpdated map[schema.IssueKey]string `yaml:"remote_updated,omitempty"`
+}
+
+// SetScopeLastSynced records t as the cursor of scope. A scope that is not in
+// the mirror yet (a built-in one) is appended so its cursor persists. The
+// cursor is stored in UTC.
+func (m *Mirror) SetScopeLastSynced(scope Scope, t time.Time) {
+	stamp := t.UTC().Format(time.RFC3339)
+	for i := range m.Scopes {
+		if m.Scopes[i].Name == scope.Name {
+			m.Scopes[i].LastSynced = stamp
+			return
+		}
+	}
+	scope.LastSynced = stamp
+	m.Scopes = append(m.Scopes, scope)
 }
 
 // RemoteUpdatedFor returns the stored remote updated timestamp for key, or "".

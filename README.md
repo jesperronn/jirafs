@@ -54,6 +54,16 @@ to run it for real.
 Scopes live in `<mirror_dir>/mirror.yml`. Refresh one by name with
 `jirafs mirror refresh <scope-name>`.
 
+Refresh is incremental. After a refresh that finishes without failures, the
+scope records `last_synced` (RFC3339) in `mirror.yml`. The next refresh asks
+Jira only for `(<scope jql>) AND updated >= "yyyy/MM/dd HH:mm"` (the cursor
+minus a one minute overlap, in local time; a trailing `ORDER BY` stays outside
+the wrapper) and prints `fetched N, updated M, unchanged K`. Issue files whose
+`updated` already matches Jira are not rewritten, and files with unsynced local
+edits are never overwritten (they are listed with a `jirafs status` hint).
+`--full` ignores the cursor and refetches the whole scope; `--dry-run` never
+moves the cursor; a refresh with failures leaves it unchanged.
+
 ```yaml
 scopes:
   - name: plat

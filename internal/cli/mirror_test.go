@@ -1656,7 +1656,7 @@ scopes:
 
 	fake.SetIssue("TEST-1", &schema.Issue{Identity: schema.IssueIdentity{Key: "TEST-1", Type: "bug"}, Summary: "Has comments"})
 	fake.SetErr("comments", errors.New("nope"))
-	if exit := RunMirror([]string{"refresh", "--project", "test", "my-issues"}); exit != 0 {
+	if exit := RunMirror([]string{"refresh", "--full", "--project", "test", "my-issues"}); exit != 0 {
 		t.Fatalf("exit = %d on comments failure", exit)
 	}
 	if !strings.Contains(stderr.String(), "warning: cannot fetch comments for TEST-1") {

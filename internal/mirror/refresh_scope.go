@@ -19,7 +19,7 @@ func RefreshScope(ctx context.Context, c jira.Client, scope Scope, mirror *Mirro
 		return nil, nil
 	}
 
-	jql, err := scope.JQL()
+	jql, err := scope.SearchJQL()
 	if err != nil {
 		return nil, err
 	}

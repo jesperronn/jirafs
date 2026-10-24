@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"testing"
+	"time"
 
 	"github.com/jirafs/jirafs/internal/jira"
 	"github.com/jirafs/jirafs/internal/schema"
@@ -310,5 +311,51 @@ func TestBuiltinScope(t *testing.T) {
 		if _, ok := BuiltinScope(name); ok {
 			t.Errorf("BuiltinScope(%q) should not exist", name)
 		}
+	}
+}
+
+func TestScopeSearchJQL(t *testing.T) {
+	cursor := time.Date(2026, 3, 4, 12, 5, 0, 0, time.UTC)
+	since := cursor.Add(-time.Minute).Local().Format("2006/01/02 15:04")
+	stamp := cursor.Format(time.RFC3339)
+	tests := []struct {
+		name  string
+		scope Scope
+		want  string
+		fail  bool
+	}{
+		{"no cursor", Scope{Name: "a", Type: ScopeTypeJQL, Target: "assignee = currentUser()"}, "assignee = currentUser()", false},
+		{"bad cursor ignored", Scope{Name: "a", Type: ScopeTypeJQL, Target: "x = 1", LastSynced: "yesterday"}, "x = 1", false},
+		{"jql cursor", Scope{Name: "a", Type: ScopeTypeJQL, Target: "x = 1", LastSynced: stamp}, `(x = 1) AND updated >= "` + since + `"`, false},
+		{"order by kept outside", Scope{Name: "a", Type: ScopeTypeProject, Target: "PLAT", LastSynced: stamp}, `(project = "PLAT") AND updated >= "` + since + `" ORDER BY key`, false},
+		{"lowercase order by", Scope{Name: "a", Type: ScopeTypeJQL, Target: "x = 1 order by created", LastSynced: stamp}, `(x = 1) AND updated >= "` + since + `" order by created`, false},
+		{"invalid scope", Scope{Name: "a", Type: ScopeTypeJQL, Target: " ", LastSynced: stamp}, "", true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := tt.scope.SearchJQL()
+			if (err != nil) != tt.fail {
+				t.Fatalf("err = %v, fail = %v", err, tt.fail)
+			}
+			if got != tt.want {
+				t.Errorf("SearchJQL = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestSetScopeLastSynced(t *testing.T) {
+	ts := time.Date(2026, 3, 4, 12, 5, 0, 0, time.UTC)
+	m := &Mirror{Scopes: []Scope{{Name: "a", Type: ScopeTypeJQL, Target: "x = 1"}}}
+	m.SetScopeLastSynced(m.Scopes[0], ts)
+	if got := m.Scopes[0].LastSynced; got != "2026-03-04T12:05:00Z" {
+		t.Errorf("existing scope LastSynced = %q", got)
+	}
+	m.SetScopeLastSynced(Scope{Name: "b", Type: ScopeTypeJQL, Target: "y = 2"}, ts)
+	if len(m.Scopes) != 2 || m.Scopes[1].LastSynced == "" {
+		t.Errorf("new scope not appended: %+v", m.Scopes)
+	}
+	if c, ok := m.Scopes[1].Cursor(); !ok || !c.Equal(ts) {
+		t.Errorf("Cursor = %v, %v", c, ok)
 	}
 }

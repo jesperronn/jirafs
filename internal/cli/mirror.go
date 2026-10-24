@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/jirafs/jirafs/internal/archive"
 	"github.com/jirafs/jirafs/internal/color"
@@ -32,6 +33,7 @@ type MirrorHandler struct {
 
 var (
 	mirrorStdout          io.Writer = os.Stdout
+	mirrorNow                       = time.Now
 	mirrorStderr          io.Writer = os.Stderr
 	mirrorClientFactory             = newJiraClient
 	archiveServiceFactory           = buildArchiveService
@@ -88,6 +90,7 @@ func runMirrorRefresh(cmdCtx stdcontext.Context, args []string, settings *config
 	projectFlag := fs.String("project", "", "project key or name to refresh")
 	cwdFlag := fs.String("cwd", "", "working directory to use for project resolution")
 	dryRunFlag := fs.Bool("dry-run", false, "list the issue files that would be written; change nothing")
+	fullFlag := fs.Bool("full", false, "ignore the last-sync cursor and refetch every issue of the scope")
 	if err := parseFlags(fs, args); err != nil {
 		return flagError(mirrorStderr, "jirafs mirror refresh", err)
 	}
@@ -125,7 +128,10 @@ func runMirrorRefresh(cmdCtx stdcontext.Context, args []string, settings *config
 		}
 		scope = builtin
 	}
-	jql, err := scope.JQL()
+	if *fullFlag {
+		scope.LastSynced = ""
+	}
+	jql, err := scope.SearchJQL()
 	if err != nil {
 		fmt.Fprintf(mirrorStderr, "jirafs mirror refresh: %v\n", err)
 		return 1
@@ -141,18 +147,20 @@ func runMirrorRefresh(cmdCtx stdcontext.Context, args []string, settings *config
 		return mirrorRefreshDryRun(client, settings, ctx, scopeName, jql)
 	}
 
+	startedAt := mirrorNow()
 	added, err := mirror.RefreshScope(stdcontext.Background(), client, scope, m)
 	if err != nil {
 		fmt.Fprintf(mirrorStderr, "jirafs mirror refresh: %v\n", err)
 		return 1
 	}
 
-	failures, total, err := materializeScopeIssues(cmdCtx, client, settings, ctx, jql)
+	res, err := materializeScopeIssues(cmdCtx, client, settings, ctx, jql)
 	if err != nil {
 		fmt.Fprintf(mirrorStderr, "jirafs mirror refresh: cannot write issue snapshots: %v\n", err)
 		return 1
 	}
 	// Newly added members whose file failed to write are not recorded.
+	failures := res.Failures
 	failedKeys := make(map[schema.IssueKey]bool, len(failures))
 	for _, f := range failures {
 		failedKeys[f.Key] = true
@@ -166,6 +174,16 @@ func runMirrorRefresh(cmdCtx stdcontext.Context, args []string, settings *config
 		kept = append(kept, k)
 	}
 	added = kept
+
+	// writeSyncedIssue recorded remote timestamps on disk; mirror in memory so
+	// saving m below does not discard them.
+	for key, updated := range res.RemoteUpdated {
+		m.SetRemoteUpdated(key, updated)
+	}
+	// The cursor only advances after a refresh without any failure.
+	if len(failures) == 0 {
+		m.SetScopeLastSynced(scope, startedAt)
+	}
 
 	if err := saveMirrorYAML(mirrorPath, m); err != nil {
 		fmt.Fprintf(mirrorStderr, "jirafs mirror refresh: cannot save mirror: %v\n", err)
@@ -183,13 +201,21 @@ func runMirrorRefresh(cmdCtx stdcontext.Context, args []string, settings *config
 			fmt.Fprintf(mirrorStdout, "  %s\n", key)
 		}
 	}
+	summary := fmt.Sprintf("fetched %d, updated %d, unchanged %d", res.Fetched, res.Updated, res.Unchanged)
+	if len(res.LocalEdits) > 0 {
+		summary += fmt.Sprintf(", kept local edits %d", len(res.LocalEdits))
+	}
+	fmt.Fprintf(mirrorStdout, "jirafs mirror refresh: %s\n", summary)
+	for _, key := range res.LocalEdits {
+		fmt.Fprintf(mirrorStderr, "%s: local edits kept, not overwritten (inspect: jirafs status; overwrite: jirafs export issue %s)\n", key, key)
+	}
 	if len(failures) == 0 {
 		return 0
 	}
 	for _, f := range failures {
 		fmt.Fprintf(mirrorStderr, "%s: %s\n", f.Key, f.Reason)
 	}
-	fmt.Fprintf(mirrorStderr, "refreshed %d, failed %d\n", total-len(failures), len(failures))
+	fmt.Fprintf(mirrorStderr, "refreshed %d, failed %d\n", res.Updated, len(failures))
 	fmt.Fprintln(mirrorStderr, "retry each failed issue:")
 	for _, f := range failures {
 		fmt.Fprintf(mirrorStderr, "  jirafs export issue %s\n", f.Key)
@@ -233,25 +259,77 @@ func mirrorRefreshDryRun(client jira.Client, settings *config.Settings, ctx *con
 	return 0
 }
 
-// materializeScopeIssues writes one file per issue matching jql. A failure
-// writing a single issue is recorded and processing continues; only fatal
-// errors (settings, directory creation, search) are returned as err. It
-// returns the per-issue failures and the number of issues attempted.
-func materializeScopeIssues(ctx stdcontext.Context, client jira.Client, settings *config.Settings, projectCtx *context.Context, jql string) ([]refreshFailure, int, error) {
+// refreshResult summarizes one materializeScopeIssues run.
+type refreshResult struct {
+	// Failures are the issues whose file could not be written.
+	Failures []refreshFailure
+	// Fetched is the number of issues the search returned.
+	Fetched int
+	// Updated is the number of issue files written.
+	Updated int
+	// Unchanged is the number of issues whose local file already carries the
+	// remote updated timestamp; they are not rewritten.
+	Unchanged int
+	// LocalEdits are issues with unsynced local edits; they are never
+	// overwritten by a refresh.
+	LocalEdits []schema.IssueKey
+	// RemoteUpdated holds the remote updated timestamp to record per issue.
+	RemoteUpdated map[schema.IssueKey]string
+}
+
+// localIssueState classifies an existing local issue file against the remote
+// updated timestamp.
+type localIssueState int
+
+const (
+	localAbsent localIssueState = iota
+	localStale
+	localCurrent
+	localEdited
+)
+
+// classifyLocalIssue reads dest and reports whether it is missing, stale,
+// already at remoteUpdated, or carries local edits (its content no longer
+// matches its synced_hash).
+func classifyLocalIssue(dest, remoteUpdated string) localIssueState {
+	data, err := os.ReadFile(dest)
+	if err != nil {
+		return localAbsent
+	}
+	doc := string(data)
+	if h := schema.SyncedHash(doc); h != "" && h != schema.ContentHash(doc) {
+		return localEdited
+	}
+	if remoteUpdated == "" {
+		return localStale
+	}
+	local, perr := schema.ParseIssue(doc)
+	if perr == nil && local.Context.Updated == remoteUpdated {
+		return localCurrent
+	}
+	return localStale
+}
+
+// materializeScopeIssues writes one file per issue matching jql. Issues whose
+// local file already has the remote updated timestamp are skipped, and files
+// with local edits are never overwritten. A failure writing a single issue is
+// recorded and processing continues; only fatal errors (settings, directory
+// creation, search) are returned as err.
+func materializeScopeIssues(ctx stdcontext.Context, client jira.Client, settings *config.Settings, projectCtx *context.Context, jql string) (*refreshResult, error) {
 	proj, ok := settings.Projects[projectCtx.Name]
 	if !ok {
-		return nil, 0, fmt.Errorf("project %q not found in settings", projectCtx.Name)
+		return nil, fmt.Errorf("project %q not found in settings", projectCtx.Name)
 	}
 	if len(proj.LocalDirs) == 0 {
-		return nil, 0, fmt.Errorf("project %q has no local_dirs configured", projectCtx.Name)
+		return nil, fmt.Errorf("project %q has no local_dirs configured", projectCtx.Name)
 	}
 	if err := os.MkdirAll(proj.LocalDirs[0], 0o755); err != nil {
-		return nil, 0, fmt.Errorf("create local directory %s: %w", proj.LocalDirs[0], err)
+		return nil, fmt.Errorf("create local directory %s: %w", proj.LocalDirs[0], err)
 	}
 
 	issues, _, err := client.SearchIssues(ctx, jql)
 	if err != nil {
-		return nil, 0, err
+		return nil, err
 	}
 	// Only issues that will actually be written count towards progress.
 	writable := make([]*schema.Issue, 0, len(issues))
@@ -261,34 +339,54 @@ func materializeScopeIssues(ctx stdcontext.Context, client jira.Client, settings
 		}
 	}
 	total := len(writable)
+	res := &refreshResult{Fetched: total, RemoteUpdated: map[schema.IssueKey]string{}}
 	writeMirrorProgress(mirrorStdout, "fetching", 0, total)
 	if total == 0 {
 		writeMirrorProgress(mirrorStdout, "fetched", 0, total)
 		fmt.Fprintln(mirrorStdout)
-		return nil, 0, nil
+		return res, nil
 	}
-	var failures []refreshFailure
 	completed := 0
 	for _, issue := range writable {
+		completed++
+		key := issue.Identity.Key
+		dest := filepath.Join(proj.LocalDirs[0], string(key)+".md")
+		switch classifyLocalIssue(dest, issue.Context.Updated) {
+		case localCurrent:
+			res.Unchanged++
+			writeMirrorProgress(mirrorStdout, "fetching", completed, total)
+			continue
+		case localEdited:
+			res.LocalEdits = append(res.LocalEdits, key)
+			if issue.Context.Updated != "" {
+				res.RemoteUpdated[key] = issue.Context.Updated
+			}
+			writeMirrorProgress(mirrorStdout, "fetching", completed, total)
+			continue
+		}
 		renderIssue := issue
-		fullIssue, err := client.FetchIssue(ctx, string(issue.Identity.Key))
+		fullIssue, err := client.FetchIssue(ctx, string(key))
 		if err == nil && fullIssue != nil && fullIssue.Identity.Key != "" {
 			renderIssue = fullIssue
 		}
 		jira.AttachComments(ctx, client, renderIssue, mirrorStderr)
-		dest := filepath.Join(proj.LocalDirs[0], string(renderIssue.Identity.Key)+".md")
+		dest = filepath.Join(proj.LocalDirs[0], string(renderIssue.Identity.Key)+".md")
 		if err := writeSyncedIssue(dest, projectCtx.MirrorDir, renderIssue); err != nil {
-			failures = append(failures, refreshFailure{
-				Key:    issue.Identity.Key,
+			res.Failures = append(res.Failures, refreshFailure{
+				Key:    key,
 				Reason: fmt.Sprintf("write issue file %s: %v", dest, err),
 			})
+		} else {
+			res.Updated++
+			if renderIssue.Context.Updated != "" {
+				res.RemoteUpdated[renderIssue.Identity.Key] = renderIssue.Context.Updated
+			}
 		}
-		completed++
 		writeMirrorProgress(mirrorStdout, "fetching", completed, total)
 	}
 	writeMirrorProgress(mirrorStdout, "fetched", total, total)
 	fmt.Fprintln(mirrorStdout)
-	return failures, total, nil
+	return res, nil
 }
 
 func writeMirrorProgress(w io.Writer, label string, current, total int) {
@@ -595,7 +693,8 @@ func printMirrorHelp() {
 	fmt.Fprintf(mirrorStdout, "  %s KEY   %s\n", color.Yellow(mirrorStdout, "--project"), color.Dim(mirrorStdout, "project key or name to use"))
 	fmt.Fprintf(mirrorStdout, "  %s DIR   %s\n", color.Yellow(mirrorStdout, "--cwd"), color.Dim(mirrorStdout, "working directory for project resolution"))
 	fmt.Fprintf(mirrorStdout, "  %s         %s\n", color.Yellow(mirrorStdout, "--apply"), color.Dim(mirrorStdout, "actually archive eligible issues"))
-	fmt.Fprintf(mirrorStdout, "  %s       %s\n\n", color.Yellow(mirrorStdout, "--dry-run"), color.Dim(mirrorStdout, "list only; on refresh also list the files that would be written"))
+	fmt.Fprintf(mirrorStdout, "  %s       %s\n", color.Yellow(mirrorStdout, "--dry-run"), color.Dim(mirrorStdout, "list only; on refresh also list the files that would be written"))
+	fmt.Fprintf(mirrorStdout, "  %s          %s\n\n", color.Yellow(mirrorStdout, "--full"), color.Dim(mirrorStdout, "on refresh, ignore the last-sync cursor and refetch every issue"))
 
 	fmt.Fprintf(mirrorStdout, "%s\n", color.Cyan(mirrorStdout, `Run "jirafs mirror <subcommand> --help" for more information about a subcommand.`))
 }
