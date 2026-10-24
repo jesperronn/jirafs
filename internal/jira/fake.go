@@ -18,6 +18,7 @@ type FakeTransport struct {
 	err           error                      // returned when ErrOn is set
 	errOn         string                     // "fetch", "search", or "user"
 	issuesByScope map[string][]*schema.Issue // scope -> issues
+	searches      []string
 	// Registry data for registry refresh tests.
 	comments    map[string][]schema.Comment
 	statuses    []StatusEntry
@@ -90,10 +91,22 @@ func (f *FakeTransport) FetchIssue(_ context.Context, key string) (*schema.Issue
 // configured error if ErrOn == "search". When no explicit issues are set
 // for the scope, it falls back to GenerateScopeIssues for known scopes.
 func (f *FakeTransport) SearchIssues(_ context.Context, scope string) ([]*schema.Issue, int, error) {
-	f.mu.RLock()
-	defer f.mu.RUnlock()
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.searches = append(f.searches, scope)
 	if f.errOn == "search" {
 		return nil, 0, f.err
+	}
+	// The query is JQL; the two built-in scope queries map to their names.
+	switch scope {
+	case "assignee = currentUser()":
+		if _, ok := f.issuesByScope[scope]; !ok {
+			scope = "my-issues"
+		}
+	case "sprint in openSprints()":
+		if _, ok := f.issuesByScope[scope]; !ok {
+			scope = "current-sprint"
+		}
 	}
 	issues := f.issuesByScope[scope]
 	if issues == nil {
@@ -103,6 +116,13 @@ func (f *FakeTransport) SearchIssues(_ context.Context, scope string) ([]*schema
 		}
 	}
 	return issues, len(issues), nil
+}
+
+// Searches returns every query passed to SearchIssues, in call order.
+func (f *FakeTransport) Searches() []string {
+	f.mu.RLock()
+	defer f.mu.RUnlock()
+	return append([]string(nil), f.searches...)
 }
 
 // SetCurrentUser registers a user that CurrentUser will return.

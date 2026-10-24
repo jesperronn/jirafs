@@ -63,9 +63,9 @@ type Client interface {
 	// FetchIssue retrieves a single issue by its key.
 	FetchIssue(ctx context.Context, key string) (*schema.Issue, error)
 
-	// SearchIssues returns issues matching the given scope and the total
+	// SearchIssues returns issues matching the given JQL and the total
 	// number of matching issues reported by Jira.
-	SearchIssues(ctx context.Context, scope string) ([]*schema.Issue, int, error)
+	SearchIssues(ctx context.Context, jql string) ([]*schema.Issue, int, error)
 
 	// FetchComments returns up to limit comments for the issue, newest
 	// first, and the total number of comments Jira reports.
@@ -383,27 +383,14 @@ func (c *JiraClient) FetchIssue(ctx context.Context, key string) (*schema.Issue,
 	return issue, nil
 }
 
-// SearchIssues builds a JQL query for the given scope and POSTs it to the
-// Jira /rest/api/2/search endpoint, returning the matching issues.
-//
-// Supported scopes:
-//
-//	"my-issues"       -> assignee = currentUser()
-//	"current-sprint"  -> sprint in openSprints()
-//
-// Unsupported scopes return a not_found error.
-func (c *JiraClient) SearchIssues(ctx context.Context, scope string) ([]*schema.Issue, int, error) {
+// SearchIssues POSTs the given JQL to the Jira /rest/api/2/search endpoint,
+// returning the matching issues.
+func (c *JiraClient) SearchIssues(ctx context.Context, jql string) ([]*schema.Issue, int, error) {
 	if ctx == nil {
 		ctx = context.Background()
 	}
-	var jql string
-	switch scope {
-	case "my-issues":
-		jql = "assignee = currentUser()"
-	case "current-sprint":
-		jql = "sprint in openSprints()"
-	default:
-		return nil, 0, NewNotFoundError("scope:" + scope)
+	if strings.TrimSpace(jql) == "" {
+		return nil, 0, NewNotFoundError("jql: empty query")
 	}
 
 	url := c.baseURL + "/rest/api/2/search"
@@ -444,7 +431,7 @@ func (c *JiraClient) SearchIssues(ctx context.Context, scope string) ([]*schema.
 
 		if resp.StatusCode == http.StatusNotFound {
 			resp.Body.Close()
-			return nil, 0, NewNotFoundError("search:" + scope)
+			return nil, 0, NewNotFoundError("search:" + jql)
 		}
 		if resp.StatusCode >= 400 && resp.StatusCode < 500 {
 			if resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden {

@@ -826,7 +826,7 @@ func TestSearchIssuesMyIssues(t *testing.T) {
 		},
 	})
 
-	issues, total, err := client.SearchIssues(context.Background(), "my-issues")
+	issues, total, err := client.SearchIssues(context.Background(), "assignee = currentUser()")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -911,7 +911,7 @@ func TestSearchIssuesCurrentSprint(t *testing.T) {
 		},
 	})
 
-	issues, total, err := client.SearchIssues(context.Background(), "current-sprint")
+	issues, total, err := client.SearchIssues(context.Background(), "sprint in openSprints()")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -939,9 +939,9 @@ func TestSearchIssuesCurrentSprint(t *testing.T) {
 	}
 }
 
-func TestSearchIssuesUnknownScope(t *testing.T) {
+func TestSearchIssuesEmptyJQL(t *testing.T) {
 	client := NewJiraClient("https://jira.example.com")
-	_, _, err := client.SearchIssues(context.Background(), "unknown-scope")
+	_, _, err := client.SearchIssues(context.Background(), "  ")
 	if !IsClientError(err, ErrNotFound) {
 		t.Errorf("expected not_found error, got %v", err)
 	}
@@ -965,7 +965,7 @@ func TestSearchIssuesAuthError(t *testing.T) {
 		},
 	})
 
-	_, _, err := client.SearchIssues(context.Background(), "my-issues")
+	_, _, err := client.SearchIssues(context.Background(), "assignee = currentUser()")
 	if !IsClientError(err, ErrAuth) {
 		t.Errorf("expected auth error, got %v", err)
 	}
@@ -979,7 +979,7 @@ func TestSearchIssuesHTTPError(t *testing.T) {
 	defer server.Close()
 
 	client := NewJiraClient(server.URL)
-	_, _, err := client.SearchIssues(context.Background(), "my-issues")
+	_, _, err := client.SearchIssues(context.Background(), "assignee = currentUser()")
 	if !IsClientError(err, ErrHTTP) {
 		t.Errorf("expected http error, got %v", err)
 	}
@@ -989,7 +989,7 @@ func TestSearchIssuesTransportError(t *testing.T) {
 	client := NewJiraClient("http://localhost:1")
 	ctx, cancel := context.WithTimeout(context.Background(), 100*1000000)
 	defer cancel()
-	_, _, err := client.SearchIssues(ctx, "my-issues")
+	_, _, err := client.SearchIssues(ctx, "assignee = currentUser()")
 	if err == nil {
 		t.Fatal("expected error for connection refused")
 	}
@@ -1013,7 +1013,7 @@ func TestSearchIssuesInvalidJSON(t *testing.T) {
 		},
 	})
 
-	_, _, err := client.SearchIssues(context.Background(), "my-issues")
+	_, _, err := client.SearchIssues(context.Background(), "assignee = currentUser()")
 	if !IsClientError(err, ErrUnknown) {
 		t.Errorf("expected unknown error, got %v", err)
 	}
@@ -1037,7 +1037,7 @@ func TestSearchIssuesEmptyBody(t *testing.T) {
 		},
 	})
 
-	_, _, err := client.SearchIssues(context.Background(), "my-issues")
+	_, _, err := client.SearchIssues(context.Background(), "assignee = currentUser()")
 	if !IsClientError(err, ErrUnknown) {
 		t.Errorf("expected unknown error, got %v", err)
 	}
@@ -1067,7 +1067,7 @@ func TestSearchIssuesNoIssuesReturned(t *testing.T) {
 		},
 	})
 
-	issues, total, err := client.SearchIssues(context.Background(), "my-issues")
+	issues, total, err := client.SearchIssues(context.Background(), "assignee = currentUser()")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -1558,7 +1558,7 @@ func TestSearchIssuesNoCredentials(t *testing.T) {
 	client := NewJiraClient(server.URL)
 	// Intentionally NOT calling SetCredentials.
 
-	issues, total, err := client.SearchIssues(context.Background(), "my-issues")
+	issues, total, err := client.SearchIssues(context.Background(), "assignee = currentUser()")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -1591,7 +1591,7 @@ func TestSearchIssuesForbidden(t *testing.T) {
 		},
 	})
 
-	_, _, err := client.SearchIssues(context.Background(), "my-issues")
+	_, _, err := client.SearchIssues(context.Background(), "assignee = currentUser()")
 	if !IsClientError(err, ErrAuth) {
 		t.Errorf("expected auth error for 403, got %v", err)
 	}
@@ -1620,7 +1620,7 @@ func TestSearchIssuesNoCredentialsAuthError(t *testing.T) {
 		},
 	})
 
-	_, _, err := client.SearchIssues(context.Background(), "my-issues")
+	_, _, err := client.SearchIssues(context.Background(), "assignee = currentUser()")
 	if !IsClientError(err, ErrUnknown) {
 		t.Errorf("expected unknown error for auth construction failure, got %v", err)
 	}

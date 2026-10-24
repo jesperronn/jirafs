@@ -2,6 +2,9 @@
 package mirror
 
 import (
+	"fmt"
+	"strings"
+
 	"gopkg.in/yaml.v3"
 
 	"github.com/jirafs/jirafs/internal/schema"
@@ -108,6 +111,55 @@ type Scope struct {
 	// Target is the filter target: a project key, component name, or JQL
 	// string depending on the scope type.
 	Target string `yaml:"target"`
+	// Project is the project key a component scope belongs to. It is only
+	// used by component scopes.
+	Project string `yaml:"project,omitempty"`
+}
+
+// BuiltinScopeJQL returns the JQL for a built-in scope name that works
+// without a matching entry in mirror.yml.
+func BuiltinScopeJQL(name string) (string, bool) {
+	switch name {
+	case "my-issues":
+		return "assignee = currentUser()", true
+	case "current-sprint":
+		return "sprint in openSprints()", true
+	default:
+		return "", false
+	}
+}
+
+// BuiltinScope returns the implicit scope for a built-in name.
+func BuiltinScope(name string) (Scope, bool) {
+	jql, ok := BuiltinScopeJQL(name)
+	if !ok {
+		return Scope{}, false
+	}
+	return Scope{Name: name, Type: ScopeTypeJQL, Target: jql}, true
+}
+
+func jqlQuote(v string) string {
+	return `"` + strings.NewReplacer(`\`, `\\`, `"`, `\"`).Replace(v) + `"`
+}
+
+// JQL builds the JQL query that selects the issues of the scope.
+func (s Scope) JQL() (string, error) {
+	if strings.TrimSpace(s.Target) == "" {
+		return "", fmt.Errorf("scope %q: target must not be empty", s.Name)
+	}
+	switch s.Type {
+	case ScopeTypeProject:
+		return "project = " + jqlQuote(s.Target) + " ORDER BY key", nil
+	case ScopeTypeJQL:
+		return s.Target, nil
+	case ScopeTypeComponent:
+		if strings.TrimSpace(s.Project) == "" {
+			return "", fmt.Errorf("scope %q: component scopes need a project (add \"project: KEY\")", s.Name)
+		}
+		return "project = " + jqlQuote(s.Project) + " AND component = " + jqlQuote(s.Target) + " ORDER BY key", nil
+	default:
+		return "", fmt.Errorf("scope %q: unsupported type %q", s.Name, s.Type)
+	}
 }
 
 // IsZero reports whether s has no identity set.

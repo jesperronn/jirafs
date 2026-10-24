@@ -247,3 +247,68 @@ func TestRefreshScope_error_type_assertion(t *testing.T) {
 		t.Errorf("expected %v, got %v", expectedErr, err)
 	}
 }
+
+func TestRefreshScope_sendsJQLPerScopeType(t *testing.T) {
+	tests := []struct {
+		name  string
+		scope Scope
+		want  string
+	}{
+		{"project", Scope{Name: "plat", Type: ScopeTypeProject, Target: "PLAT"}, `project = "PLAT" ORDER BY key`},
+		{"jql verbatim", Scope{Name: "urgent", Type: ScopeTypeJQL, Target: "priority = Highest ORDER BY created"}, "priority = Highest ORDER BY created"},
+		{"component", Scope{Name: "api", Type: ScopeTypeComponent, Target: "API", Project: "PLAT"}, `project = "PLAT" AND component = "API" ORDER BY key`},
+		{"quotes escaped", Scope{Name: "q", Type: ScopeTypeProject, Target: `A"B`}, `project = "A\"B" ORDER BY key`},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			fake := jira.NewFakeTransport()
+			fake.SetIssuesByScope(tt.want, []*schema.Issue{})
+			if _, err := RefreshScope(context.Background(), fake, tt.scope, &Mirror{}); err != nil {
+				t.Fatalf("RefreshScope: %v", err)
+			}
+			got := fake.Searches()
+			if len(got) != 1 || got[0] != tt.want {
+				t.Fatalf("searches = %q, want [%q]", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestRefreshScope_componentWithoutProjectIsValidationError(t *testing.T) {
+	fake := jira.NewFakeTransport()
+	scope := Scope{Name: "api", Type: ScopeTypeComponent, Target: "API"}
+	if _, err := RefreshScope(context.Background(), fake, scope, &Mirror{}); err == nil {
+		t.Fatal("expected validation error for component scope without project")
+	}
+	if got := fake.Searches(); len(got) != 0 {
+		t.Fatalf("searches = %q, want none", got)
+	}
+}
+
+func TestScopeJQL_errors(t *testing.T) {
+	for _, s := range []Scope{
+		{Name: "a", Type: ScopeTypeProject},
+		{Name: "b", Type: "bogus", Target: "x"},
+	} {
+		if _, err := s.JQL(); err == nil {
+			t.Errorf("JQL(%+v) = nil error, want error", s)
+		}
+	}
+}
+
+func TestBuiltinScope(t *testing.T) {
+	for name, want := range map[string]string{"my-issues": "assignee = currentUser()", "current-sprint": "sprint in openSprints()"} {
+		s, ok := BuiltinScope(name)
+		if !ok {
+			t.Fatalf("BuiltinScope(%q) not found", name)
+		}
+		if got, err := s.JQL(); err != nil || got != want {
+			t.Errorf("JQL(%q) = %q, %v; want %q", name, got, err, want)
+		}
+	}
+	for _, name := range []string{"backlog", "next-sprint", "other"} {
+		if _, ok := BuiltinScope(name); ok {
+			t.Errorf("BuiltinScope(%q) should not exist", name)
+		}
+	}
+}

@@ -18,7 +18,7 @@ type endpointCall struct {
 func endpointCalls() []endpointCall {
 	return []endpointCall{
 		{"FetchIssue", func(c *JiraClient) error { _, err := c.FetchIssue(nil, "A-1"); return err }},
-		{"SearchIssues", func(c *JiraClient) error { _, _, err := c.SearchIssues(nil, "my-issues"); return err }},
+		{"SearchIssues", func(c *JiraClient) error { _, _, err := c.SearchIssues(nil, "assignee = currentUser()"); return err }},
 		{"CurrentUser", func(c *JiraClient) error { _, err := c.CurrentUser(nil); return err }},
 		{"FetchStatuses", func(c *JiraClient) error { _, err := c.FetchStatuses(nil); return err }},
 		{"FetchSprints", func(c *JiraClient) error { _, err := c.FetchSprints(nil, "P"); return err }},
@@ -85,8 +85,8 @@ func TestClientEndpoints_EmptyArgs(t *testing.T) {
 	if _, err := c.UpdateIssue(ctx, "", &schema.Issue{}); !IsClientError(err, ErrNotFound) {
 		t.Errorf("UpdateIssue empty = %v", err)
 	}
-	if _, _, err := c.SearchIssues(ctx, "no-such-scope"); !IsClientError(err, ErrNotFound) {
-		t.Errorf("SearchIssues unknown scope = %v", err)
+	if _, _, err := c.SearchIssues(ctx, ""); !IsClientError(err, ErrNotFound) {
+		t.Errorf("SearchIssues empty jql = %v", err)
 	}
 }
 

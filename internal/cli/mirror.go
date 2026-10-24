@@ -65,7 +65,7 @@ func RunMirror(args []string) int {
 		return runMirrorRefresh(args[1:], settings, resolver)
 	case "archive-sweep":
 		return runMirrorArchiveSweep(args[1:], settings, resolver)
-	case "current-sprint", "my-issues", "backlog", "next-sprint":
+	case "current-sprint", "my-issues":
 		return runMirrorRefresh(append(args[1:], args[0]), settings, resolver)
 	default:
 		fmt.Fprintf(mirrorStderr, "jirafs mirror: unknown subcommand %q. Use --help for usage.\n", args[0])
@@ -119,7 +119,16 @@ func runMirrorRefresh(args []string, settings *config.Settings, resolver *contex
 
 	scope := m.ScopeFor(scopeName)
 	if scope.IsZero() {
-		fmt.Fprintf(mirrorStderr, "jirafs mirror refresh: scope %q not found in mirror\n", scopeName)
+		builtin, ok := mirror.BuiltinScope(scopeName)
+		if !ok {
+			printUnknownScope(scopeName, m)
+			return 1
+		}
+		scope = builtin
+	}
+	jql, err := scope.JQL()
+	if err != nil {
+		fmt.Fprintf(mirrorStderr, "jirafs mirror refresh: %v\n", err)
 		return 1
 	}
 
@@ -130,7 +139,7 @@ func runMirrorRefresh(args []string, settings *config.Settings, resolver *contex
 	}
 
 	if *dryRunFlag {
-		return mirrorRefreshDryRun(client, settings, ctx, scopeName)
+		return mirrorRefreshDryRun(client, settings, ctx, scopeName, jql)
 	}
 
 	added, err := mirror.RefreshScope(stdcontext.Background(), client, scope, m)
@@ -139,7 +148,7 @@ func runMirrorRefresh(args []string, settings *config.Settings, resolver *contex
 		return 1
 	}
 
-	if err := materializeScopeIssues(stdcontext.Background(), client, settings, ctx, scopeName); err != nil {
+	if err := materializeScopeIssues(stdcontext.Background(), client, settings, ctx, jql); err != nil {
 		fmt.Fprintf(mirrorStderr, "jirafs mirror refresh: cannot write issue snapshots: %v\n", err)
 		return 1
 	}
@@ -166,13 +175,13 @@ func runMirrorRefresh(args []string, settings *config.Settings, resolver *contex
 
 // mirrorRefreshDryRun lists the issue files a refresh of scopeName would
 // write, using only read calls, and changes nothing locally or remotely.
-func mirrorRefreshDryRun(client jira.Client, settings *config.Settings, ctx *context.Context, scopeName string) int {
+func mirrorRefreshDryRun(client jira.Client, settings *config.Settings, ctx *context.Context, scopeName, jql string) int {
 	proj, ok := settings.Projects[ctx.Name]
 	if !ok || len(proj.LocalDirs) == 0 {
 		fmt.Fprintf(mirrorStderr, "jirafs mirror refresh: project %q has no local_dirs configured\n", ctx.Name)
 		return 1
 	}
-	issues, _, err := client.SearchIssues(stdcontext.Background(), scopeName)
+	issues, _, err := client.SearchIssues(stdcontext.Background(), jql)
 	if err != nil {
 		fmt.Fprintf(mirrorStderr, "jirafs mirror refresh: %v\n", err)
 		return 1
@@ -194,7 +203,7 @@ func mirrorRefreshDryRun(client jira.Client, settings *config.Settings, ctx *con
 	return 0
 }
 
-func materializeScopeIssues(ctx stdcontext.Context, client jira.Client, settings *config.Settings, projectCtx *context.Context, scopeName string) error {
+func materializeScopeIssues(ctx stdcontext.Context, client jira.Client, settings *config.Settings, projectCtx *context.Context, jql string) error {
 	proj, ok := settings.Projects[projectCtx.Name]
 	if !ok {
 		return fmt.Errorf("project %q not found in settings", projectCtx.Name)
@@ -206,7 +215,7 @@ func materializeScopeIssues(ctx stdcontext.Context, client jira.Client, settings
 		return fmt.Errorf("create local directory %s: %w", proj.LocalDirs[0], err)
 	}
 
-	issues, _, err := client.SearchIssues(ctx, scopeName)
+	issues, _, err := client.SearchIssues(ctx, jql)
 	if err != nil {
 		return err
 	}
@@ -537,8 +546,6 @@ func printMirrorHelp() {
 	fmt.Fprintf(mirrorStderr, "%s:\n", color.BoldGreen(mirrorStderr, "Subcommands"))
 	fmt.Fprintf(mirrorStderr, "  %s  %s\n", color.Blue(mirrorStderr, "current-sprint"), color.Dim(mirrorStderr, "shorthand for \"refresh current-sprint\""))
 	fmt.Fprintf(mirrorStderr, "  %s       %s\n", color.Blue(mirrorStderr, "my-issues"), color.Dim(mirrorStderr, "shorthand for \"refresh my-issues\""))
-	fmt.Fprintf(mirrorStderr, "  %s         %s\n", color.Blue(mirrorStderr, "backlog"), color.Dim(mirrorStderr, "shorthand for \"refresh backlog\""))
-	fmt.Fprintf(mirrorStderr, "  %s     %s\n", color.Blue(mirrorStderr, "next-sprint"), color.Dim(mirrorStderr, "shorthand for \"refresh next-sprint\""))
 	fmt.Fprintf(mirrorStderr, "  %s         %s\n", color.Blue(mirrorStderr, "refresh"), color.Dim(mirrorStderr, "refresh one named live mirror scope"))
 	fmt.Fprintf(mirrorStderr, "  %s   %s\n", color.Blue(mirrorStderr, "archive-sweep"), color.Dim(mirrorStderr, "report archive-eligible issues without mutation"))
 	fmt.Fprintf(mirrorStderr, "  %s            %s\n\n", color.Blue(mirrorStderr, "help"), color.Dim(mirrorStderr, "show this help message"))
@@ -546,8 +553,7 @@ func printMirrorHelp() {
 	fmt.Fprintf(mirrorStderr, "%s:\n", color.BoldGreen(mirrorStderr, "Live mirror scopes"))
 	fmt.Fprintf(mirrorStderr, "  %s  %s\n", color.Magenta(mirrorStderr, "current-sprint"), color.Dim(mirrorStderr, "active sprint issues"))
 	fmt.Fprintf(mirrorStderr, "  %s       %s\n", color.Magenta(mirrorStderr, "my-issues"), color.Dim(mirrorStderr, "issues assigned to the current user"))
-	fmt.Fprintf(mirrorStderr, "  %s         %s\n", color.Magenta(mirrorStderr, "backlog"), color.Dim(mirrorStderr, "bounded backlog window"))
-	fmt.Fprintf(mirrorStderr, "  %s     %s\n\n", color.Magenta(mirrorStderr, "next-sprint"), color.Dim(mirrorStderr, "next planned sprint when configured"))
+	fmt.Fprintf(mirrorStderr, "  %s  %s\n\n", color.Magenta(mirrorStderr, "<name>"), color.Dim(mirrorStderr, "any scope (project, component or jql) defined in mirror.yml"))
 
 	fmt.Fprintf(mirrorStderr, "%s:\n", color.BoldGreen(mirrorStderr, "Flags"))
 	fmt.Fprintf(mirrorStderr, "  %s KEY   %s\n", color.Yellow(mirrorStderr, "--project"), color.Dim(mirrorStderr, "project key or name to use"))
@@ -568,17 +574,34 @@ func printMirrorRefreshHelp() {
 	fmt.Fprintf(mirrorStderr, "%s:\n", color.BoldGreen(mirrorStderr, "Live mirror scopes"))
 	fmt.Fprintf(mirrorStderr, "  %s\n", color.Magenta(mirrorStderr, "current-sprint"))
 	fmt.Fprintf(mirrorStderr, "  %s\n", color.Magenta(mirrorStderr, "my-issues"))
-	fmt.Fprintf(mirrorStderr, "  %s\n", color.Magenta(mirrorStderr, "backlog"))
-	fmt.Fprintf(mirrorStderr, "  %s\n\n", color.Magenta(mirrorStderr, "next-sprint"))
+	fmt.Fprintf(mirrorStderr, "  %s\n", color.Magenta(mirrorStderr, "<name> (any scope in mirror.yml)"))
+	fmt.Fprintln(mirrorStderr)
 
 	fmt.Fprintf(mirrorStderr, "%s:\n", color.BoldGreen(mirrorStderr, "Examples"))
 	fmt.Fprintf(mirrorStderr, "  %s\n", color.Cyan(mirrorStderr, "jirafs mirror my-issues"))
 	fmt.Fprintf(mirrorStderr, "  %s\n", color.Cyan(mirrorStderr, "jirafs mirror refresh my-issues"))
-	fmt.Fprintf(mirrorStderr, "  %s\n", color.Cyan(mirrorStderr, "jirafs mirror next-sprint"))
 	fmt.Fprintf(mirrorStderr, "  %s\n\n", color.Cyan(mirrorStderr, "jirafs mirror refresh current-sprint"))
 
 	fmt.Fprintf(mirrorStderr, "%s:\n", color.BoldGreen(mirrorStderr, "Flags"))
 	fmt.Fprintf(mirrorStderr, "  %s KEY   %s\n", color.Yellow(mirrorStderr, "--project"), color.Dim(mirrorStderr, "project key or name to use"))
 	fmt.Fprintf(mirrorStderr, "  %s DIR   %s\n", color.Yellow(mirrorStderr, "--cwd"), color.Dim(mirrorStderr, "working directory for project resolution"))
 	fmt.Fprintf(mirrorStderr, "  %s          %s\n", color.Yellow(mirrorStderr, "--help"), color.Dim(mirrorStderr, "show this help message"))
+}
+
+// printUnknownScope reports an unknown scope name, listing the configured
+// scope names and a copy-pasteable mirror.yml example for adding one.
+func printUnknownScope(name string, m *mirror.Mirror) {
+	fmt.Fprint(mirrorStderr, unknownScopeMessage(name, m))
+}
+
+func unknownScopeMessage(name string, m *mirror.Mirror) string {
+	var b strings.Builder
+	fmt.Fprintf(&b, "jirafs mirror refresh: scope %q not found in mirror\n", name)
+	names := []string{"my-issues (built-in)", "current-sprint (built-in)"}
+	for _, s := range m.Scopes {
+		names = append(names, s.Name)
+	}
+	fmt.Fprintf(&b, "available scopes: %s\n", strings.Join(names, ", "))
+	fmt.Fprintf(&b, "to add one, append this to mirror.yml and re-run:\n\nscopes:\n  - name: %s\n    type: jql\n    target: project = PLAT AND status != Done ORDER BY key\n", name)
+	return b.String()
 }

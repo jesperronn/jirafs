@@ -310,12 +310,111 @@ func TestRunMirrorRefresh_ScopeNotFound(t *testing.T) {
 	defer os.Setenv("HOME", oldHome)
 	_, stderr := withMirrorTestIO(t)
 
-	exit := RunMirror([]string{"refresh", "--project", "test", "my-issues"})
+	exit := RunMirror([]string{"refresh", "--project", "test", "no-such-scope"})
 	if exit != 1 {
 		t.Fatalf("RunMirror(refresh unknown scope) = %d, want 1", exit)
 	}
-	if !strings.Contains(stderr.String(), `scope "my-issues" not found`) {
+	if !strings.Contains(stderr.String(), `scope "no-such-scope" not found`) {
 		t.Fatalf("stderr = %q, want scope not found", stderr.String())
+	}
+}
+
+func TestRunMirrorRefresh_UnknownScopeListsConfiguredNames(t *testing.T) {
+	tmpDir := t.TempDir()
+	homeDir := writeSettings(t, tmpDir)
+	writeMirrorWithScopes(t, tmpDir, `
+scopes:
+  - name: plat
+    type: project
+    target: PLAT
+  - name: urgent
+    type: jql
+    target: priority = Highest
+`)
+	oldHome := os.Getenv("HOME")
+	os.Setenv("HOME", homeDir)
+	defer os.Setenv("HOME", oldHome)
+	_, stderr := withMirrorTestIO(t)
+
+	if exit := RunMirror([]string{"refresh", "--project", "test", "nope"}); exit != 1 {
+		t.Fatalf("exit = %d, want 1", exit)
+	}
+	out := stderr.String()
+	for _, want := range []string{"plat", "urgent", "my-issues", "current-sprint", "scopes:\n  - name: nope\n    type: jql\n    target: "} {
+		if !strings.Contains(out, want) {
+			t.Errorf("stderr missing %q:\n%s", want, out)
+		}
+	}
+}
+
+func TestRunMirrorRefresh_ProjectScopeSendsJQL(t *testing.T) {
+	tmpDir := t.TempDir()
+	homeDir := writeSettings(t, tmpDir)
+	writeMirrorWithScopes(t, tmpDir, `
+scopes:
+  - name: plat
+    type: project
+    target: PLAT
+`)
+	oldHome := os.Getenv("HOME")
+	os.Setenv("HOME", homeDir)
+	defer os.Setenv("HOME", oldHome)
+
+	fake := jira.NewFakeTransport()
+	fake.SetIssuesByScope(`project = "PLAT" ORDER BY key`, []*schema.Issue{})
+	withMirrorClientFactory(t, func(*config.Settings, *context.Context, string) (jira.Client, error) {
+		return fake, nil
+	})
+	withMirrorTestIO(t)
+
+	if exit := RunMirror([]string{"refresh", "--project", "test", "plat"}); exit != 0 {
+		t.Fatalf("exit = %d, want 0", exit)
+	}
+	got := fake.Searches()
+	if len(got) == 0 || got[0] != `project = "PLAT" ORDER BY key` {
+		t.Fatalf("searches = %q, want project JQL first", got)
+	}
+}
+
+func TestRunMirrorRefresh_BuiltinScopeWithoutMirrorEntry(t *testing.T) {
+	tmpDir := t.TempDir()
+	homeDir := writeSettings(t, tmpDir)
+	writeMirror(t, tmpDir)
+	oldHome := os.Getenv("HOME")
+	os.Setenv("HOME", homeDir)
+	defer os.Setenv("HOME", oldHome)
+
+	fake := jira.NewFakeTransport()
+	withMirrorClientFactory(t, func(*config.Settings, *context.Context, string) (jira.Client, error) {
+		return fake, nil
+	})
+	withMirrorTestIO(t)
+
+	if exit := RunMirror([]string{"refresh", "--project", "test", "current-sprint"}); exit != 0 {
+		t.Fatalf("exit = %d, want 0", exit)
+	}
+	if got := fake.Searches(); len(got) == 0 || got[0] != "sprint in openSprints()" {
+		t.Fatalf("searches = %q, want built-in sprint JQL", got)
+	}
+}
+
+func TestMirrorHelpListsOnlySupportedScopes(t *testing.T) {
+	_, stderr := withMirrorTestIO(t)
+	printMirrorHelp()
+	printMirrorRefreshHelp()
+	out := stderr.String()
+	for _, banned := range []string{"backlog", "next-sprint"} {
+		if strings.Contains(out, banned) {
+			t.Errorf("help mentions unsupported scope %q:\n%s", banned, out)
+		}
+	}
+	for _, want := range []string{"my-issues", "current-sprint"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("help missing %q", want)
+		}
+	}
+	if exit := RunMirror([]string{"backlog"}); exit != 1 {
+		t.Errorf("RunMirror(backlog) = %d, want 1 (unknown subcommand)", exit)
 	}
 }
 

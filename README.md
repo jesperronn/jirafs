@@ -39,6 +39,28 @@ jirafs plan PLAT-123
 jirafs sync PLAT-123
 ```
 
+## Mirror scopes
+
+Scopes live in `<mirror_dir>/mirror.yml`. Refresh one by name with
+`jirafs mirror refresh <scope-name>`.
+
+```yaml
+scopes:
+  - name: plat
+    type: project        # project = "PLAT" ORDER BY key
+    target: PLAT
+  - name: urgent
+    type: jql            # target is sent to Jira verbatim
+    target: project = PLAT AND priority = Highest ORDER BY created
+  - name: plat-api
+    type: component      # needs "project"; project = "PLAT" AND component = "API"
+    project: PLAT
+    target: API
+```
+
+`my-issues` and `current-sprint` also work without a `mirror.yml` entry.
+Unknown scope names print the configured names and an example to add.
+
 ## Current Status
 
 What works today:
