@@ -195,11 +195,13 @@ func runPullIssue(cmdCtx stdcontext.Context, arg string, settings *config.Settin
 		fmt.Fprintf(pullStderr, "jirafs pull: create local directory %s: %v\n", proj.LocalDirs[0], err)
 		return 1
 	}
+	gitState := beginPullGit(ctx.MirrorDir, dryRun, pullStderr)
 	if err := writeSyncedIssue(dest, ctx.MirrorDir, issue); err != nil {
 		fmt.Fprintf(pullStderr, "jirafs pull: write %s: %v\n", dest, err)
 		return 1
 	}
 	fmt.Fprintf(pullStdout, "wrote %s → %s\n", key, dest)
+	gitState.commit(pullGitCommit{Label: key, Host: hostOf(settings.Instances[ctx.Instance].BaseURL), Written: map[string]schema.IssueKey{dest: schema.IssueKey(key)}}, pullNow(), pullStdout, pullStderr)
 	return 0
 }
 
@@ -231,6 +233,7 @@ func runPullScope(cmdCtx stdcontext.Context, client jira.Client, settings *confi
 		return 1
 	}
 
+	gitState := beginPullGit(ctx.MirrorDir, dryRun, pullStderr)
 	res, err := materializeScopeIssues(cmdCtx, client, settings, ctx, jql)
 	if err != nil {
 		fmt.Fprintf(pullStderr, "jirafs pull: cannot write issue snapshots: %v\n", err)
@@ -286,6 +289,7 @@ func runPullScope(cmdCtx stdcontext.Context, client jira.Client, settings *confi
 	for _, key := range res.LocalEdits {
 		fmt.Fprintf(pullStderr, "%s: local edits kept, not overwritten (inspect: jirafs status; overwrite: jirafs pull %s)\n", key, key)
 	}
+	gitState.commit(pullGitCommit{Label: scopeName, Scope: true, Host: hostOf(settings.Instances[ctx.Instance].BaseURL), Written: res.Written}, pullNow(), pullStdout, pullStderr)
 	if len(failures) == 0 {
 		return 0
 	}
@@ -349,6 +353,8 @@ type pullResult struct {
 	// LocalEdits are issues with unsynced local edits; they are never
 	// overwritten by a refresh.
 	LocalEdits []schema.IssueKey
+	// Written maps every file this run wrote to its issue key.
+	Written map[string]schema.IssueKey
 	// RemoteUpdated holds the remote updated timestamp to record per issue.
 	RemoteUpdated map[schema.IssueKey]string
 }
@@ -415,7 +421,7 @@ func materializeScopeIssues(ctx stdcontext.Context, client jira.Client, settings
 		}
 	}
 	total := len(writable)
-	res := &pullResult{Fetched: total, RemoteUpdated: map[schema.IssueKey]string{}}
+	res := &pullResult{Fetched: total, RemoteUpdated: map[schema.IssueKey]string{}, Written: map[string]schema.IssueKey{}}
 	writeMirrorProgress(pullStdout, "fetching", 0, total)
 	if total == 0 {
 		writeMirrorProgress(pullStdout, "fetched", 0, total)
@@ -454,6 +460,7 @@ func materializeScopeIssues(ctx stdcontext.Context, client jira.Client, settings
 			})
 		} else {
 			res.Updated++
+			res.Written[dest] = renderIssue.Identity.Key
 			if renderIssue.Context.Updated != "" {
 				res.RemoteUpdated[renderIssue.Identity.Key] = renderIssue.Context.Updated
 			}

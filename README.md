@@ -426,3 +426,22 @@ repo, including a parent repo, is reused and init says which), and appends
 `.gitignore` (an existing `.gitignore` is appended to, never overwritten).
 Re-running is idempotent. Without git on PATH, init fails with an install hint;
 a commit without `user.name`/`user.email` hints at `git config --global`.
+
+### Auto-commit after `pull`
+
+With `git: true`, every real `jirafs pull` (not `--dry-run`) commits the files
+it wrote with the subject `sync from <host> at <RFC3339 UTC>` and a body
+listing the scope (or issue key) and `changed: KEY, KEY` (plus `archived:` and
+`moved:` lines when the pull archived or moved issues). Only those exact
+paths are staged, never `git add -A`, so unrelated dirty files stay untouched
+and unstaged. A pull that changes nothing makes no commit.
+
+jirafs never commits your work implicitly: a file that already has uncommitted
+changes is still written by the pull, but is left out of the sync commit and
+reported as `left uncommitted: KEY (local edits)`. Review and commit it
+yourself. Paths outside the mirror directory are never committed.
+
+The pull itself always succeeds. The commit is skipped with a message on a
+detached HEAD (`git switch main`), while a rebase or merge is in progress, or
+when the index is locked. If the commit fails, jirafs prints
+`pull ok, git commit failed: ...` followed by `git -C <dir> status`.
