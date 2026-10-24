@@ -208,7 +208,7 @@ func TestRunPull_FailureKeepsCursor(t *testing.T) {
 	}
 }
 
-func TestRunPull_KeepsLocalEdits(t *testing.T) {
+func TestRunPull_KeepsLocalEditsWhenRemoteUnchanged(t *testing.T) {
 	e := newIncrEnv(t, "")
 	if exit := e.refresh(t); exit != 0 {
 		t.Fatalf("first refresh exit = %d, stderr = %q", exit, e.stderr.String())
@@ -225,9 +225,6 @@ func TestRunPull_KeepsLocalEdits(t *testing.T) {
 	if err := os.WriteFile(p, []byte(edited), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	// Jira moved on for TEST-1: the remote updated timestamp differs.
-	e.rec.issues[0].Context.Updated = "2026-01-02T09:59:00.000+0000"
-
 	if exit := e.refresh(t, "--full"); exit != 0 {
 		t.Fatalf("second refresh exit = %d, stderr = %q", exit, e.stderr.String())
 	}
@@ -241,10 +238,10 @@ func TestRunPull_KeepsLocalEdits(t *testing.T) {
 	if !strings.Contains(e.stdout.String(), "kept local edits 1") {
 		t.Errorf("stdout = %q, want kept local edits summary", e.stdout.String())
 	}
-	if !strings.Contains(e.stderr.String(), "TEST-1: local edits kept") || !strings.Contains(e.stderr.String(), "jirafs status") {
+	if !strings.Contains(e.stderr.String(), "TEST-1: local edits kept") || !strings.Contains(e.stderr.String(), "jirafs diff TEST-1") {
 		t.Errorf("stderr = %q, want local edits hint", e.stderr.String())
 	}
-	if !strings.Contains(e.mirrorYAML(t), "2026-01-02T09:59:00.000+0000") {
+	if !strings.Contains(e.mirrorYAML(t), "2026-01-01T09:00:00.000+0000") {
 		t.Errorf("remote_updated not recorded for kept issue:\n%s", e.mirrorYAML(t))
 	}
 }

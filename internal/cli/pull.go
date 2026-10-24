@@ -211,12 +211,24 @@ func runPullIssue(cmdCtx stdcontext.Context, arg string, settings *config.Settin
 		return 1
 	}
 	gitState := beginPullGit(ctx.MirrorDir, dryRun, pullStderr)
-	if err := writeSyncedIssue(dest, ctx.MirrorDir, issue); err != nil {
-		fmt.Fprintf(pullStderr, "jirafs pull: write %s: %v\n", dest, err)
+	written := map[string]schema.IssueKey{}
+	handled, clean, err := pullMergeSingle(dest, ctx.MirrorDir, issue)
+	if err != nil {
+		fmt.Fprintf(pullStderr, "jirafs pull: merge %s: %v\n", dest, err)
 		return 1
 	}
-	fmt.Fprintf(pullStdout, "wrote %s → %s\n", key, dest)
-	gitState.commit(pullGitCommit{Label: key, Host: hostOf(settings.Instances[ctx.Instance].BaseURL), Written: map[string]schema.IssueKey{dest: schema.IssueKey(key)}}, pullNow(), pullStdout, pullStderr)
+	if clean {
+		written[dest] = schema.IssueKey(key)
+	}
+	if !handled {
+		if err := writeSyncedIssue(dest, ctx.MirrorDir, issue); err != nil {
+			fmt.Fprintf(pullStderr, "jirafs pull: write %s: %v\n", dest, err)
+			return 1
+		}
+		fmt.Fprintf(pullStdout, "wrote %s → %s\n", key, dest)
+		written[dest] = schema.IssueKey(key)
+	}
+	gitState.commit(pullGitCommit{Label: key, Host: hostOf(settings.Instances[ctx.Instance].BaseURL), Written: written}, pullNow(), pullStdout, pullStderr)
 	return 0
 }
 
@@ -305,9 +317,13 @@ func runPullScope(cmdCtx stdcontext.Context, client jira.Client, settings *confi
 	if len(res.LocalEdits) > 0 {
 		summary += fmt.Sprintf(", kept local edits %d", len(res.LocalEdits))
 	}
+	summary += res.Merges.summary()
 	fmt.Fprintf(pullStdout, "jirafs pull: %s\n", summary)
+	for _, line := range res.Merges.Lines {
+		fmt.Fprintln(pullStdout, line)
+	}
 	for _, key := range res.LocalEdits {
-		fmt.Fprintf(pullStderr, "%s: local edits kept, not overwritten (inspect: jirafs status; overwrite: jirafs pull %s)\n", key, key)
+		fmt.Fprintf(pullStderr, "%s: local edits kept, remote unchanged (inspect: jirafs diff %s)\n", key, key)
 	}
 	gitState.commit(*pc, pullNow(), pullStdout, pullStderr)
 	if len(failures) == 0 {
@@ -380,9 +396,12 @@ type pullResult struct {
 	// Unchanged is the number of issues whose local file already carries the
 	// remote updated timestamp; they are not rewritten.
 	Unchanged int
-	// LocalEdits are issues with unsynced local edits; they are never
-	// overwritten by a refresh.
+	// LocalEdits are issues with unsynced local edits whose remote has not
+	// changed; a refresh leaves them untouched.
 	LocalEdits []schema.IssueKey
+	// Merges are the outcomes of merging remote changes into locally edited
+	// files.
+	Merges pullMerges
 	// Written maps every file this run wrote to its issue key.
 	Written map[string]schema.IssueKey
 	// RemoteUpdated holds the remote updated timestamp to record per issue.
@@ -472,10 +491,7 @@ func materializeScopeIssues(ctx stdcontext.Context, client jira.Client, settings
 			writeMirrorProgress(pullStdout, "fetching", completed, total)
 			continue
 		case localEdited:
-			res.LocalEdits = append(res.LocalEdits, key)
-			if issue.Context.Updated != "" {
-				res.RemoteUpdated[key] = issue.Context.Updated
-			}
+			mergeEditedScopeIssue(ctx, client, projectCtx, issue, dest, res)
 			writeMirrorProgress(pullStdout, "fetching", completed, total)
 			continue
 		}

@@ -115,6 +115,28 @@ moved PLAT-9 -> PLAT-12: jirafs pull PLAT-12
 
 `--dry-run` prints the same lines prefixed `would`.
 
+## Merging local edits on `pull`
+
+A file with unsynced local edits is never overwritten by `pull`. When the
+remote changed since the last pull, jirafs merges it against the base snapshot
+field by field: a field changed only remotely is taken, a field changed only
+locally is kept, and a description edited in both places is merged by line.
+`pull` prints one line per issue:
+
+```text
+merged PLAT-1 (backup: .jirafs/backup/PLAT-1-20260102T103000Z.md)
+conflict PLAT-2 summary (backup: ...; review: jirafs diff PLAT-2)
+```
+
+A field changed on both sides to different values (or overlapping description
+lines) is conflicted: the file keeps the local value, the remote value goes
+into the frontmatter as `conflicts: [{field, remote, base}]`, and the base is
+not advanced for that field so the next pull reproduces the conflict. Without a
+base snapshot every differing field is conflicted. The merged file still counts
+as locally modified. Before any merge or conflict the local file is saved to
+`.jirafs/backup/KEY-<timestamp>.md`, so no local edit is lost. If the remote has
+not changed since the last pull, the edited file is left as it is.
+
 ## Current Status
 
 What works today:

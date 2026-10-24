@@ -71,7 +71,7 @@ var commandDocs = []CommandDoc{
 			Description: []string{
 				"Fetches issues from Jira into the local mirror.",
 				"KEY (PROJ-123, or a Jira URL) pulls that one issue to <local_dirs[0]>/<KEY>.md.",
-				"A scope name from mirror.yml (or the built-ins my-issues and current-sprint) is refreshed incrementally; files with local edits are kept.",
+				"A scope name from mirror.yml (or the built-ins my-issues and current-sprint) is refreshed incrementally; files with local edits are three-way merged with the remote (conflicting fields keep the local value; the pre-merge file is saved under .jirafs/backup).",
 				"With no argument, every scope configured in mirror.yml is pulled.",
 			},
 			Sections: []UsageSection{

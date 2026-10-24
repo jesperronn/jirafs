@@ -120,3 +120,35 @@ func StripVolatile(doc string) string {
 	sb.WriteString(body)
 	return sb.String()
 }
+
+// StampSyncedHashAs is StampSyncedHash with an explicit hash, used when a file
+// deliberately differs from the content the hash was computed for (a merged
+// file that still carries unsynced local edits).
+func StampSyncedHashAs(doc, hash string) string {
+	front, body, ok := splitDocument(doc)
+	if !ok {
+		return doc
+	}
+	var sb strings.Builder
+	sb.WriteString("---\n")
+	for _, l := range front {
+		if !strings.HasPrefix(l, SyncedHashField+":") {
+			sb.WriteString(l)
+		}
+	}
+	sb.WriteString(SyncedHashField + ": " + quoteScalar(hash) + "\n")
+	sb.WriteString("---\n")
+	sb.WriteString(body)
+	return sb.String()
+}
+
+// AppendFrontmatter returns doc with block (complete newline-terminated YAML
+// lines) added at the end of its frontmatter. Documents without frontmatter
+// are returned unchanged.
+func AppendFrontmatter(doc, block string) string {
+	front, body, ok := splitDocument(doc)
+	if !ok {
+		return doc
+	}
+	return "---\n" + strings.Join(front, "") + block + "---\n" + body
+}
