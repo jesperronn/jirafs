@@ -68,7 +68,7 @@ func (c *JiraClient) getJSON(ctx context.Context, url string, target interface{}
 	if err != nil {
 		return 0, NewUnknownErr("cannot authenticate request: " + err.Error())
 	}
-	resp, err := c.httpClient.Do(req)
+	resp, err := c.do(req)
 	if err != nil {
 		return 0, NewTransportError("request failed: " + err.Error())
 	}
@@ -89,9 +89,6 @@ func (c *JiraClient) getJSON(ctx context.Context, url string, target interface{}
 // given type in the project. It uses the classic createmeta endpoint and falls
 // back to the Jira 9+ /createmeta/{project}/issuetypes/{id} variant on 404.
 func (c *JiraClient) FetchCreateMeta(ctx context.Context, projectKey, issueType string) ([]CreateMetaField, error) {
-	if ctx == nil {
-		ctx = context.Background()
-	}
 	q := fmt.Sprintf("%s/rest/api/2/issue/createmeta?projectKeys=%s&issuetypeNames=%s&expand=projects.issuetypes.fields",
 		c.baseURL, neturl.QueryEscape(projectKey), neturl.QueryEscape(issueType))
 	var legacy struct {

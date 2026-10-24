@@ -2,6 +2,7 @@ package cli
 
 import (
 	"bytes"
+	stdcontext "context"
 	"os"
 	"path/filepath"
 	"strings"
@@ -692,5 +693,67 @@ func TestReadLocalIssueReturnsFullPath(t *testing.T) {
 	}
 	if want := filepath.Join(localDir, "PROJ-42.md"); path != want {
 		t.Fatalf("path = %q, want %q", path, want)
+	}
+}
+
+// ctxClient wraps a jira.Client, failing reads with the context error like a
+// real HTTP client does, and counting write calls.
+type ctxClient struct {
+	jira.Client
+	writes int
+}
+
+func (c *ctxClient) FetchIssue(ctx stdcontext.Context, key string) (*schema.Issue, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, jira.NewTransportError("request failed: " + err.Error())
+	}
+	return c.Client.FetchIssue(ctx, key)
+}
+
+func (c *ctxClient) UpdateIssue(ctx stdcontext.Context, key string, issue *schema.Issue) (*schema.Issue, error) {
+	c.writes++
+	return c.Client.UpdateIssue(ctx, key, issue)
+}
+
+func TestRunSyncIssue_CancelledContext(t *testing.T) {
+	tmpDir := t.TempDir()
+	localDir := filepath.Join(tmpDir, "local")
+	if err := os.MkdirAll(localDir, 0o755); err != nil {
+		t.Fatalf("MkdirAll: %v", err)
+	}
+	issueContent := "---\nkey: PROJ-42\ntype: story\nproject:\n  type: project\n  value: PROJ\n---\n\nSummary: Local modified summary\n"
+	if err := os.WriteFile(filepath.Join(localDir, "PROJ-42.md"), []byte(issueContent), 0o644); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+	settings := &config.Settings{
+		Version:   1,
+		Instances: map[string]config.Instance{"default": {BaseURL: "https://example.atlassian.net", AuthType: "basic"}},
+		Projects: map[string]config.Project{"test": {
+			Key: "TEST", Instance: "default", MirrorDir: filepath.Join(tmpDir, "mirror"), LocalDirs: []string{localDir},
+		}},
+	}
+
+	fake := jira.NewFakeTransport()
+	fake.SetIssue("PROJ-42", &schema.Issue{
+		Identity: schema.IssueIdentity{Key: "PROJ-42", Type: "story", Project: schema.TypedRef{Type: schema.RefProject, Value: "PROJ"}},
+		Summary:  "Remote original summary",
+	})
+	client := &ctxClient{Client: fake}
+	withSyncClientFactory(t, func(*config.Settings, *context.Context, string) (jira.Client, error) {
+		return client, nil
+	})
+	_, stderr := withSyncTestIO(t)
+
+	ctx, cancel := stdcontext.WithCancel(stdcontext.Background())
+	cancel()
+	exit := runSyncIssue(ctx, []string{"PROJ-42"}, settings, context.NewResolver(settings, "test"), true, false)
+	if exit != 1 {
+		t.Fatalf("runSyncIssue with cancelled context = %d, want 1; stderr = %q", exit, stderr.String())
+	}
+	if client.writes != 0 {
+		t.Fatalf("Jira writes = %d, want 0", client.writes)
+	}
+	if !strings.Contains(stderr.String(), "canceled") {
+		t.Fatalf("stderr = %q, want cancellation message", stderr.String())
 	}
 }

@@ -2,6 +2,7 @@
 package cli
 
 import (
+	stdcontext "context"
 	"flag"
 	"fmt"
 	"io"
@@ -31,6 +32,8 @@ var (
 // When called without an issue key, RunPlan resolves the project context
 // and lists all local issues with their planned operations.
 func RunPlan(args []string) int {
+	cmdCtx, stop := commandContext()
+	defer stop()
 	// Check for help before loading settings.
 	if len(args) > 0 && (args[0] == "help" || args[0] == "--help" || args[0] == "-h") {
 		printPlanHelp()
@@ -51,7 +54,7 @@ func RunPlan(args []string) int {
 
 	// When no issue key is provided, resolve the project and list all local issues.
 	if len(fs.Args()) == 0 {
-		return runPlanList(settings, *projectFlag, *cwdFlag)
+		return runPlanList(cmdCtx, settings, *projectFlag, *cwdFlag)
 	}
 
 	key := ""
@@ -62,14 +65,14 @@ func RunPlan(args []string) int {
 		fmt.Fprintln(planStderr, "jirafs plan: too many positional arguments")
 		return 1
 	}
-	return runPlanIssue(key, *projectFlag, *cwdFlag, settings)
+	return runPlanIssue(cmdCtx, key, *projectFlag, *cwdFlag, settings)
 }
 
 // runPlanIssue handles `jirafs plan KEY`. It resolves the project context,
 // fetches the remote issue from Jira through the real service path, reads
 // the local issue from the file system, and displays the plan of operations.
 // project and cwd are already parsed by the caller.
-func runPlanIssue(key, project, cwd string, settings *config.Settings) int {
+func runPlanIssue(cmdCtx stdcontext.Context, key, project, cwd string, settings *config.Settings) int {
 	if key == "" {
 		fmt.Fprintln(planStderr, "jirafs plan: missing issue key")
 		return 1
@@ -92,7 +95,7 @@ func runPlanIssue(key, project, cwd string, settings *config.Settings) int {
 	}
 
 	// Fetch the remote issue from Jira.
-	remote, err := client.FetchIssue(nil, key)
+	remote, err := client.FetchIssue(cmdCtx, key)
 	if err != nil {
 		fmt.Fprintf(planStderr, "jirafs plan: %v\n", err)
 		return 1
@@ -195,7 +198,7 @@ func resolvePlanContext(settings *config.Settings, project, cwd string) (*contex
 
 // runPlanList resolves the project context and lists all local issues
 // with their planned operations (no issue key provided).
-func runPlanList(settings *config.Settings, project, cwd string) int {
+func runPlanList(cmdCtx stdcontext.Context, settings *config.Settings, project, cwd string) int {
 	ctx, ok := resolvePlanContext(settings, project, cwd)
 	if !ok {
 		return 1
@@ -264,7 +267,7 @@ func runPlanList(settings *config.Settings, project, cwd string) int {
 			continue
 		}
 
-		remote, err := client.FetchIssue(nil, string(localIssue.Identity.Key))
+		remote, err := client.FetchIssue(cmdCtx, string(localIssue.Identity.Key))
 		if err != nil {
 			// Remote issue not found or fetch error - skip.
 			continue

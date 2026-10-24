@@ -52,11 +52,11 @@ func TestFetchCreateMetaJira9Fallback(t *testing.T) {
 	}))
 	defer srv.Close()
 	c := newCreateClient(srv.URL)
-	fields, err := c.FetchCreateMeta(nil, "ABC", "Story")
+	fields, err := c.FetchCreateMeta(context.Background(), "ABC", "Story")
 	if err != nil || len(fields) != 2 || fields[0].ID != "customfield_12601" || fields[0].AllowedValues[0].Name != "Team A" {
 		t.Fatalf("fields=%+v err=%v", fields, err)
 	}
-	if _, err := c.FetchCreateMeta(nil, "ABC", "Epic"); !IsClientError(err, ErrNotFound) {
+	if _, err := c.FetchCreateMeta(context.Background(), "ABC", "Epic"); !IsClientError(err, ErrNotFound) {
 		t.Errorf("unknown type err=%v", err)
 	}
 }
@@ -65,7 +65,7 @@ func TestFetchCreateMetaErrors(t *testing.T) {
 	for _, code := range []int{401, 400, 500} {
 		code := code
 		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(code) }))
-		if _, err := newCreateClient(srv.URL).FetchCreateMeta(nil, "ABC", "Story"); err == nil {
+		if _, err := newCreateClient(srv.URL).FetchCreateMeta(context.Background(), "ABC", "Story"); err == nil {
 			t.Errorf("code %d: want error", code)
 		}
 		srv.Close()
@@ -79,25 +79,25 @@ func TestFetchCreateMetaErrors(t *testing.T) {
 		_, _ = w.Write([]byte("nope"))
 	}))
 	defer srv.Close()
-	if _, err := newCreateClient(srv.URL).FetchCreateMeta(nil, "ABC", "Story"); err == nil {
+	if _, err := newCreateClient(srv.URL).FetchCreateMeta(context.Background(), "ABC", "Story"); err == nil {
 		t.Error("want parse error")
 	}
-	if _, err := NewJiraClient("http://127.0.0.1:1").FetchCreateMeta(nil, "ABC", "Story"); err == nil {
+	if _, err := NewJiraClient("http://127.0.0.1:1").FetchCreateMeta(context.Background(), "ABC", "Story"); err == nil {
 		t.Error("want transport error")
 	}
 }
 
 func TestFakeCreateMeta(t *testing.T) {
 	f := NewFakeTransport()
-	if got, err := f.FetchCreateMeta(nil, "A", "Story"); got != nil || err != nil {
+	if got, err := f.FetchCreateMeta(context.Background(), "A", "Story"); got != nil || err != nil {
 		t.Fatal("empty fake")
 	}
 	f.SetCreateMeta("A", "Story", []CreateMetaField{{ID: "x"}})
-	if got, _ := f.FetchCreateMeta(nil, "A", "Story"); len(got) != 1 {
+	if got, _ := f.FetchCreateMeta(context.Background(), "A", "Story"); len(got) != 1 {
 		t.Fatal("registered")
 	}
 	f.SetErr("createmeta", NewUnknownErr("boom"))
-	if _, err := f.FetchCreateMeta(nil, "A", "Story"); err == nil {
+	if _, err := f.FetchCreateMeta(context.Background(), "A", "Story"); err == nil {
 		t.Fatal("want err")
 	}
 }

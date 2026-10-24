@@ -6,13 +6,16 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	neturl "net/url"
 	"os"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/jirafs/jirafs/internal/config"
 	"github.com/jirafs/jirafs/internal/export"
@@ -263,12 +266,35 @@ func (c *JiraClient) SetCredentials(creds config.ResolvedInstanceCredentials) {
 	c.credential = creds
 }
 
+// DefaultTimeout is the overall timeout applied to each Jira request unless
+// overridden with WithTimeout.
+const DefaultTimeout = 30 * time.Second
+
+// do sends req. A timeout is reported as an error naming the timeout and the
+// request host, so a stalled connection is recognisable.
+func (c *JiraClient) do(req *http.Request) (*http.Response, error) {
+	resp, err := c.httpClient.Do(req)
+	if err == nil {
+		return resp, nil
+	}
+	var ne net.Error
+	if req.Context().Err() == nil && errors.As(err, &ne) && ne.Timeout() {
+		return nil, fmt.Errorf("timed out after %s waiting for %s", c.httpClient.Timeout, req.URL.Host)
+	}
+	return nil, err
+}
+
 // Option configures a JiraClient at construction time.
 type Option func(*JiraClient)
 
 // WithTransport sets the HTTP transport used for all requests.
 func WithTransport(rt http.RoundTripper) Option {
-	return func(c *JiraClient) { c.httpClient = &http.Client{Transport: rt} }
+	return func(c *JiraClient) { c.httpClient.Transport = rt }
+}
+
+// WithTimeout sets the overall per-request timeout of the HTTP client.
+func WithTimeout(d time.Duration) Option {
+	return func(c *JiraClient) { c.httpClient.Timeout = d }
 }
 
 // WithEpicLinkField sets the custom field id used for the epic link.
@@ -304,7 +330,7 @@ func NewJiraClient(baseURL string, opts ...Option) *JiraClient {
 	c := &JiraClient{
 		baseURL:       baseURL,
 		epicLinkField: strings.TrimSpace(os.Getenv(EpicLinkFieldEnv)),
-		httpClient:    &http.Client{Transport: defaultTransport()},
+		httpClient:    &http.Client{Transport: defaultTransport(), Timeout: DefaultTimeout},
 	}
 	for _, o := range opts {
 		o(c)
@@ -314,9 +340,6 @@ func NewJiraClient(baseURL string, opts ...Option) *JiraClient {
 
 // FetchIssue retrieves a single issue by its key from the Jira REST API.
 func (c *JiraClient) FetchIssue(ctx context.Context, key string) (*schema.Issue, error) {
-	if ctx == nil {
-		ctx = context.Background()
-	}
 	if key == "" {
 		return nil, NewNotFoundError("empty key")
 	}
@@ -331,7 +354,7 @@ func (c *JiraClient) FetchIssue(ctx context.Context, key string) (*schema.Issue,
 		return nil, NewUnknownErr("cannot authenticate user request: " + err.Error())
 	}
 
-	resp, err := c.httpClient.Do(req)
+	resp, err := c.do(req)
 	if err != nil {
 		return nil, NewTransportError("request failed: " + err.Error())
 	}
@@ -386,9 +409,6 @@ func (c *JiraClient) FetchIssue(ctx context.Context, key string) (*schema.Issue,
 // SearchIssues POSTs the given JQL to the Jira /rest/api/2/search endpoint,
 // returning the matching issues.
 func (c *JiraClient) SearchIssues(ctx context.Context, jql string) ([]*schema.Issue, int, error) {
-	if ctx == nil {
-		ctx = context.Background()
-	}
 	if strings.TrimSpace(jql) == "" {
 		return nil, 0, NewNotFoundError("jql: empty query")
 	}
@@ -424,7 +444,7 @@ func (c *JiraClient) SearchIssues(ctx context.Context, jql string) ([]*schema.Is
 			return nil, 0, NewUnknownErr("cannot authenticate search request: " + err.Error())
 		}
 
-		resp, err := c.httpClient.Do(req)
+		resp, err := c.do(req)
 		if err != nil {
 			return nil, 0, NewTransportError("search request failed: " + err.Error())
 		}
@@ -493,9 +513,6 @@ func (c *JiraClient) SearchIssues(ctx context.Context, jql string) ([]*schema.Is
 // the authenticated user's identity. It is used for scope resolution
 // when building JQL queries that depend on the current user.
 func (c *JiraClient) CurrentUser(ctx context.Context) (*User, error) {
-	if ctx == nil {
-		ctx = context.Background()
-	}
 	url := c.baseURL + "/rest/api/2/myself"
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
@@ -506,7 +523,7 @@ func (c *JiraClient) CurrentUser(ctx context.Context) (*User, error) {
 		return nil, NewUnknownErr("cannot authenticate user request: " + err.Error())
 	}
 
-	resp, err := c.httpClient.Do(req)
+	resp, err := c.do(req)
 	if err != nil {
 		return nil, NewTransportError("request failed: " + err.Error())
 	}
@@ -538,16 +555,13 @@ func (c *JiraClient) CurrentUser(ctx context.Context) (*User, error) {
 // FetchStatuses calls the Jira /rest/api/2/status endpoint to retrieve
 // all available issue statuses. It returns the parsed StatusEntry slice.
 func (c *JiraClient) FetchStatuses(ctx context.Context) ([]StatusEntry, error) {
-	if ctx == nil {
-		ctx = context.Background()
-	}
 	url := c.baseURL + "/rest/api/2/status"
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
 		return nil, NewTransportError("cannot create status request: " + err.Error())
 	}
 
-	resp, err := c.httpClient.Do(req)
+	resp, err := c.do(req)
 	if err != nil {
 		return nil, NewTransportError("status request failed: " + err.Error())
 	}
@@ -579,9 +593,6 @@ func (c *JiraClient) FetchStatuses(ctx context.Context) ([]StatusEntry, error) {
 // FetchSprints calls the Jira /rest/api/2/project/{projectKey}/versions
 // endpoint to retrieve all sprints for the given project.
 func (c *JiraClient) FetchSprints(ctx context.Context, projectKey string) ([]SprintEntry, error) {
-	if ctx == nil {
-		ctx = context.Background()
-	}
 	if projectKey == "" {
 		return nil, NewNotFoundError("empty project key for sprints")
 	}
@@ -592,7 +603,7 @@ func (c *JiraClient) FetchSprints(ctx context.Context, projectKey string) ([]Spr
 		return nil, NewTransportError("cannot create sprint request: " + err.Error())
 	}
 
-	resp, err := c.httpClient.Do(req)
+	resp, err := c.do(req)
 	if err != nil {
 		return nil, NewTransportError("sprint request failed: " + err.Error())
 	}
@@ -627,9 +638,6 @@ func (c *JiraClient) FetchSprints(ctx context.Context, projectKey string) ([]Spr
 // Fields that Jira rejects on edit (status needs the transitions API; the
 // sprint placeholder is not a real field id) are not sent.
 func (c *JiraClient) UpdateIssue(ctx context.Context, key string, issue *schema.Issue) (*schema.Issue, error) {
-	if ctx == nil {
-		ctx = context.Background()
-	}
 	if key == "" {
 		return nil, NewNotFoundError("empty key")
 	}
@@ -665,7 +673,7 @@ func (c *JiraClient) UpdateIssue(ctx context.Context, key string, issue *schema.
 		return nil, NewUnknownErr("cannot authenticate update request: " + err.Error())
 	}
 
-	resp, err := c.httpClient.Do(req)
+	resp, err := c.do(req)
 	if err != nil {
 		return nil, NewTransportError("update request failed: " + err.Error())
 	}
@@ -687,9 +695,6 @@ func (c *JiraClient) UpdateIssue(ctx context.Context, key string, issue *schema.
 // FetchFixVersions calls the Jira /rest/api/2/project/{projectKey}/versions
 // endpoint to retrieve all fix versions for the given project.
 func (c *JiraClient) FetchFixVersions(ctx context.Context, projectKey string) ([]FixVersionEntry, error) {
-	if ctx == nil {
-		ctx = context.Background()
-	}
 	if projectKey == "" {
 		return nil, NewNotFoundError("empty project key for fix versions")
 	}
@@ -700,7 +705,7 @@ func (c *JiraClient) FetchFixVersions(ctx context.Context, projectKey string) ([
 		return nil, NewTransportError("cannot create version request: " + err.Error())
 	}
 
-	resp, err := c.httpClient.Do(req)
+	resp, err := c.do(req)
 	if err != nil {
 		return nil, NewTransportError("version request failed: " + err.Error())
 	}
@@ -757,9 +762,6 @@ func IssueTypeName(t string) string {
 // CreateIssue creates an issue via POST /rest/api/2/issue and returns the
 // new issue key.
 func (c *JiraClient) CreateIssue(ctx context.Context, issue *schema.Issue) (string, error) {
-	if ctx == nil {
-		ctx = context.Background()
-	}
 	pbody, err := json.Marshal(map[string]interface{}{"fields": CreateFields(issue)})
 	if err != nil {
 		return "", NewUnknownErr("cannot marshal create request: " + err.Error())
@@ -773,7 +775,7 @@ func (c *JiraClient) CreateIssue(ctx context.Context, issue *schema.Issue) (stri
 	if err != nil {
 		return "", NewUnknownErr("cannot authenticate create request: " + err.Error())
 	}
-	resp, err := c.httpClient.Do(req)
+	resp, err := c.do(req)
 	if err != nil {
 		return "", NewTransportError("create request failed: " + err.Error())
 	}

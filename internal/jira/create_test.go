@@ -74,12 +74,12 @@ func TestCreateIssueErrors(t *testing.T) {
 				_, _ = w.Write([]byte(tc.body))
 			}))
 			defer srv.Close()
-			if _, err := newCreateClient(srv.URL).CreateIssue(nil, draftIssue()); err == nil {
+			if _, err := newCreateClient(srv.URL).CreateIssue(context.Background(), draftIssue()); err == nil {
 				t.Error("expected error")
 			}
 		})
 	}
-	if _, err := newCreateClient("http://127.0.0.1:1").CreateIssue(nil, draftIssue()); err == nil {
+	if _, err := newCreateClient("http://127.0.0.1:1").CreateIssue(context.Background(), draftIssue()); err == nil {
 		t.Error("expected transport error")
 	}
 }

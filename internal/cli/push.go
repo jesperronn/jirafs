@@ -39,6 +39,8 @@ are missing), then creates the issue in Jira, rewrites the file with the new key
 
 // RunPush implements `jirafs push <draft.md> [--apply]`.
 func RunPush(args []string) int {
+	cmdCtx, stop := commandContext()
+	defer stop()
 	if len(args) > 0 && (args[0] == "help" || args[0] == "--help" || args[0] == "-h") {
 		printPushHelp()
 		return 0
@@ -155,7 +157,7 @@ func RunPush(args []string) int {
 		return 0
 	}
 
-	key, err := client.CreateIssue(nil, issue)
+	key, err := client.CreateIssue(cmdCtx, issue)
 	if err != nil {
 		fmt.Fprintf(pushStderr, "jirafs push: cannot create issue: %v\n", err)
 		return 1

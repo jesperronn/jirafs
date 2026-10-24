@@ -45,9 +45,6 @@ func (t Transition) RequiredFields() []RequiredField {
 // FetchTransitions lists the transitions currently available for the issue
 // via GET /rest/api/2/issue/{key}/transitions. It is read-only.
 func (c *JiraClient) FetchTransitions(ctx context.Context, key string) ([]Transition, error) {
-	if ctx == nil {
-		ctx = context.Background()
-	}
 	if key == "" {
 		return nil, NewNotFoundError("empty key")
 	}
@@ -60,7 +57,7 @@ func (c *JiraClient) FetchTransitions(ctx context.Context, key string) ([]Transi
 	if err != nil {
 		return nil, NewUnknownErr("cannot authenticate transitions request: " + err.Error())
 	}
-	resp, err := c.httpClient.Do(req)
+	resp, err := c.do(req)
 	if err != nil {
 		return nil, NewTransportError("transitions request failed: " + err.Error())
 	}
@@ -86,9 +83,6 @@ func (c *JiraClient) FetchTransitions(ctx context.Context, key string) ([]Transi
 // DoTransition performs a transition via POST
 // /rest/api/2/issue/{key}/transitions; Jira answers 204 with no body.
 func (c *JiraClient) DoTransition(ctx context.Context, key, transitionID string, fields map[string]interface{}) error {
-	if ctx == nil {
-		ctx = context.Background()
-	}
 	if key == "" {
 		return NewNotFoundError("empty key")
 	}
@@ -112,7 +106,7 @@ func (c *JiraClient) DoTransition(ctx context.Context, key, transitionID string,
 	if err != nil {
 		return NewUnknownErr("cannot authenticate transition request: " + err.Error())
 	}
-	resp, err := c.httpClient.Do(req)
+	resp, err := c.do(req)
 	if err != nil {
 		return NewTransportError("transition request failed: " + err.Error())
 	}

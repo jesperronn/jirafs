@@ -2,6 +2,7 @@ package cli
 
 import (
 	"bytes"
+	stdcontext "context"
 	"errors"
 	"os"
 	"path/filepath"
@@ -52,7 +53,7 @@ func TestPushDryRunDefault(t *testing.T) {
 	if _, err := os.Stat(p); err != nil {
 		t.Errorf("draft should be untouched: %v", err)
 	}
-	if _, err := fake.FetchIssue(nil, "TEST-1"); err == nil {
+	if _, err := fake.FetchIssue(stdcontext.Background(), "TEST-1"); err == nil {
 		t.Error("dry run must not create")
 	}
 }
@@ -247,7 +248,7 @@ func TestPushApplyRefusesMissingRequired(t *testing.T) {
 	if _, err := os.Stat(p); err != nil {
 		t.Error("draft must remain")
 	}
-	if _, err := fake.FetchIssue(nil, "TEST-1"); err == nil {
+	if _, err := fake.FetchIssue(stdcontext.Background(), "TEST-1"); err == nil {
 		t.Error("must not create")
 	}
 }

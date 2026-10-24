@@ -1,6 +1,7 @@
 package cli
 
 import (
+	stdcontext "context"
 	"os"
 	"path/filepath"
 	"strings"
@@ -336,13 +337,13 @@ func TestSmokeExportEditPlanSyncReexport_Conflict(t *testing.T) {
 	}
 
 	// Verify UpdateIssue was NOT called (the fake should still have the original issue).
-	_, err := fake.UpdateIssue(nil, "PROJ-42", &schema.Issue{
+	_, err := fake.UpdateIssue(stdcontext.Background(), "PROJ-42", &schema.Issue{
 		Identity: schema.IssueIdentity{Key: "PROJ-42"},
 		Summary:  "updated",
 	})
 	if err == nil {
 		// Check if the original issue is still there (not updated).
-		original, _ := fake.FetchIssue(nil, "PROJ-42")
+		original, _ := fake.FetchIssue(stdcontext.Background(), "PROJ-42")
 		if original != nil && original.Summary == "updated" {
 			t.Log("WARNING: UpdateIssue was called despite conflicts")
 		}

@@ -31,9 +31,6 @@ type jiraCommentsResponse struct {
 // FetchComments retrieves the most recent comments of an issue from
 // /rest/api/2/issue/KEY/comment, newest first, plus Jira's total count.
 func (c *JiraClient) FetchComments(ctx context.Context, key string, limit int) ([]schema.Comment, int, error) {
-	if ctx == nil {
-		ctx = context.Background()
-	}
 	if key == "" {
 		return nil, 0, NewNotFoundError("empty key")
 	}
@@ -46,7 +43,7 @@ func (c *JiraClient) FetchComments(ctx context.Context, key string, limit int) (
 	if err != nil {
 		return nil, 0, NewUnknownErr("cannot authenticate user request: " + err.Error())
 	}
-	resp, err := c.httpClient.Do(req)
+	resp, err := c.do(req)
 	if err != nil {
 		return nil, 0, NewTransportError("request failed: " + err.Error())
 	}

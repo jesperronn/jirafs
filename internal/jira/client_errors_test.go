@@ -17,14 +17,17 @@ type endpointCall struct {
 
 func endpointCalls() []endpointCall {
 	return []endpointCall{
-		{"FetchIssue", func(c *JiraClient) error { _, err := c.FetchIssue(nil, "A-1"); return err }},
-		{"SearchIssues", func(c *JiraClient) error { _, _, err := c.SearchIssues(nil, "assignee = currentUser()"); return err }},
-		{"CurrentUser", func(c *JiraClient) error { _, err := c.CurrentUser(nil); return err }},
-		{"FetchStatuses", func(c *JiraClient) error { _, err := c.FetchStatuses(nil); return err }},
-		{"FetchSprints", func(c *JiraClient) error { _, err := c.FetchSprints(nil, "P"); return err }},
-		{"FetchFixVersions", func(c *JiraClient) error { _, err := c.FetchFixVersions(nil, "P"); return err }},
+		{"FetchIssue", func(c *JiraClient) error { _, err := c.FetchIssue(context.Background(), "A-1"); return err }},
+		{"SearchIssues", func(c *JiraClient) error {
+			_, _, err := c.SearchIssues(context.Background(), "assignee = currentUser()")
+			return err
+		}},
+		{"CurrentUser", func(c *JiraClient) error { _, err := c.CurrentUser(context.Background()); return err }},
+		{"FetchStatuses", func(c *JiraClient) error { _, err := c.FetchStatuses(context.Background()); return err }},
+		{"FetchSprints", func(c *JiraClient) error { _, err := c.FetchSprints(context.Background(), "P"); return err }},
+		{"FetchFixVersions", func(c *JiraClient) error { _, err := c.FetchFixVersions(context.Background(), "P"); return err }},
 		{"UpdateIssue", func(c *JiraClient) error {
-			_, err := c.UpdateIssue(nil, "A-1", &schema.Issue{Identity: schema.IssueIdentity{Key: "A-1"}})
+			_, err := c.UpdateIssue(context.Background(), "A-1", &schema.Issue{Identity: schema.IssueIdentity{Key: "A-1"}})
 			return err
 		}},
 	}

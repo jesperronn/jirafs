@@ -93,15 +93,15 @@ func TestFakeTransitions(t *testing.T) {
 	tr := Transition{ID: "1", Name: "Go"}
 	tr.To.Name = "Done"
 	f.SetTransitions("K-1", []Transition{tr})
-	if err := f.DoTransition(nil, "K-1", "9", nil); err == nil {
+	if err := f.DoTransition(context.Background(), "K-1", "9", nil); err == nil {
 		t.Error("unknown id: want error")
 	}
 	f.SetErr("transitions", NewUnknownErr("boom"))
-	if _, err := f.FetchTransitions(nil, "K-1"); err == nil {
+	if _, err := f.FetchTransitions(context.Background(), "K-1"); err == nil {
 		t.Error("want fetch error")
 	}
 	f.SetErr("transition", NewUnknownErr("boom"))
-	if err := f.DoTransition(nil, "K-1", "1", nil); err == nil {
+	if err := f.DoTransition(context.Background(), "K-1", "1", nil); err == nil {
 		t.Error("want do error")
 	}
 }
@@ -112,11 +112,11 @@ func TestFakeTransitions_Success(t *testing.T) {
 	tr := Transition{ID: "1", Name: "Go"}
 	tr.To.Name = "Done"
 	f.SetTransitions("K-1", []Transition{tr})
-	ts, err := f.FetchTransitions(nil, "K-1")
+	ts, err := f.FetchTransitions(context.Background(), "K-1")
 	if err != nil || len(ts) != 1 {
 		t.Fatalf("ts=%v err=%v", ts, err)
 	}
-	if err := f.DoTransition(nil, "K-1", "1", nil); err != nil {
+	if err := f.DoTransition(context.Background(), "K-1", "1", nil); err != nil {
 		t.Fatal(err)
 	}
 	if got := f.DoneTransitions(); len(got) != 1 || got[0] != "K-1:1" {
@@ -126,10 +126,10 @@ func TestFakeTransitions_Success(t *testing.T) {
 
 func TestTransitions_TransportError(t *testing.T) {
 	c := NewJiraClient("http://127.0.0.1:1")
-	if _, err := c.FetchTransitions(nil, "K-1"); err == nil {
+	if _, err := c.FetchTransitions(context.Background(), "K-1"); err == nil {
 		t.Error("want error")
 	}
-	if err := c.DoTransition(nil, "K-1", "1", nil); err == nil {
+	if err := c.DoTransition(context.Background(), "K-1", "1", nil); err == nil {
 		t.Error("want error")
 	}
 }
@@ -148,14 +148,14 @@ func TestTransitionFieldsAndBody(t *testing.T) {
 	}))
 	defer server.Close()
 	c := NewJiraClient(server.URL)
-	ts, err := c.FetchTransitions(nil, "P-1")
+	ts, err := c.FetchTransitions(context.Background(), "P-1")
 	if err != nil || gotQuery != "expand=transitions.fields" {
 		t.Fatalf("err=%v query=%q", err, gotQuery)
 	}
 	if rf := ts[0].RequiredFields(); len(rf) != 1 || rf[0].ID != "resolution" || rf[0].Name != "Resolution" {
 		t.Errorf("required = %+v", rf)
 	}
-	if err := c.DoTransition(nil, "P-1", "5", map[string]interface{}{"resolution": "Fixed"}); err != nil {
+	if err := c.DoTransition(context.Background(), "P-1", "5", map[string]interface{}{"resolution": "Fixed"}); err != nil {
 		t.Fatal(err)
 	}
 	if gotBody != `{"fields":{"resolution":"Fixed"},"transition":{"id":"5"}}` {

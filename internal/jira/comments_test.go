@@ -50,7 +50,7 @@ func TestFetchComments_TotalExceedsPage(t *testing.T) {
 		w.Write([]byte(`{"total":45,"comments":[{"author":{"displayName":"A"},"body":"b","created":"bad-time"}]}`))
 	}))
 	defer server.Close()
-	comments, total, err := NewJiraClient(server.URL).FetchComments(nil, "PROJ-1", 20)
+	comments, total, err := NewJiraClient(server.URL).FetchComments(context.Background(), "PROJ-1", 20)
 	if err != nil || total != 45 || len(comments) != 1 || comments[0].Created != "bad-time" {
 		t.Fatalf("comments=%v total=%d err=%v", comments, total, err)
 	}

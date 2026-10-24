@@ -1,6 +1,7 @@
 package cli
 
 import (
+	stdcontext "context"
 	"os"
 	"path/filepath"
 	"strings"
@@ -135,7 +136,7 @@ func TestRunSync_GatedTransitionWithoutValueBlocks(t *testing.T) {
 	if len(fake.DoneTransitions()) != 0 {
 		t.Error("transition performed")
 	}
-	if got, _ := fake.FetchIssue(nil, "PROJ-42"); got.Summary != "Old summary" {
+	if got, _ := fake.FetchIssue(stdcontext.Background(), "PROJ-42"); got.Summary != "Old summary" {
 		t.Errorf("remote summary changed to %q", got.Summary)
 	}
 	if after, _ := os.ReadFile(localPath); string(after) != string(before) {

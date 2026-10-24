@@ -2,6 +2,7 @@
 package cli
 
 import (
+	stdcontext "context"
 	"flag"
 	"fmt"
 	"io"
@@ -27,6 +28,8 @@ var (
 //	"jirafs export issue KEY" → fetch and export one issue
 //	"jirafs export help"      → show help text
 func RunExport(args []string) int {
+	cmdCtx, stop := commandContext()
+	defer stop()
 	if len(args) == 0 {
 		fmt.Fprintln(exportStderr, "jirafs export: missing subcommand. Use --help for usage.")
 		return 1
@@ -47,7 +50,7 @@ func RunExport(args []string) int {
 
 	switch args[0] {
 	case "issue":
-		return runExportIssue(args[1:], settings, resolver)
+		return runExportIssue(cmdCtx, args[1:], settings, resolver)
 	default:
 		fmt.Fprintf(exportStderr, "jirafs export: unknown subcommand %q. Use --help for usage.\n", args[0])
 		return 1
@@ -57,7 +60,7 @@ func RunExport(args []string) int {
 // runExportIssue handles `jirafs export issue KEY`. It resolves the project
 // context, fetches the issue from Jira through the real service path, and
 // exports it through the canonical codec.
-func runExportIssue(args []string, settings *config.Settings, resolver *context.Resolver) int {
+func runExportIssue(cmdCtx stdcontext.Context, args []string, settings *config.Settings, resolver *context.Resolver) int {
 	fs := flag.NewFlagSet("export issue", flag.ExitOnError)
 	fs.Usage = func() {
 		fmt.Fprintf(exportStderr, "Usage: jirafs export issue <KEY|URL> [--project NAME] [--cwd DIR] [--stdout] [--dry-run]\n\n")
@@ -111,13 +114,13 @@ func runExportIssue(args []string, settings *config.Settings, resolver *context.
 	}
 
 	// Fetch the issue from Jira.
-	issue, err := client.FetchIssue(nil, key)
+	issue, err := client.FetchIssue(cmdCtx, key)
 	if err != nil {
 		fmt.Fprintf(exportStderr, "jirafs export issue: %v\n", err)
 		return 1
 	}
 
-	jira.AttachComments(nil, client, issue, exportStderr)
+	jira.AttachComments(cmdCtx, client, issue, exportStderr)
 
 	// Export through the canonical codec.
 	output := export.ExportIssue(issue)

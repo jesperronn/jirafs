@@ -42,6 +42,8 @@ var (
 // RunMirror dispatches the `jirafs mirror` subcommand to the appropriate
 // sub-subcommand. It returns an exit code (0 on success, 1 on error).
 func RunMirror(args []string) int {
+	cmdCtx, stop := commandContext()
+	defer stop()
 	if len(args) == 0 {
 		fmt.Fprintln(mirrorStderr, "jirafs mirror: missing subcommand. Use --help for usage.")
 		return 1
@@ -62,18 +64,18 @@ func RunMirror(args []string) int {
 
 	switch args[0] {
 	case "refresh":
-		return runMirrorRefresh(args[1:], settings, resolver)
+		return runMirrorRefresh(cmdCtx, args[1:], settings, resolver)
 	case "archive-sweep":
 		return runMirrorArchiveSweep(args[1:], settings, resolver)
 	case "current-sprint", "my-issues":
-		return runMirrorRefresh(append(args[1:], args[0]), settings, resolver)
+		return runMirrorRefresh(cmdCtx, append(args[1:], args[0]), settings, resolver)
 	default:
 		fmt.Fprintf(mirrorStderr, "jirafs mirror: unknown subcommand %q. Use --help for usage.\n", args[0])
 		return 1
 	}
 }
 
-func runMirrorRefresh(args []string, settings *config.Settings, resolver *context.Resolver) int {
+func runMirrorRefresh(cmdCtx stdcontext.Context, args []string, settings *config.Settings, resolver *context.Resolver) int {
 	for _, arg := range args {
 		if arg == "--help" || arg == "-h" {
 			printMirrorRefreshHelp()
@@ -148,7 +150,7 @@ func runMirrorRefresh(args []string, settings *config.Settings, resolver *contex
 		return 1
 	}
 
-	if err := materializeScopeIssues(stdcontext.Background(), client, settings, ctx, jql); err != nil {
+	if err := materializeScopeIssues(cmdCtx, client, settings, ctx, jql); err != nil {
 		fmt.Fprintf(mirrorStderr, "jirafs mirror refresh: cannot write issue snapshots: %v\n", err)
 		return 1
 	}

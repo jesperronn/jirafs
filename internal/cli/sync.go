@@ -2,6 +2,7 @@
 package cli
 
 import (
+	stdcontext "context"
 	"flag"
 	"fmt"
 	"io"
@@ -31,6 +32,8 @@ var (
 // the real service path. Without an issue key it exits 2: syncing multiple
 // issues is not implemented yet.
 func RunSync(args []string) int {
+	cmdCtx, stop := commandContext()
+	defer stop()
 	// Check for help before loading settings.
 	if len(args) > 0 && (args[0] == "help" || args[0] == "--help" || args[0] == "-h") {
 		printSyncHelp()
@@ -66,14 +69,14 @@ func RunSync(args []string) int {
 	// Parse flags to extract --project and --cwd regardless of whether
 	// an issue key is provided. This allows "jirafs sync --project TEST"
 	// (no key) to resolve the project and list pending syncs.
-	return runSyncIssue(fs.Args(), settings, context.NewResolver(settings, *projectFlag), *applyFlag, *dryRunFlag)
+	return runSyncIssue(cmdCtx, fs.Args(), settings, context.NewResolver(settings, *projectFlag), *applyFlag, *dryRunFlag)
 }
 
 // runSyncIssue handles `jirafs sync KEY`. It resolves the project context,
 // fetches the remote issue from Jira through the real service path, reads
 // the local issue from the file system, builds and validates a plan,
 // applies the plan, and pushes the updated remote back to Jira.
-func runSyncIssue(args []string, settings *config.Settings, resolver *context.Resolver, apply, dryRun bool) int {
+func runSyncIssue(cmdCtx stdcontext.Context, args []string, settings *config.Settings, resolver *context.Resolver, apply, dryRun bool) int {
 	if len(args) == 0 {
 		fmt.Fprintln(syncStderr, "jirafs sync: missing issue key")
 		return 1
@@ -98,7 +101,7 @@ func runSyncIssue(args []string, settings *config.Settings, resolver *context.Re
 	}
 
 	// Fetch the remote issue from Jira.
-	remote, err := client.FetchIssue(nil, key)
+	remote, err := client.FetchIssue(cmdCtx, key)
 	if err != nil {
 		fmt.Fprintf(syncStderr, "jirafs sync: %v\n", err)
 		return 1
@@ -162,7 +165,7 @@ func runSyncIssue(args []string, settings *config.Settings, resolver *context.Re
 		if op.Field != schema.EditableFieldStatus {
 			continue
 		}
-		transitions, err := client.FetchTransitions(nil, key)
+		transitions, err := client.FetchTransitions(cmdCtx, key)
 		if err != nil {
 			fmt.Fprintf(syncStderr, "jirafs sync: cannot fetch transitions for %s: %v\n", key, err)
 			return 1
@@ -206,14 +209,14 @@ func runSyncIssue(args []string, settings *config.Settings, resolver *context.Re
 	}
 
 	// Push the updated remote back to Jira through the real service path.
-	updatedRemote, err := client.UpdateIssue(nil, key, result.Remote)
+	updatedRemote, err := client.UpdateIssue(cmdCtx, key, result.Remote)
 	if err != nil {
 		fmt.Fprintf(syncStderr, "jirafs sync: cannot update remote issue: %v\n", err)
 		return 1
 	}
 
 	if statusTr != nil {
-		if err := client.DoTransition(nil, key, statusTr.ID, transitionFields); err != nil {
+		if err := client.DoTransition(cmdCtx, key, statusTr.ID, transitionFields); err != nil {
 			fmt.Fprintf(syncStderr, "jirafs sync: fields updated, but status transition %q failed (the field update was already applied): %v\n", statusTr.Name, err)
 			return 1
 		}

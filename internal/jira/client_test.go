@@ -4,11 +4,13 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/jirafs/jirafs/internal/config"
 	"github.com/jirafs/jirafs/internal/schema"
@@ -1806,7 +1808,7 @@ func TestFetchIssue_PopulatesRemoteStatus(t *testing.T) {
 		w.Write([]byte(`{"key":"P-1","fields":{"summary":"S","status":{"name":"Open"},"issuetype":{"name":"Task"}}}`))
 	}))
 	defer server.Close()
-	got, err := NewJiraClient(server.URL).FetchIssue(nil, "P-1")
+	got, err := NewJiraClient(server.URL).FetchIssue(context.Background(), "P-1")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1828,5 +1830,45 @@ func TestProductionTransportRejectsUntrustedCert(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "x509") {
 		t.Fatalf("expected x509 error, got %v", err)
+	}
+}
+
+func TestClientTimeout(t *testing.T) {
+	release := make(chan struct{})
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		select {
+		case <-release:
+		case <-r.Context().Done():
+		}
+	}))
+	defer srv.Close()
+	defer close(release)
+
+	client := NewJiraClient(srv.URL, WithTimeout(50*time.Millisecond))
+	start := time.Now()
+	_, err := client.FetchIssue(context.Background(), "PROJ-1")
+	if err == nil {
+		t.Fatal("expected timeout error")
+	}
+	if elapsed := time.Since(start); elapsed > time.Second {
+		t.Fatalf("FetchIssue took %v, want < 1s", elapsed)
+	}
+	var ce *ClientError
+	if !errors.As(err, &ce) || ce.Code != ErrTransport {
+		t.Fatalf("err = %#v, want transport ClientError", err)
+	}
+	host := strings.TrimPrefix(srv.URL, "http://")
+	if !strings.Contains(err.Error(), "timed out after 50ms") || !strings.Contains(err.Error(), host) {
+		t.Fatalf("err = %q, want timeout and host %q", err.Error(), host)
+	}
+}
+
+func TestClientDefaultTimeout(t *testing.T) {
+	if got := NewJiraClient("http://x").httpClient.Timeout; got != 30*time.Second {
+		t.Fatalf("default timeout = %v, want 30s", got)
+	}
+	c := NewJiraClient("http://x", WithTimeout(time.Second), WithTransport(http.DefaultTransport))
+	if c.httpClient.Timeout != time.Second {
+		t.Fatalf("timeout after WithTransport = %v, want 1s", c.httpClient.Timeout)
 	}
 }
