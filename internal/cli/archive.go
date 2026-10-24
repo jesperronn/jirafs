@@ -39,7 +39,7 @@ func runArchiveIssue(args []string, settings *config.Settings) int {
 	}
 
 	fs := quietFlagSet("archive issue")
-	projectFlag := fs.String("project", "", "project key or name to use")
+	projectFlag := fs.String("project", "", "name of a configured project")
 	cwdFlag := fs.String("cwd", "", "working directory to resolve the project from")
 	dryRunFlag := fs.Bool("dry-run", false, "print what would be archived; move nothing")
 	if err := parseFlags(fs, flagArgs); err != nil {
@@ -111,7 +111,7 @@ func runArchiveIssue(args []string, settings *config.Settings) int {
 // every archived issue snapshot in the project's _archive directory.
 func runArchiveList(args []string, settings *config.Settings) int {
 	fs := quietFlagSet("archive list")
-	projectFlag := fs.String("project", "", "project key or name to use")
+	projectFlag := fs.String("project", "", "name of a configured project")
 	cwdFlag := fs.String("cwd", "", "working directory to resolve the project from")
 	if err := parseFlags(fs, args); err != nil {
 		return flagError(archiveStderr, "jirafs archive list", err)
@@ -251,7 +251,7 @@ func printArchiveIssueHelp() {
 		Synopsis:    []string{"archive issue <KEY> [flags]"},
 		Description: []string{"Moves one resolved issue file into the project's _archive directory."},
 		Sections: []UsageSection{{Title: "Flags", Rows: [][2]string{
-			{"--project KEY", "project key or name to use"},
+			{"--project KEY", "name of a configured project"},
 			{"--cwd DIR", "working directory to resolve the project from"},
 			{"--dry-run", "print what would be archived; move nothing"},
 			{"--help, -h", "show this help message"},
@@ -264,7 +264,7 @@ func printArchiveListHelp() {
 		Synopsis:    []string{"archive list [flags]"},
 		Description: []string{"Lists archived issue snapshots in the project's _archive directory."},
 		Sections: []UsageSection{{Title: "Flags", Rows: [][2]string{
-			{"--project KEY", "project key or name to use"},
+			{"--project KEY", "name of a configured project"},
 			{"--cwd DIR", "working directory to resolve the project from"},
 			{"--help, -h", "show this help message"},
 		}}},
@@ -284,7 +284,7 @@ func printArchiveHelp() {
 	fmt.Fprintf(archiveStdout, "  %s   %s\n", color.Yellow(archiveStdout, "list"), color.Dim(archiveStdout, "list archived issue snapshots"))
 
 	fmt.Fprintf(archiveStdout, "%s:\n", color.BoldGreen(archiveStdout, "Flags"))
-	fmt.Fprintf(archiveStdout, "  %s   %s\n", color.Yellow(archiveStdout, "--project"), color.Dim(archiveStdout, "project key or name to use"))
+	fmt.Fprintf(archiveStdout, "  %s   %s\n", color.Yellow(archiveStdout, "--project"), color.Dim(archiveStdout, "name of a configured project"))
 	fmt.Fprintf(archiveStdout, "  %s   %s\n", color.Yellow(archiveStdout, "--cwd"), color.Dim(archiveStdout, "working directory to resolve the project from"))
 	fmt.Fprintf(archiveStdout, "  %s   %s\n", color.Yellow(archiveStdout, "--help, -h"), color.Dim(archiveStdout, "show this help message"))
 }

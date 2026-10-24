@@ -1,9 +1,11 @@
 package cli
 
 import (
+	"flag"
 	"fmt"
 	"io"
 	"os"
+	"sort"
 
 	"github.com/jirafs/jirafs/internal/config"
 	"github.com/jirafs/jirafs/internal/context"
@@ -74,8 +76,12 @@ func BuildUseSnapshot(settings *config.Settings, cwd string) UseSnapshot {
 // Returns an exit code (0 on success, 1 on error).
 func RunUse(args []string) int {
 	fs := quietFlagSet("use")
-	project := fs.String("project", "", "project key to set as current")
+	project := fs.String("project", "", "name of the configured project to set as current")
 	clear := fs.Bool("clear", false, "clear the remembered current project")
+	if wantsHelpOrWord(args) {
+		printUseHelp(fs)
+		return 0
+	}
 	if err := parseFlags(fs, args); err != nil {
 		return flagError(useStderr, "jirafs use", err)
 	}
@@ -83,8 +89,7 @@ func RunUse(args []string) int {
 	// --clear takes priority.
 	if *clear {
 		if *project != "" {
-			fmt.Fprintf(useStderr, "jirafs use: --project and --clear are mutually exclusive\n")
-			return 1
+			return usageError(useStderr, "jirafs use", "--project and --clear are mutually exclusive")
 		}
 		s, ok := loadSettingsOrHint(useStderr, "use")
 		if !ok {
@@ -106,8 +111,7 @@ func RunUse(args []string) int {
 	} else if len(fs.Args()) == 1 {
 		key = fs.Args()[0]
 	} else if len(fs.Args()) > 1 {
-		fmt.Fprintf(useStderr, "jirafs use: too many positional arguments\n")
-		return 1
+		return usageError(useStderr, "jirafs use", "too many positional arguments")
 	}
 
 	// No project given → show current state via snapshot and list
@@ -127,7 +131,7 @@ func RunUse(args []string) int {
 			fmt.Fprintln(useStdout, "jirafs: no current project set")
 			if len(s.Projects) > 0 {
 				fmt.Fprintln(useStdout, "jirafs: available projects:")
-				for name := range s.Projects {
+				for _, name := range sortedProjectNames(s) {
 					fmt.Fprintf(useStdout, "  - %s\n", name)
 				}
 			}
@@ -137,11 +141,11 @@ func RunUse(args []string) int {
 		// Show other projects as next-step choices.
 		if len(s.Projects) > 1 {
 			fmt.Fprintln(useStdout, "jirafs: other projects:")
-			for name, proj := range s.Projects {
+			for _, name := range sortedProjectNames(s) {
 				if name == snap.ProjectName {
 					continue
 				}
-				fmt.Fprintf(useStdout, "  - %s (key: %s)\n", name, proj.Key)
+				fmt.Fprintf(useStdout, "  - %s (key: %s)\n", name, s.Projects[name].Key)
 			}
 		}
 		return 0
@@ -165,4 +169,27 @@ func RunUse(args []string) int {
 
 	fmt.Fprintf(useStdout, "jirafs: current project set to %q\n", key)
 	return 0
+}
+
+// sortedProjectNames returns the configured project names in alphabetical
+// order so listings are stable.
+func sortedProjectNames(s *config.Settings) []string {
+	names := make([]string, 0, len(s.Projects))
+	for name := range s.Projects {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	return names
+}
+
+// printUseHelp prints usage information for `jirafs use` to stdout.
+func printUseHelp(fs *flag.FlagSet) {
+	PrintUsage(useStdout, Usage{
+		Synopsis: []string{"use [flags] [project]"},
+		Description: []string{
+			"Shows, sets or clears the remembered current project.",
+			"With no arguments it shows the current project.",
+		},
+		Sections: []UsageSection{{Title: "Flags", Rows: append(FlagRows(fs), [2]string{"--help, -h", "show this help message"})}},
+	})
 }

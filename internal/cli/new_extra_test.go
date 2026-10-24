@@ -85,7 +85,7 @@ func TestRunNew_Errors(t *testing.T) {
 	}{
 		{"missing template file", []string{"--template", filepath.Join(dir, "nope.md"), "--cwd", localDir}, "cannot read template"},
 		{"template without summary", []string{"--template", badTmpl, "--cwd", localDir}, "summary is required"},
-		{"unknown project", []string{"story", "--summary", "x", "--project", "nope", "--cwd", localDir}, "jirafs setup"},
+		{"unknown project", []string{"story", "--summary", "x", "--project", "nope", "--cwd", localDir}, "jirafs init"},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
@@ -108,7 +108,7 @@ func TestRunNew_NoSettings(t *testing.T) {
 func TestRunNew_ProjectWithoutLocalDirs(t *testing.T) {
 	writeNoLocalDirsSettings(t)
 	_, errBuf := withNewTestIO(t)
-	if code := RunNew([]string{"story", "--summary", "x", "--project", "test", "--cwd", t.TempDir()}); code != 1 || !strings.Contains(errBuf.String(), "jirafs setup") {
+	if code := RunNew([]string{"story", "--summary", "x", "--project", "test", "--cwd", t.TempDir()}); code != 1 || !strings.Contains(errBuf.String(), "jirafs init") {
 		t.Errorf("code=%d stderr=%q", code, errBuf.String())
 	}
 }

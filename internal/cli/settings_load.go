@@ -14,7 +14,7 @@ const (
 
 	// firstRunSetupCommand is the copy-pasteable command shown when no
 	// settings exist yet.
-	firstRunSetupCommand = "jirafs setup --project <name> --key <KEY> --instance <name> " +
+	firstRunSetupCommand = "jirafs init <name> --key <KEY> --instance <name> " +
 		"--base-url https://<site>.atlassian.net --credential-ref env://JIRAFS_API_TOKEN --set-current"
 )
 

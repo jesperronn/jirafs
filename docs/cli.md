@@ -23,25 +23,46 @@ Suggested top-level commands:
 
 ## Init
 
-Creates the local project layout and config files.
+The single command that configures a project. It records one Jira instance and
+one project in `~/.jirafs/settings.toml`, creates the mirror directory, and
+writes `mirror.yml` plus the six registry files. Existing files are never
+overwritten. There is no separate `setup` command.
+
+The project name is the first positional argument; the Jira project key is
+`--key`. Missing values are prompted for when run in a terminal.
 
 Examples:
 
 ```text
-jirafs init
-jirafs init --jira-url https://jira.example.com
-jirafs init --project PLAT --mirror-dir ~/jira/platform
+jirafs init platform --key PLAT --instance work --base-url https://jira.example.com
+jirafs init platform --key PLAT --instance work --base-url https://jira.example.com \
+  --credential-ref env://JIRAFS_API_TOKEN --mirror-dir ~/jira/platform --set-current
 ```
+
+## Flag conventions
+
+- `--project NAME` always means the name of a project already configured in
+  settings. It never means a Jira key (`init` uses `--key` for that, and takes
+  the new project's name as its first positional argument).
+- `--cwd DIR` sets the directory the project is resolved from. `status` and
+  `doctor` accept both, like the other project-aware commands.
+- `--base-url` is the Jira base URL everywhere.
+- Results and data (listings, plans, exported content, paths) go to stdout.
+  Progress, warnings, hints and errors go to stderr. Explicit `--help` prints
+  to stdout.
+- Usage errors exit 2, other failures exit 1.
 
 ## Use
 
-Sets, clears, or shows the current Jira project context.
+Sets, clears, or shows the current Jira project context. Project listings are
+sorted by name and printed to stdout.
 
 Examples:
 
 ```text
 jirafs use
 jirafs use platform
+jirafs use --project platform
 jirafs use --clear
 ```
 

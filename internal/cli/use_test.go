@@ -378,8 +378,8 @@ func TestRunUse_UnknownProject(t *testing.T) {
 func TestRunUse_ClearAndProjectMutual(t *testing.T) {
 	_, stderr := withUseTestIO(t)
 	exit := RunUse([]string{"--clear", "--project", "test"})
-	if exit != 1 {
-		t.Fatalf("RunUse([\"--clear\", \"--project\", \"test\"]) = %d, want 1", exit)
+	if exit != 2 {
+		t.Fatalf("RunUse([\"--clear\", \"--project\", \"test\"]) = %d, want 2", exit)
 	}
 	if !strings.Contains(stderr.String(), "mutually exclusive") {
 		t.Fatalf("stderr = %q, want 'mutually exclusive'", stderr.String())
@@ -387,12 +387,12 @@ func TestRunUse_ClearAndProjectMutual(t *testing.T) {
 }
 
 // TestRunUse_TooManyArgs verifies that too many positional arguments
-// returns exit code 1.
+// returns usage exit code 2.
 func TestRunUse_TooManyArgs(t *testing.T) {
 	_, stderr := withUseTestIO(t)
 	exit := RunUse([]string{"test", "other"})
-	if exit != 1 {
-		t.Fatalf("RunUse([\"test\", \"other\"]) = %d, want 1", exit)
+	if exit != 2 {
+		t.Fatalf("RunUse([\"test\", \"other\"]) = %d, want 2", exit)
 	}
 	if !strings.Contains(stderr.String(), "too many positional") {
 		t.Fatalf("stderr = %q, want 'too many positional'", stderr.String())
@@ -740,4 +740,50 @@ func withUseTestIO(t *testing.T) (*bytes.Buffer, *bytes.Buffer) {
 		useStderr = oldStderr
 	})
 	return stdout, stderr
+}
+
+// TestRunUse_ListsProjectsSorted verifies that project listings come out in
+// name order on every run (map iteration order must not leak).
+func TestRunUse_ListsProjectsSorted(t *testing.T) {
+	home := t.TempDir()
+	dir := filepath.Join(home, ".jirafs")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	toml := "version = 1\n\n[instances.work]\nbase_url = \"https://jira.example.com\"\nauth_type = \"basic\"\n"
+	for _, n := range []string{"zeta", "alpha", "mid"} {
+		toml += "\n[projects." + n + "]\nkey = \"" + strings.ToUpper(n) + "\"\ninstance = \"work\"\nmirror_dir = \"" + filepath.Join(home, n) + "\"\n"
+	}
+	if err := os.WriteFile(filepath.Join(dir, "settings.toml"), []byte(toml), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("HOME", home)
+	t.Setenv("XDG_CONFIG_HOME", home)
+
+	for i := 0; i < 20; i++ {
+		stdout, stderr := withUseTestIO(t)
+		if exit := RunUse(nil); exit != 0 {
+			t.Fatalf("run %d: RunUse = %d, stderr = %q", i, exit, stderr.String())
+		}
+		out := stdout.String()
+		a, m, z := strings.Index(out, "- alpha"), strings.Index(out, "- mid"), strings.Index(out, "- zeta")
+		if a < 0 || a > m || m > z {
+			t.Fatalf("run %d: projects not sorted by name:\n%s", i, out)
+		}
+		if stderr.Len() != 0 {
+			t.Fatalf("run %d: listing leaked to stderr: %q", i, stderr.String())
+		}
+	}
+}
+
+// TestRunUse_Help verifies that help goes to stdout and needs no settings.
+func TestRunUse_Help(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	stdout, stderr := withUseTestIO(t)
+	if exit := RunUse([]string{"--help"}); exit != 0 {
+		t.Fatalf("RunUse(--help) = %d", exit)
+	}
+	if !strings.Contains(stdout.String(), "Usage:") || stderr.Len() != 0 {
+		t.Fatalf("stdout = %q stderr = %q", stdout.String(), stderr.String())
+	}
 }

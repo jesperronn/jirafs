@@ -46,7 +46,7 @@ func TestMissingSettingsPrintsFirstRunHint(t *testing.T) {
 			out := buf.String()
 			for _, want := range []string{
 				"no settings found (~/.jirafs/settings.toml)",
-				"next step: jirafs setup --project",
+				"next step: jirafs init <name>",
 				"--credential-ref env://",
 				"--set-current",
 			} {

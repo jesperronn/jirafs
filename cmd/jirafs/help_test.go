@@ -15,7 +15,6 @@ var helpCommands = [][]string{
 	{"init"},
 	{"export"}, {"export", "issue"},
 	{"diff"},
-	{"setup"},
 	{"status"},
 	{"doctor"},
 	{"sync"},

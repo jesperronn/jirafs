@@ -118,7 +118,7 @@ Arguments:
 
 Flags:
   --summary <text>   Set the issue summary.
-  --project <key>    Override the project (key or name).
+  --project <name>   Name of a configured project.
   --assignee <name>  Set the assignee.
   --cwd <dir>        Working directory to resolve the project from.
   --template <path>  Use a user-supplied template file instead of a built-in.
@@ -168,7 +168,7 @@ func RunNew(args []string) int {
 
 	fs := quietFlagSet("new")
 	summaryFlag := fs.String("summary", "", "issue summary")
-	projectFlag := fs.String("project", "", "project key or name to override")
+	projectFlag := fs.String("project", "", "name of a configured project")
 	assigneeFlag := fs.String("assignee", "", "assignee to set")
 	cwdFlag := fs.String("cwd", "", "working directory to resolve the project from")
 	templateFlag := fs.String("template", "", "path to a template file")
@@ -206,12 +206,12 @@ func RunNew(args []string) int {
 
 	ctx, ok := resolveMirrorContext(settings, *projectFlag, cwd, "new")
 	if !ok {
-		fmt.Fprintln(newStderr, `run "jirafs setup ..." to configure a project`)
+		fmt.Fprintln(newStderr, `run "jirafs init <name> ..." to configure a project`)
 		return 1
 	}
 	proj, ok := settings.Projects[ctx.Name]
 	if !ok || len(proj.LocalDirs) == 0 {
-		fmt.Fprintln(newStderr, `run "jirafs setup ..." to configure a project`)
+		fmt.Fprintln(newStderr, `run "jirafs init <name> ..." to configure a project`)
 		return 1
 	}
 

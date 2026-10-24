@@ -54,7 +54,7 @@ func RunPush(args []string) int {
 	fs := quietFlagSet("push")
 	applyFlag := fs.Bool("apply", false, "create the issue in Jira")
 	dryRunFlag := fs.Bool("dry-run", false, "show what would be created (the default)")
-	projectFlag := fs.String("project", "", "project key or name to use")
+	projectFlag := fs.String("project", "", "name of a configured project")
 	cwdFlag := fs.String("cwd", "", "working directory to resolve the project from")
 	if err := parseFlags(fs, flagArgs); err != nil {
 		return flagError(pushStderr, "jirafs push", err)
@@ -102,7 +102,7 @@ func RunPush(args []string) int {
 	}
 	ctx, ok := resolveMirrorContext(settings, *projectFlag, cwd, "push")
 	if !ok {
-		fmt.Fprintln(pushStderr, `run "jirafs setup ..." to configure a project`)
+		fmt.Fprintln(pushStderr, `run "jirafs init <name> ..." to configure a project`)
 		return 1
 	}
 	if *projectFlag != "" || issue.Identity.Project.IsZero() || issue.Identity.Project.Value == "PROJECT" {

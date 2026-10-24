@@ -87,7 +87,7 @@ func RunMirror(args []string) int {
 
 func runMirrorRefresh(cmdCtx stdcontext.Context, args []string, settings *config.Settings, resolver *context.Resolver) int {
 	fs := quietFlagSet("mirror refresh")
-	projectFlag := fs.String("project", "", "project key or name to refresh")
+	projectFlag := fs.String("project", "", "name of a configured project")
 	cwdFlag := fs.String("cwd", "", "working directory to use for project resolution")
 	dryRunFlag := fs.Bool("dry-run", false, "list the issue files that would be written; change nothing")
 	fullFlag := fs.Bool("full", false, "ignore the last-sync cursor and refetch every issue of the scope")
@@ -401,7 +401,7 @@ func writeMirrorProgress(w io.Writer, label string, current, total int) {
 func runMirrorArchiveSweep(args []string, settings *config.Settings, resolver *context.Resolver) int {
 	fs := quietFlagSet("mirror archive-sweep")
 	// --project overrides the auto-detected project.
-	projectFlag := fs.String("project", "", "project key or name to scan")
+	projectFlag := fs.String("project", "", "name of a configured project")
 	// --cwd overrides the working directory for project resolution.
 	cwdFlag := fs.String("cwd", "", "working directory to use for project resolution")
 	// --apply actually moves eligible issues through the archive service.
@@ -690,7 +690,7 @@ func printMirrorHelp() {
 	fmt.Fprintf(mirrorStdout, "  %s  %s\n\n", color.Magenta(mirrorStdout, "<name>"), color.Dim(mirrorStdout, "any scope (project, component or jql) defined in mirror.yml"))
 
 	fmt.Fprintf(mirrorStdout, "%s:\n", color.BoldGreen(mirrorStdout, "Flags"))
-	fmt.Fprintf(mirrorStdout, "  %s KEY   %s\n", color.Yellow(mirrorStdout, "--project"), color.Dim(mirrorStdout, "project key or name to use"))
+	fmt.Fprintf(mirrorStdout, "  %s KEY   %s\n", color.Yellow(mirrorStdout, "--project"), color.Dim(mirrorStdout, "name of a configured project"))
 	fmt.Fprintf(mirrorStdout, "  %s DIR   %s\n", color.Yellow(mirrorStdout, "--cwd"), color.Dim(mirrorStdout, "working directory for project resolution"))
 	fmt.Fprintf(mirrorStdout, "  %s         %s\n", color.Yellow(mirrorStdout, "--apply"), color.Dim(mirrorStdout, "actually archive eligible issues"))
 	fmt.Fprintf(mirrorStdout, "  %s       %s\n", color.Yellow(mirrorStdout, "--dry-run"), color.Dim(mirrorStdout, "list only; on refresh also list the files that would be written"))
@@ -718,7 +718,7 @@ func printMirrorRefreshHelp() {
 	fmt.Fprintf(mirrorStdout, "  %s\n\n", color.Cyan(mirrorStdout, "jirafs mirror refresh current-sprint"))
 
 	fmt.Fprintf(mirrorStdout, "%s:\n", color.BoldGreen(mirrorStdout, "Flags"))
-	fmt.Fprintf(mirrorStdout, "  %s KEY   %s\n", color.Yellow(mirrorStdout, "--project"), color.Dim(mirrorStdout, "project key or name to use"))
+	fmt.Fprintf(mirrorStdout, "  %s KEY   %s\n", color.Yellow(mirrorStdout, "--project"), color.Dim(mirrorStdout, "name of a configured project"))
 	fmt.Fprintf(mirrorStdout, "  %s DIR   %s\n", color.Yellow(mirrorStdout, "--cwd"), color.Dim(mirrorStdout, "working directory for project resolution"))
 	fmt.Fprintf(mirrorStdout, "  %s          %s\n", color.Yellow(mirrorStdout, "--help"), color.Dim(mirrorStdout, "show this help message"))
 }
@@ -728,7 +728,7 @@ func printMirrorArchiveSweepHelp() {
 		Synopsis:    []string{"mirror archive-sweep [flags]"},
 		Description: []string{"Reports archive-eligible issues in the project's local directories; with --apply, archives them."},
 		Sections: []UsageSection{{Title: "Flags", Rows: [][2]string{
-			{"--project KEY", "project key or name to scan"},
+			{"--project KEY", "name of a configured project"},
 			{"--cwd DIR", "working directory for project resolution"},
 			{"--apply", "actually archive eligible issues"},
 			{"--dry-run", "list eligible issues only (the default)"},

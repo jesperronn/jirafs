@@ -211,7 +211,7 @@ func parseRegistryFlags(args []string, withJSON bool) (project, cwd string, json
 	fs := quietFlagSet("registry")
 
 	jsonFlag := fs.Bool("json", false, "output registries as JSON (show)")
-	projectFlag := fs.String("project", "", "project key or name to use")
+	projectFlag := fs.String("project", "", "name of a configured project")
 	cwdFlag := fs.String("cwd", "", "working directory to use for project resolution")
 
 	positionals, callErr = parseInterspersed(fs, args)
@@ -284,7 +284,7 @@ func resolveRegistryContext(settings *config.Settings, project, cwd string) (*co
 		if context.IsContextError(err, &ce) {
 			if ce.Code == config.ErrNoProjectResolved {
 				fmt.Fprintf(registryStderr, "jirafs registry: no project resolved for cwd %q\n", cwd)
-				fmt.Fprintln(registryStderr, `run "jirafs use --project NAME" or "jirafs setup"`)
+				fmt.Fprintln(registryStderr, `run "jirafs use --project NAME" or "jirafs init <name> ..."`)
 				if len(ce.Candidates) > 0 {
 					fmt.Fprintln(registryStderr, "Available projects:")
 					for _, name := range ce.Candidates {
@@ -319,7 +319,7 @@ func printRegistryHelp() {
 	fmt.Fprintf(registryStdout, "  %s\n\n", color.Dim(registryStdout, "users, projects, statuses, sprints, fix_versions"))
 
 	fmt.Fprintf(registryStdout, "%s:\n", color.BoldGreen(registryStdout, "Flags"))
-	fmt.Fprintf(registryStdout, "  %s   %s\n", color.Yellow(registryStdout, "--project"), color.Dim(registryStdout, "project key or name to use"))
+	fmt.Fprintf(registryStdout, "  %s   %s\n", color.Yellow(registryStdout, "--project"), color.Dim(registryStdout, "name of a configured project"))
 	fmt.Fprintf(registryStdout, "  %s   %s\n", color.Yellow(registryStdout, "--cwd"), color.Dim(registryStdout, "working directory for project resolution"))
 	fmt.Fprintf(registryStdout, "  %s   %s\n", color.Yellow(registryStdout, "--json"), color.Dim(registryStdout, "output registries as JSON (show)"))
 }

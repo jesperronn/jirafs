@@ -68,10 +68,16 @@ type LiveProbeCheck struct {
 // resolves credentials for each configured instance, and live-probes each
 // instance's Jira API via the CurrentUser endpoint.
 func BuildDoctorSnapshot(settings *config.Settings, cwd string) DoctorSnapshot {
+	return BuildDoctorSnapshotFor(settings, cwd, "")
+}
+
+// BuildDoctorSnapshotFor is BuildDoctorSnapshot with an explicit project
+// name; an empty project resolves from cwd or the remembered project.
+func BuildDoctorSnapshotFor(settings *config.Settings, cwd, project string) DoctorSnapshot {
 	dsnap := DoctorSnapshot{}
 
 	// Build the embedded status snapshot first.
-	dsnap.StatusSnapshot = BuildStatusSnapshot(settings, cwd)
+	dsnap.StatusSnapshot = BuildStatusSnapshotFor(settings, cwd, project)
 
 	dsnap.InstanceCredentials = make(map[string]CredentialCheck)
 	dsnap.LiveProbes = make(map[string]LiveProbeCheck)
@@ -173,6 +179,7 @@ func RunDoctor(args []string) int {
 
 	fs := quietFlagSet("doctor")
 	verbose := fs.Bool("verbose", false, "print request URLs during checks")
+	scope := addScopeFlags(fs)
 	if err := parseFlags(fs, args); err != nil {
 		return flagError(doctorStderr, "jirafs doctor", err)
 	}
@@ -185,12 +192,12 @@ func RunDoctor(args []string) int {
 	}
 
 	// Build the doctor snapshot.
-	cwd, err := os.Getwd()
+	cwd, err := scope.workdir()
 	if err != nil {
 		fmt.Fprintf(doctorStderr, "jirafs doctor: cannot determine working directory: %v\n", err)
 		return 1
 	}
-	dsnap := BuildDoctorSnapshot(settings, cwd)
+	dsnap := BuildDoctorSnapshotFor(settings, cwd, *scope.project)
 
 	// Report config (from embedded StatusSnapshot).
 	fmt.Fprintln(doctorStdout, "jirafs doctor:")
@@ -304,6 +311,8 @@ func printDoctorHelp() {
 	fmt.Fprintf(doctorStdout, "%s\n\n", color.Dim(doctorStdout, "and live-probe connectivity for each configured Jira instance."))
 
 	fmt.Fprintf(doctorStdout, "%s:\n", color.BoldGreen(doctorStdout, "Flags"))
+	fmt.Fprintf(doctorStdout, "  %s    %s\n", color.Yellow(doctorStdout, "--project NAME"), color.Dim(doctorStdout, "name of a configured project (default: resolved from --cwd or the remembered project)"))
+	fmt.Fprintf(doctorStdout, "  %s    %s\n", color.Yellow(doctorStdout, "--cwd DIR"), color.Dim(doctorStdout, "working directory to resolve the project from (default: current directory)"))
 	fmt.Fprintf(doctorStdout, "  %s    %s\n", color.Yellow(doctorStdout, "--verbose"), color.Dim(doctorStdout, "print request URLs during checks"))
 	fmt.Fprintf(doctorStdout, "  %s   %s\n", color.Yellow(doctorStdout, "--help, -h"), color.Dim(doctorStdout, "show this help message"))
 }

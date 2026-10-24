@@ -683,8 +683,8 @@ func TestUseInvalidFlag(t *testing.T) {
 	}
 }
 
-func TestSetupHelp(t *testing.T) {
-	output := runMainHelper(t, "setup", "--help")
+func TestInitHelp(t *testing.T) {
+	output := runMainHelper(t, "init", "--help")
 	if output.exitCode != 0 {
 		t.Fatalf("exitCode = %d, want 0", output.exitCode)
 	}
@@ -699,24 +699,24 @@ func TestSetupHelp(t *testing.T) {
 	}
 }
 
-func TestSetupMissingFlags(t *testing.T) {
-	output := runMainHelper(t, "setup")
+func TestInitMissingFlags(t *testing.T) {
+	output := runMainHelper(t, "init")
 	if output.exitCode != 2 {
 		t.Fatalf("exitCode = %d, want 2", output.exitCode)
 	}
-	if !strings.Contains(output.stderr, "missing required flags") {
+	if !strings.Contains(output.stderr, "missing required values") {
 		t.Fatalf("stderr = %q, want aggregated missing-flags message", output.stderr)
 	}
-	for _, flagName := range []string{"--project", "--key", "--instance", "--base-url"} {
+	for _, flagName := range []string{"<project-name>", "--key", "--instance", "--base-url"} {
 		if !strings.Contains(output.stderr, flagName) {
 			t.Fatalf("stderr = %q, want missing flag %s", output.stderr, flagName)
 		}
 	}
 }
 
-func TestSetupInvalidBaseURL(t *testing.T) {
+func TestInitInvalidBaseURL(t *testing.T) {
 	tmpDir := t.TempDir()
-	output := runMainHelper(t, "setup", "--project", "p", "--key", "K", "--instance", "i", "--base-url", "not-a-url", "--auth-type", "basic", "--mirror-dir", filepath.Join(tmpDir, "mirror"))
+	output := runMainHelper(t, "init", "p", "--key", "K", "--instance", "i", "--base-url", "not-a-url", "--auth-type", "basic", "--mirror-dir", filepath.Join(tmpDir, "mirror"))
 	if output.exitCode != 2 {
 		t.Fatalf("exitCode = %d, want 2", output.exitCode)
 	}
@@ -725,7 +725,7 @@ func TestSetupInvalidBaseURL(t *testing.T) {
 	}
 }
 
-func TestSetupUsesDefaults(t *testing.T) {
+func TestInitUsesDefaults(t *testing.T) {
 	tmpDir := t.TempDir()
 	homeDir := filepath.Join(tmpDir, "home")
 	jirafsDir := filepath.Join(homeDir, settingsDir)
@@ -733,8 +733,7 @@ func TestSetupUsesDefaults(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	output := runMainHelperWithHome(t, homeDir, "setup",
-		"--project", "platform",
+	output := runMainHelperWithHome(t, homeDir, "init", "platform",
 		"--key", "PLAT",
 		"--instance", "work",
 		"--base-url", "https://jira.example.com",
@@ -762,7 +761,7 @@ func TestSetupUsesDefaults(t *testing.T) {
 	}
 }
 
-func TestSetupCreatesSettingsFile(t *testing.T) {
+func TestInitCreatesSettingsFile(t *testing.T) {
 	tmpDir := t.TempDir()
 	homeDir := filepath.Join(tmpDir, "home")
 	jirafsDir := filepath.Join(homeDir, settingsDir)
@@ -770,8 +769,7 @@ func TestSetupCreatesSettingsFile(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	output := runMainHelperWithHome(t, homeDir, "setup",
-		"--project", "platform",
+	output := runMainHelperWithHome(t, homeDir, "init", "platform",
 		"--key", "PLAT",
 		"--instance", "work",
 		"--base-url", "https://jira.example.com",
@@ -785,8 +783,8 @@ func TestSetupCreatesSettingsFile(t *testing.T) {
 	if !strings.Contains(output.stderr, "configuring project") {
 		t.Fatalf("stderr = %q, want setup action summary", output.stderr)
 	}
-	if !strings.Contains(output.stderr, "setup complete") {
-		t.Fatalf("stderr = %q, want 'setup complete'", output.stderr)
+	if !strings.Contains(output.stderr, "complete") {
+		t.Fatalf("stderr = %q, want 'complete'", output.stderr)
 	}
 
 	// Verify the settings file was written.
@@ -821,7 +819,7 @@ func TestSetupCreatesSettingsFile(t *testing.T) {
 	}
 }
 
-func TestSetupUpdatesExistingSettings(t *testing.T) {
+func TestInitUpdatesExistingSettings(t *testing.T) {
 	tmpDir := t.TempDir()
 	homeDir := filepath.Join(tmpDir, "home")
 	jirafsDir := filepath.Join(homeDir, settingsDir)
@@ -847,8 +845,7 @@ mirror_dir = "` + filepath.Join(tmpDir, "legacy-mirror") + `"
 	}
 
 	// Run setup to add a new project.
-	output := runMainHelperWithHome(t, homeDir, "setup",
-		"--project", "newproj",
+	output := runMainHelperWithHome(t, homeDir, "init", "newproj",
 		"--key", "NP",
 		"--instance", "newinst",
 		"--base-url", "https://new.example.com",
@@ -873,7 +870,7 @@ mirror_dir = "` + filepath.Join(tmpDir, "legacy-mirror") + `"
 	}
 }
 
-func TestSetupFailsOnMissingFile(t *testing.T) {
+func TestInitFailsOnMissingFile(t *testing.T) {
 	tmpDir := t.TempDir()
 	homeDir := filepath.Join(tmpDir, "home")
 	jirafsDir := filepath.Join(homeDir, settingsDir)
@@ -882,8 +879,7 @@ func TestSetupFailsOnMissingFile(t *testing.T) {
 	}
 
 	// No settings file exists — setup should create one.
-	output := runMainHelperWithHome(t, homeDir, "setup",
-		"--project", "p",
+	output := runMainHelperWithHome(t, homeDir, "init", "p",
 		"--key", "K",
 		"--instance", "i",
 		"--base-url", "https://j.example.com",
@@ -895,7 +891,7 @@ func TestSetupFailsOnMissingFile(t *testing.T) {
 	}
 }
 
-func TestSetupCreatesMirrorDirectory(t *testing.T) {
+func TestInitCreatesMirrorDirectory(t *testing.T) {
 	tmpDir := t.TempDir()
 	homeDir := filepath.Join(tmpDir, "home")
 	jirafsDir := filepath.Join(homeDir, settingsDir)
@@ -906,8 +902,7 @@ func TestSetupCreatesMirrorDirectory(t *testing.T) {
 	mirrorDir := filepath.Join(tmpDir, "mirror", "subdir", "nested")
 
 	// The mirror directory does NOT exist yet.
-	output := runMainHelperWithHome(t, homeDir, "setup",
-		"--project", "platform",
+	output := runMainHelperWithHome(t, homeDir, "init", "platform",
 		"--key", "PLAT",
 		"--instance", "work",
 		"--base-url", "https://jira.example.com",
@@ -933,7 +928,7 @@ func TestSetupCreatesMirrorDirectory(t *testing.T) {
 	}
 }
 
-func TestSetupPreservesExistingMirrorDirectory(t *testing.T) {
+func TestInitPreservesExistingMirrorDirectory(t *testing.T) {
 	tmpDir := t.TempDir()
 	homeDir := filepath.Join(tmpDir, "home")
 	jirafsDir := filepath.Join(homeDir, settingsDir)
@@ -951,8 +946,7 @@ func TestSetupPreservesExistingMirrorDirectory(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	output := runMainHelperWithHome(t, homeDir, "setup",
-		"--project", "platform",
+	output := runMainHelperWithHome(t, homeDir, "init", "platform",
 		"--key", "PLAT",
 		"--instance", "work",
 		"--base-url", "https://jira.example.com",
@@ -971,7 +965,7 @@ func TestSetupPreservesExistingMirrorDirectory(t *testing.T) {
 
 // TestSetupWithFileCredentialRef verifies that the setup command
 // accepts file:// credential refs and writes them into the settings file.
-func TestSetupWithFileCredentialRef(t *testing.T) {
+func TestInitWithFileCredentialRef(t *testing.T) {
 	tmpDir := t.TempDir()
 	homeDir := filepath.Join(tmpDir, "home")
 	jirafsDir := filepath.Join(homeDir, settingsDir)
@@ -987,8 +981,7 @@ func TestSetupWithFileCredentialRef(t *testing.T) {
 		t.Fatalf("setup: write creds file: %v", err)
 	}
 
-	output := runMainHelperWithHome(t, homeDir, "setup",
-		"--project", "platform",
+	output := runMainHelperWithHome(t, homeDir, "init", "platform",
 		"--key", "PLAT",
 		"--instance", "work",
 		"--base-url", "https://jira.example.com",
@@ -1002,8 +995,8 @@ func TestSetupWithFileCredentialRef(t *testing.T) {
 	if !strings.Contains(output.stderr, "writing settings") {
 		t.Fatalf("stderr = %q, want write step summary", output.stderr)
 	}
-	if !strings.Contains(output.stderr, "setup complete") {
-		t.Fatalf("stderr = %q, want 'setup complete'", output.stderr)
+	if !strings.Contains(output.stderr, "complete") {
+		t.Fatalf("stderr = %q, want 'complete'", output.stderr)
 	}
 
 	// Verify the settings file contains the file:// credential ref.
@@ -1022,7 +1015,7 @@ func TestSetupWithFileCredentialRef(t *testing.T) {
 
 // TestSetupWithMultipleCredentialRefs verifies that the setup command
 // accepts multiple --credential-ref flags and appends all of them.
-func TestSetupWithMultipleCredentialRefs(t *testing.T) {
+func TestInitWithMultipleCredentialRefs(t *testing.T) {
 	tmpDir := t.TempDir()
 	homeDir := filepath.Join(tmpDir, "home")
 	jirafsDir := filepath.Join(homeDir, settingsDir)
@@ -1038,8 +1031,7 @@ func TestSetupWithMultipleCredentialRefs(t *testing.T) {
 		t.Fatalf("setup: write creds file: %v", err)
 	}
 
-	output := runMainHelperWithHome(t, homeDir, "setup",
-		"--project", "platform",
+	output := runMainHelperWithHome(t, homeDir, "init", "platform",
 		"--key", "PLAT",
 		"--instance", "work",
 		"--base-url", "https://jira.example.com",
@@ -1070,7 +1062,7 @@ func TestSetupWithMultipleCredentialRefs(t *testing.T) {
 // stores invalid credential refs in the settings file without rejecting
 // them at CLI time — validation happens at resolve time via
 // ResolveInstanceCredentials.
-func TestSetupStoresInvalidCredentialRef(t *testing.T) {
+func TestInitStoresInvalidCredentialRef(t *testing.T) {
 	tmpDir := t.TempDir()
 	homeDir := filepath.Join(tmpDir, "home")
 	jirafsDir := filepath.Join(homeDir, settingsDir)
@@ -1078,8 +1070,7 @@ func TestSetupStoresInvalidCredentialRef(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	output := runMainHelperWithHome(t, homeDir, "setup",
-		"--project", "platform",
+	output := runMainHelperWithHome(t, homeDir, "init", "platform",
 		"--key", "PLAT",
 		"--instance", "work",
 		"--base-url", "https://jira.example.com",
@@ -1102,10 +1093,10 @@ func TestSetupStoresInvalidCredentialRef(t *testing.T) {
 	}
 }
 
-// TestB018dSetupSetCurrentFlag verifies that when --set-current is
+// TestB018dInitSetCurrentFlag verifies that when --set-current is
 // passed to the setup command, the resulting settings file contains
 // the project name as the remembered current_project.
-func TestB018dSetupSetCurrentFlag(t *testing.T) {
+func TestB018dInitSetCurrentFlag(t *testing.T) {
 	tmpDir := t.TempDir()
 	homeDir := filepath.Join(tmpDir, "home")
 	jirafsDir := filepath.Join(homeDir, settingsDir)
@@ -1113,8 +1104,7 @@ func TestB018dSetupSetCurrentFlag(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	output := runMainHelperWithHome(t, homeDir, "setup",
-		"--project", "platform",
+	output := runMainHelperWithHome(t, homeDir, "init", "platform",
 		"--key", "PLAT",
 		"--instance", "work",
 		"--base-url", "https://jira.example.com",
@@ -1137,10 +1127,10 @@ func TestB018dSetupSetCurrentFlag(t *testing.T) {
 	}
 }
 
-// TestB018dSetupSetCurrentOnExistingSettings verifies that --set-current
+// TestB018dInitSetCurrentOnExistingSettings verifies that --set-current
 // updates the current_project in an existing settings file without
 // losing other projects.
-func TestB018dSetupSetCurrentOnExistingSettings(t *testing.T) {
+func TestB018dInitSetCurrentOnExistingSettings(t *testing.T) {
 	tmpDir := t.TempDir()
 	homeDir := filepath.Join(tmpDir, "home")
 	jirafsDir := filepath.Join(homeDir, settingsDir)
@@ -1174,8 +1164,7 @@ current_project = "legacy"
 	}
 
 	// Run setup with --set-current to add a new project and set it as current.
-	output := runMainHelperWithHome(t, homeDir, "setup",
-		"--project", "newproj",
+	output := runMainHelperWithHome(t, homeDir, "init", "newproj",
 		"--key", "NP",
 		"--instance", "work",
 		"--base-url", "https://new.example.com",
@@ -1204,9 +1193,9 @@ current_project = "legacy"
 	}
 }
 
-// TestB018dSetupWithoutSetCurrentPreservesNoState verifies that without
+// TestB018dInitWithoutSetCurrentPreservesNoState verifies that without
 // --set-current, the setup command does NOT write a current_project.
-func TestB018dSetupWithoutSetCurrentPreservesNoState(t *testing.T) {
+func TestB018dInitWithoutSetCurrentPreservesNoState(t *testing.T) {
 	tmpDir := t.TempDir()
 	homeDir := filepath.Join(tmpDir, "home")
 	jirafsDir := filepath.Join(homeDir, settingsDir)
@@ -1227,8 +1216,7 @@ auth_type = "atlassian_api_token"
 	}
 
 	// Run setup WITHOUT --set-current.
-	output := runMainHelperWithHome(t, homeDir, "setup",
-		"--project", "platform",
+	output := runMainHelperWithHome(t, homeDir, "init", "platform",
 		"--key", "PLAT",
 		"--instance", "work",
 		"--base-url", "https://jira.example.com",
@@ -1250,7 +1238,7 @@ auth_type = "atlassian_api_token"
 	}
 }
 
-func TestSetupFailsOnUncreatableMirrorDirectory(t *testing.T) {
+func TestInitFailsOnUncreatableMirrorDirectory(t *testing.T) {
 	tmpDir := t.TempDir()
 	homeDir := filepath.Join(tmpDir, "home")
 	jirafsDir := filepath.Join(homeDir, settingsDir)
@@ -1272,8 +1260,7 @@ func TestSetupFailsOnUncreatableMirrorDirectory(t *testing.T) {
 	// The mirror dir is a subpath of the file — MkdirAll will fail.
 	conflictPath := filepath.Join(conflictFile, "child")
 
-	output := runMainHelperWithHome(t, homeDir, "setup",
-		"--project", "platform",
+	output := runMainHelperWithHome(t, homeDir, "init", "platform",
 		"--key", "PLAT",
 		"--instance", "work",
 		"--base-url", "https://jira.example.com",
@@ -1297,7 +1284,7 @@ func ownedInProcess(args []string) bool {
 		return true
 	}
 	switch args[0] {
-	case "board", "init", "new", "push", "registry", "archive", "sync", "mirror", "export", "diff", "status", "doctor":
+	case "board", "init", "use", "new", "push", "registry", "archive", "sync", "mirror", "export", "diff", "status", "doctor":
 		return false
 	}
 	return true

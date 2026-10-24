@@ -40,7 +40,7 @@ func RunSync(args []string) int {
 	}
 
 	fs := quietFlagSet("sync")
-	projectFlag := fs.String("project", "", "project key or name to use")
+	projectFlag := fs.String("project", "", "name of a configured project")
 	fs.String("cwd", "", "ignored; sync resolves the project from the current directory")
 	applyFlag := fs.Bool("apply", false, "perform the Jira writes (without it, sync is a dry run)")
 	writeLocalFlag := fs.Bool("write-local", false, "after a successful --apply, write the refreshed remote to the local issue file")
@@ -341,7 +341,7 @@ func printSyncHelp() {
 	fmt.Fprintf(syncStdout, "%s\n\n", color.Dim(syncStdout, "service path."))
 
 	fmt.Fprintf(syncStdout, "%s:\n", color.BoldGreen(syncStdout, "Flags"))
-	fmt.Fprintf(syncStdout, "  %s KEY    %s\n", color.Yellow(syncStdout, "--project"), color.Dim(syncStdout, "project key or name to use"))
+	fmt.Fprintf(syncStdout, "  %s NAME   %s\n", color.Yellow(syncStdout, "--project"), color.Dim(syncStdout, "name of a configured project"))
 	fmt.Fprintf(syncStdout, "  %s        %s\n", color.Yellow(syncStdout, "--apply"), color.Dim(syncStdout, "perform the Jira writes; without it sync is a dry run"))
 	fmt.Fprintf(syncStdout, "  %s  %s\n", color.Yellow(syncStdout, "--write-local"), color.Dim(syncStdout, "after a successful --apply, write the refreshed remote to the local file"))
 	fmt.Fprintf(syncStdout, "  %s      %s\n\n", color.Yellow(syncStdout, "--dry-run"), color.Dim(syncStdout, "print the plan and write nothing (the default without --apply)"))

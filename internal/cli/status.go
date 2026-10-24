@@ -98,6 +98,12 @@ func (s StatusSnapshot) IsZero() bool {
 // working directory. It resolves the project, inspects the mirror file,
 // and checks which onboarding steps are complete.
 func BuildStatusSnapshot(settings *config.Settings, cwd string) StatusSnapshot {
+	return BuildStatusSnapshotFor(settings, cwd, "")
+}
+
+// BuildStatusSnapshotFor is BuildStatusSnapshot with an explicit project
+// name; an empty project resolves from cwd or the remembered project.
+func BuildStatusSnapshotFor(settings *config.Settings, cwd, project string) StatusSnapshot {
 	snap := StatusSnapshot{}
 
 	// If settings is nil, we can't resolve anything.
@@ -107,7 +113,7 @@ func BuildStatusSnapshot(settings *config.Settings, cwd string) StatusSnapshot {
 	}
 
 	// Resolve the project.
-	resolver := context.NewResolver(settings, "")
+	resolver := context.NewResolver(settings, project)
 	ctx, err := resolver.Resolve(cwd)
 	if err == nil {
 		snap.Resolved = true
@@ -337,6 +343,7 @@ func RunStatus(args []string) int {
 
 	fs := quietFlagSet("status")
 	porcelain := fs.Bool("porcelain", false, "print STATE<TAB>KEY<TAB>PATH lines only")
+	scope := addScopeFlags(fs)
 	if err := parseFlags(fs, args); err != nil {
 		return flagError(statusStderr, "jirafs status", err)
 	}
@@ -348,12 +355,12 @@ func RunStatus(args []string) int {
 	}
 
 	// Build the status snapshot.
-	cwd, err := os.Getwd()
+	cwd, err := scope.workdir()
 	if err != nil {
 		fmt.Fprintf(statusStderr, "jirafs status: cannot determine working directory: %v\n", err)
 		return 1
 	}
-	snap := BuildStatusSnapshot(settings, cwd)
+	snap := BuildStatusSnapshotFor(settings, cwd, *scope.project)
 
 	if *porcelain {
 		for _, c := range snap.Changes {
@@ -443,5 +450,7 @@ func printStatusHelp() {
 
 	fmt.Fprintf(statusStdout, "%s:\n", color.BoldGreen(statusStdout, "Flags"))
 	fmt.Fprintf(statusStdout, "  %s   %s\n", color.Yellow(statusStdout, "--help, -h"), color.Dim(statusStdout, "show this help message"))
+	fmt.Fprintf(statusStdout, "  %s   %s\n", color.Yellow(statusStdout, "--project NAME"), color.Dim(statusStdout, "name of a configured project (default: resolved from --cwd or the remembered project)"))
+	fmt.Fprintf(statusStdout, "  %s   %s\n", color.Yellow(statusStdout, "--cwd DIR"), color.Dim(statusStdout, "working directory to resolve the project from (default: current directory)"))
 	fmt.Fprintf(statusStdout, "  %s   %s\n", color.Yellow(statusStdout, "--porcelain"), color.Dim(statusStdout, "print STATE<TAB>KEY<TAB>PATH lines only, for scripts"))
 }

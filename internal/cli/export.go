@@ -64,7 +64,7 @@ func RunExport(args []string) int {
 func runExportIssue(cmdCtx stdcontext.Context, args []string, settings *config.Settings, resolver *context.Resolver) int {
 	fs := quietFlagSet("export issue")
 	// --project overrides the auto-detected project.
-	projectFlag := fs.String("project", "", "project key or name to use")
+	projectFlag := fs.String("project", "", "name of a configured project")
 	// --cwd overrides the working directory for project resolution.
 	cwdFlag := fs.String("cwd", "", "working directory to use for project resolution")
 	// --stdout prints the document instead of writing a file.
@@ -191,7 +191,7 @@ func printExportHelp() {
 	fmt.Fprintf(exportStdout, "  %s    %s\n\n", color.Blue(exportStdout, "help"), color.Dim(exportStdout, "show this help message"))
 
 	fmt.Fprintf(exportStdout, "%s:\n", color.BoldGreen(exportStdout, "Flags"))
-	fmt.Fprintf(exportStdout, "  %s KEY   %s\n", color.Yellow(exportStdout, "--project"), color.Dim(exportStdout, "project key or name to use"))
+	fmt.Fprintf(exportStdout, "  %s KEY   %s\n", color.Yellow(exportStdout, "--project"), color.Dim(exportStdout, "name of a configured project"))
 	fmt.Fprintf(exportStdout, "  %s DIR   %s\n", color.Yellow(exportStdout, "--cwd"), color.Dim(exportStdout, "working directory for project resolution"))
 	fmt.Fprintf(exportStdout, "  %s     %s\n", color.Yellow(exportStdout, "--stdout"), color.Dim(exportStdout, "print the document to stdout instead of writing <local_dirs[0]>/<KEY>.md"))
 	fmt.Fprintf(exportStdout, "  %s    %s\n\n", color.Yellow(exportStdout, "--dry-run"), color.Dim(exportStdout, "print the target path and whether it would be overwritten; write nothing"))
@@ -208,7 +208,7 @@ func printExportIssueHelp() {
 			"KEY is an issue key (PROJ-123); URL is <base_url>/browse/PROJ-123 or a URL with selectedIssue=PROJ-123.",
 		},
 		Sections: []UsageSection{{Title: "Flags", Rows: [][2]string{
-			{"--project KEY", "project key or name to use"},
+			{"--project KEY", "name of a configured project"},
 			{"--cwd DIR", "working directory for project resolution"},
 			{"--stdout", "print the document to stdout and write no file"},
 			{"--dry-run", "print the target path and whether it would be overwritten; write nothing"},

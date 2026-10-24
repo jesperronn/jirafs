@@ -28,6 +28,16 @@ func withInitTestIO(t *testing.T) (*bytes.Buffer, *bytes.Buffer) {
 	return stdout, stderr
 }
 
+// useInitHome points HOME (and XDG_CONFIG_HOME) at a fresh temp dir with no
+// settings and returns it.
+func useInitHome(t *testing.T) string {
+	t.Helper()
+	home := filepath.Join(t.TempDir(), "home")
+	t.Setenv("HOME", home)
+	t.Setenv("XDG_CONFIG_HOME", home)
+	return home
+}
+
 // chdirTemp moves the process into a fresh temp dir for the duration of the
 // test and returns it.
 func chdirTemp(t *testing.T) string {
@@ -57,28 +67,32 @@ scopes:
     target: assignee = currentUser()
 `
 
-func TestRunInit_HappyPath(t *testing.T) {
-	tmpDir := chdirTemp(t)
-	stdout, stderr := withInitTestIO(t)
-
-	args := []string{
-		"--project", "platform",
+func initArgs(mirror string, extra ...string) []string {
+	return append([]string{
+		"platform",
 		"--key", "PLAT",
 		"--instance", "work",
-		"--jira-url", "https://jira.example.com",
-		"--mirror-dir", tmpDir,
-	}
+		"--base-url", "https://jira.example.com",
+		"--mirror-dir", mirror,
+	}, extra...)
+}
 
-	exit := RunInit(args)
+func TestRunInit_HappyPath(t *testing.T) {
+	home := useInitHome(t)
+	tmpDir := t.TempDir()
+	stdout, stderr := withInitTestIO(t)
+
+	exit := RunInit(initArgs(tmpDir, "--credential-ref", "env://JIRAFS_API_TOKEN"))
 	if exit != 0 {
 		t.Fatalf("RunInit = %d, want 0, stderr = %q", exit, stderr.String())
 	}
-
-	if out := stdout.String(); !strings.Contains(out, "created: 7") {
-		t.Fatalf("expected 'created: 7' on first run, got %q", out)
+	if out := stdout.String(); !strings.Contains(out, "created: 7") || !strings.Contains(out, filepath.Join(tmpDir, "mirror.yml")) {
+		t.Fatalf("expected summary with 'created: 7' and paths on stdout, got %q", out)
+	}
+	if !strings.Contains(stderr.String(), "writing settings") {
+		t.Fatalf("expected progress on stderr, got %q", stderr.String())
 	}
 
-	// mirror.yml must match the expected shape exactly.
 	data, err := os.ReadFile(filepath.Join(tmpDir, "mirror.yml"))
 	if err != nil {
 		t.Fatalf("read mirror.yml: %v", err)
@@ -86,19 +100,11 @@ func TestRunInit_HappyPath(t *testing.T) {
 	if string(data) != wantMirrorYAML {
 		t.Fatalf("mirror.yml mismatch:\n got: %q\nwant: %q", data, wantMirrorYAML)
 	}
-
-	// All six registry files must exist with the empty-but-valid body and be
-	// parseable by the registry loaders.
 	for _, name := range []string{
-		registry.UsersFile,
-		registry.ProjectsFile,
-		registry.StatusesFile,
-		registry.SprintsFile,
-		registry.FixVersionsFile,
-		registry.IssueTypesFile,
+		registry.UsersFile, registry.ProjectsFile, registry.StatusesFile,
+		registry.SprintsFile, registry.FixVersionsFile, registry.IssueTypesFile,
 	} {
-		p := filepath.Join(tmpDir, name)
-		d, err := os.ReadFile(p)
+		d, err := os.ReadFile(filepath.Join(tmpDir, name))
 		if err != nil {
 			t.Fatalf("read %s: %v", name, err)
 		}
@@ -109,153 +115,195 @@ func TestRunInit_HappyPath(t *testing.T) {
 	if _, err := registry.LoadUsers(tmpDir); err != nil {
 		t.Fatalf("registry.LoadUsers rejected the created file: %v", err)
 	}
+
+	settings, err := os.ReadFile(filepath.Join(home, ".jirafs", "settings.toml"))
+	if err != nil {
+		t.Fatalf("settings not written: %v", err)
+	}
+	for _, want := range []string{"jira.example.com", "PLAT", "atlassian_api_token", "env://JIRAFS_API_TOKEN"} {
+		if !strings.Contains(string(settings), want) {
+			t.Fatalf("settings = %q, want %q", settings, want)
+		}
+	}
+	if strings.Contains(string(settings), "current_project = 'platform'") {
+		t.Fatalf("current_project must not be set without --set-current: %q", settings)
+	}
 }
 
 func TestRunInit_Idempotent(t *testing.T) {
-	tmpDir := chdirTemp(t)
-	_, stderr := withInitTestIO(t)
-
-	args := []string{
-		"--project", "platform",
-		"--key", "PLAT",
-		"--mirror-dir", tmpDir,
-	}
-
-	if exit := RunInit(args); exit != 0 {
-		t.Fatalf("first RunInit = %d, want 0, stderr = %q", exit, stderr.String())
-	}
-
+	useInitHome(t)
+	tmpDir := t.TempDir()
 	stdout, stderr := withInitTestIO(t)
-	exit := RunInit(args)
-	if exit != 0 {
-		t.Fatalf("second RunInit = %d, want 0, stderr = %q", exit, stderr.String())
-	}
 
-	out := stdout.String()
-	if !strings.Contains(out, "created: 0") {
-		t.Fatalf("expected 'created: 0' on second run, got %q", out)
+	if exit := RunInit(initArgs(tmpDir)); exit != 0 {
+		t.Fatalf("first RunInit = %d, stderr = %q", exit, stderr.String())
 	}
-	if !strings.Contains(out, "skipped: 7") {
-		t.Fatalf("expected 'skipped: 7' on second run, got %q", out)
+	custom := []byte("project:\n  type: project\n  value: CUSTOM\n")
+	if err := os.WriteFile(filepath.Join(tmpDir, "mirror.yml"), custom, 0o644); err != nil {
+		t.Fatal(err)
 	}
-
-	// The files must be byte-for-byte unchanged after the second run.
-	data, err := os.ReadFile(filepath.Join(tmpDir, "mirror.yml"))
-	if err != nil {
-		t.Fatalf("read mirror.yml: %v", err)
+	stdout.Reset()
+	if exit := RunInit(initArgs(tmpDir)); exit != 0 {
+		t.Fatalf("second RunInit = %d, stderr = %q", exit, stderr.String())
 	}
-	if string(data) != wantMirrorYAML {
-		t.Fatalf("mirror.yml changed on idempotent run:\n got: %q\nwant: %q", data, wantMirrorYAML)
+	if out := stdout.String(); !strings.Contains(out, "created: 0, skipped: 7") {
+		t.Fatalf("expected everything skipped, got %q", out)
+	}
+	got, _ := os.ReadFile(filepath.Join(tmpDir, "mirror.yml"))
+	if string(got) != string(custom) {
+		t.Fatalf("mirror.yml was overwritten: %q", got)
 	}
 }
 
-func TestRunInit_SetCurrent(t *testing.T) {
-	tmpDir := chdirTemp(t)
-	homeDir := filepath.Join(tmpDir, "home")
-	oldHome := os.Getenv("HOME")
-	os.Setenv("HOME", homeDir)
-	defer os.Setenv("HOME", oldHome)
-
-	_, stderr := withInitTestIO(t)
-
-	args := []string{
-		"--project", "platform",
-		"--key", "PLAT",
-		"--instance", "work",
-		"--jira-url", "https://jira.example.com",
-		"--mirror-dir", tmpDir,
-		"--set-current",
+func TestRunInit_RespectsMirrorYaml(t *testing.T) {
+	useInitHome(t)
+	tmpDir := t.TempDir()
+	withInitTestIO(t)
+	if err := os.WriteFile(filepath.Join(tmpDir, "mirror.yaml"), []byte("x: 1\n"), 0o644); err != nil {
+		t.Fatal(err)
 	}
-
-	exit := RunInit(args)
-	if exit != 0 {
-		t.Fatalf("RunInit = %d, want 0, stderr = %q", exit, stderr.String())
+	if exit := RunInit(initArgs(tmpDir)); exit != 0 {
+		t.Fatalf("RunInit = %d", exit)
 	}
+	if _, err := os.Stat(filepath.Join(tmpDir, "mirror.yml")); !os.IsNotExist(err) {
+		t.Fatalf("mirror.yml must not be created next to mirror.yaml, stat err = %v", err)
+	}
+}
 
+func TestRunInit_SetCurrentAndUpdate(t *testing.T) {
+	home := useInitHome(t)
+	withInitTestIO(t)
+	if exit := RunInit(initArgs(t.TempDir())); exit != 0 {
+		t.Fatalf("first RunInit = %d", exit)
+	}
+	// A second project on existing settings keeps the first and sets current.
+	other := []string{"growth", "--key", "GROW", "--instance", "work", "--base-url", "https://jira.example.com", "--mirror-dir", t.TempDir(), "--set-current"}
+	if exit := RunInit(other); exit != 0 {
+		t.Fatalf("second RunInit = %d", exit)
+	}
+	t.Setenv("HOME", home)
 	s, err := config.Load()
 	if err != nil {
 		t.Fatalf("config.Load: %v", err)
 	}
-	if s.State.CurrentProject != "platform" {
-		t.Fatalf("CurrentProject = %q, want %q", s.State.CurrentProject, "platform")
-	}
 	if _, ok := s.Projects["platform"]; !ok {
-		t.Fatalf("expected project \"platform\" recorded in settings")
+		t.Fatalf("existing project lost: %v", s.Projects)
 	}
-	if _, ok := s.Instances["work"]; !ok {
-		t.Fatalf("expected instance \"work\" recorded in settings")
+	if s.State.CurrentProject != "growth" {
+		t.Fatalf("current project = %q, want growth", s.State.CurrentProject)
 	}
 }
 
-func TestRunInit_InvalidJiraURL(t *testing.T) {
-	tmpDir := chdirTemp(t)
+func TestRunInit_JiraURLFlagRemoved(t *testing.T) {
+	removedFlag := "--jira" + "-url"
+	useInitHome(t)
 	_, stderr := withInitTestIO(t)
+	exit := RunInit([]string{"platform", "--key", "PLAT", "--instance", "work", removedFlag, "https://jira.example.com", "--mirror-dir", t.TempDir()})
+	if exit != 2 || !strings.Contains(stderr.String(), "flag provided but not defined: -"+removedFlag[2:]+"") {
+		t.Fatalf("exit = %d stderr = %q, want unknown flag usage error", exit, stderr.String())
+	}
+}
 
-	exit := RunInit([]string{
-		"--project", "platform",
-		"--jira-url", "ftp://jira.example.com",
-		"--mirror-dir", tmpDir,
-	})
-	if exit != 1 {
-		t.Fatalf("RunInit = %d, want 1, stderr = %q", exit, stderr.String())
+func TestRunInit_ProjectFlagRemoved(t *testing.T) {
+	useInitHome(t)
+	_, stderr := withInitTestIO(t)
+	exit := RunInit([]string{"--project", "platform"})
+	if exit != 2 || !strings.Contains(stderr.String(), "flag provided but not defined: -project") {
+		t.Fatalf("exit = %d stderr = %q, want unknown flag usage error", exit, stderr.String())
 	}
-	if !strings.Contains(stderr.String(), "http") {
-		t.Fatalf("expected 'http' hint in stderr, got %q", stderr.String())
+}
+
+func TestRunInit_InvalidBaseURL(t *testing.T) {
+	useInitHome(t)
+	tmpDir := t.TempDir()
+	_, stderr := withInitTestIO(t)
+	args := initArgs(tmpDir)
+	args[len(args)-3] = "ftp://jira.example.com"
+	exit := RunInit(args)
+	if exit != 2 || !strings.Contains(stderr.String(), "--base-url must start with http:// or https://") {
+		t.Fatalf("exit = %d stderr = %q", exit, stderr.String())
 	}
-	// Validation happens before any layout is written.
 	if _, err := os.Stat(filepath.Join(tmpDir, "mirror.yml")); !os.IsNotExist(err) {
 		t.Fatalf("expected no mirror.yml for invalid URL, stat err = %v", err)
 	}
 }
 
-func TestRunInit_MissingProject(t *testing.T) {
-	chdirTemp(t)
-	homeDir := filepath.Join(t.TempDir(), "home")
-	oldHome := os.Getenv("HOME")
-	os.Setenv("HOME", homeDir)
-	defer os.Setenv("HOME", oldHome)
-
+func TestRunInit_MissingValues(t *testing.T) {
+	useInitHome(t)
 	_, stderr := withInitTestIO(t)
-
 	exit := RunInit([]string{"--mirror-dir", t.TempDir()})
-	if exit != 1 {
-		t.Fatalf("RunInit = %d, want 1, stderr = %q", exit, stderr.String())
+	if exit != 2 {
+		t.Fatalf("RunInit = %d, want 2, stderr = %q", exit, stderr.String())
 	}
-	if !strings.Contains(stderr.String(), "run jirafs init --project") {
-		t.Fatalf("expected next-step hint in stderr, got %q", stderr.String())
+	for _, want := range []string{"<project-name>", "--key", "--instance", "--base-url"} {
+		if !strings.Contains(stderr.String(), want) {
+			t.Fatalf("stderr = %q, want %q", stderr.String(), want)
+		}
 	}
 }
 
-func TestRunInit_DefaultMirrorDir(t *testing.T) {
-	chdirTemp(t)
-	homeDir := filepath.Join(t.TempDir(), "home")
-	oldHome := os.Getenv("HOME")
-	os.Setenv("HOME", homeDir)
-	defer os.Setenv("HOME", oldHome)
-
+func TestRunInit_TooManyPositionals(t *testing.T) {
+	useInitHome(t)
 	_, stderr := withInitTestIO(t)
-
-	exit := RunInit([]string{"--project", "platform", "--key", "PLAT"})
-	if exit != 0 {
-		t.Fatalf("RunInit = %d, want 0, stderr = %q", exit, stderr.String())
+	if exit := RunInit([]string{"a", "b"}); exit != 2 || !strings.Contains(stderr.String(), "too many positional") {
+		t.Fatalf("exit = %d stderr = %q", exit, stderr.String())
 	}
+}
 
-	wantDir := filepath.Join(homeDir, "jira", "platform")
-	for _, name := range []string{"mirror.yml", registry.UsersFile} {
-		if _, err := os.Stat(filepath.Join(wantDir, name)); err != nil {
-			t.Fatalf("expected %s in default mirror dir %q: %v", name, wantDir, err)
+func TestRunInit_DefaultMirrorDirAndAuth(t *testing.T) {
+	home := useInitHome(t)
+	_, stderr := withInitTestIO(t)
+	exit := RunInit([]string{"platform", "--key", "PLAT", "--instance", "work", "--base-url", "https://jira.example.com"})
+	if exit != 0 {
+		t.Fatalf("RunInit = %d, stderr = %q", exit, stderr.String())
+	}
+	for _, want := range []string{`default --auth-type="atlassian_api_token"`, `default --mirror-dir="~/jira/platform"`} {
+		if !strings.Contains(stderr.String(), want) {
+			t.Fatalf("stderr = %q, want %q", stderr.String(), want)
 		}
+	}
+	for _, name := range []string{"mirror.yml", registry.UsersFile} {
+		if _, err := os.Stat(filepath.Join(home, "jira", "platform", name)); err != nil {
+			t.Fatalf("expected %s in default mirror dir: %v", name, err)
+		}
+	}
+}
+
+func TestRunInit_MalformedSettingsFails(t *testing.T) {
+	home := useInitHome(t)
+	if err := os.MkdirAll(filepath.Join(home, ".jirafs"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(home, ".jirafs", "settings.toml"), []byte("not = [valid"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	_, stderr := withInitTestIO(t)
+	if exit := RunInit(initArgs(t.TempDir())); exit != 1 || !strings.Contains(stderr.String(), "cannot load settings") {
+		t.Fatalf("exit = %d stderr = %q", exit, stderr.String())
+	}
+}
+
+func TestRunInit_UncreatableMirrorDir(t *testing.T) {
+	useInitHome(t)
+	blocker := filepath.Join(t.TempDir(), "file")
+	if err := os.WriteFile(blocker, []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	_, stderr := withInitTestIO(t)
+	if exit := RunInit(initArgs(filepath.Join(blocker, "mirror"))); exit != 1 || !strings.Contains(stderr.String(), "cannot create mirror directory") {
+		t.Fatalf("exit = %d stderr = %q", exit, stderr.String())
 	}
 }
 
 func TestRunInit_Help(t *testing.T) {
 	stdout, stderr := withInitTestIO(t)
-
-	exit := RunInit([]string{"--help"})
-	if exit != 0 {
-		t.Fatalf("RunInit([--help]) = %d, want 0, stderr = %q", exit, stderr.String())
-	}
-	if !strings.Contains(stdout.String(), "Usage: jirafs init") || stderr.Len() != 0 {
-		t.Fatalf("expected usage on stdout only, got stdout %q stderr %q", stdout.String(), stderr.String())
+	for _, args := range [][]string{{"--help"}, {"help"}} {
+		stdout.Reset()
+		if exit := RunInit(args); exit != 0 {
+			t.Fatalf("RunInit(%v) = %d, stderr = %q", args, exit, stderr.String())
+		}
+		if !strings.Contains(stdout.String(), "jirafs init") || !strings.Contains(stdout.String(), "--base-url") || stderr.Len() != 0 {
+			t.Fatalf("expected usage on stdout only, got stdout %q stderr %q", stdout.String(), stderr.String())
+		}
 	}
 }

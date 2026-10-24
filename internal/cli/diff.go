@@ -44,7 +44,7 @@ func RunDiff(args []string) int {
 
 	// Parse flags first to extract --project and --cwd.
 	fs := quietFlagSet("diff")
-	projectFlag := fs.String("project", "", "project key or name to use")
+	projectFlag := fs.String("project", "", "name of a configured project")
 	cwdFlag := fs.String("cwd", "", "working directory to use for project resolution")
 	exitCodeFlag := fs.Bool("exit-code", false, "exit 1 when any issue differs from Jira")
 	if err := parseFlags(fs, args); err != nil {
@@ -359,7 +359,7 @@ func printDiffHelp() {
 	fmt.Fprintf(diffStdout, "%s\n\n", color.Dim(diffStdout, "Read-only: nothing is written to Jira or to local files."))
 
 	fmt.Fprintf(diffStdout, "%s:\n", color.BoldGreen(diffStdout, "Flags"))
-	fmt.Fprintf(diffStdout, "  %s KEY   %s\n", color.Yellow(diffStdout, "--project"), color.Dim(diffStdout, "project key or name to use"))
+	fmt.Fprintf(diffStdout, "  %s NAME  %s\n", color.Yellow(diffStdout, "--project"), color.Dim(diffStdout, "name of a configured project"))
 	fmt.Fprintf(diffStdout, "  %s DIR   %s\n", color.Yellow(diffStdout, "--cwd"), color.Dim(diffStdout, "working directory for project resolution"))
 	fmt.Fprintf(diffStdout, "  %s   %s\n\n", color.Yellow(diffStdout, "--exit-code"), color.Dim(diffStdout, "exit 1 when any issue differs (default exit 0)"))
 

@@ -10,7 +10,7 @@ used for analysis, agent workflows, and team process improvement.
 
 The current CLI is usable as a narrow operator workflow:
 
-1. Configure one Jira instance and one project with `jirafs setup`.
+1. Configure one Jira instance and one project with `jirafs init`.
 2. Select or confirm the active project with `jirafs use`.
 3. Refresh one live mirror scope with `jirafs mirror refresh`.
 4. Export or inspect one issue locally with `jirafs export issue`.
@@ -21,8 +21,7 @@ The current CLI is usable as a narrow operator workflow:
 Example:
 
 ```bash
-jirafs setup \
-  --project platform \
+jirafs init platform \
   --key PLAT \
   --instance work \
   --base-url https://jira.example.com \
@@ -113,7 +112,7 @@ What is still rough:
 
 If you are trying `jirafs` for the first time:
 
-1. Run `jirafs setup ... --set-current`.
+1. Run `jirafs init <name> ... --set-current`.
 2. Run `jirafs use` to confirm the active project.
 3. Run `jirafs mirror refresh my-issues`.
 4. Inspect the mirror directory and `mirror.yml`.
@@ -123,10 +122,10 @@ If you are trying `jirafs` for the first time:
 If something fails:
 
 - no settings yet (first run): run
-  `jirafs setup --project <name> --key <KEY> --instance <name> --base-url https://<site>.atlassian.net --credential-ref env://JIRAFS_API_TOKEN --set-current`
+  `jirafs init <name> --key <KEY> --instance <name> --base-url https://<site>.atlassian.net --credential-ref env://JIRAFS_API_TOKEN --set-current`
 - config or auth issue: inspect `~/.jirafs/settings.toml`
 - scope issue: inspect `<mirror_dir>/mirror.yml`
-- project resolution issue: run `jirafs use --project <name>`
+- project resolution issue: run `jirafs use <name>`
 - live Jira issue: retry with a single issue export before a whole-scope refresh
 - empty sync scope: run `jirafs mirror refresh current-sprint` or
   `jirafs mirror refresh my-issues`, then `jirafs sync <KEY>` per issue
@@ -158,7 +157,7 @@ macOS) and `jirafs` will trust it.
 
 The most important commands right now are:
 
-- `jirafs setup`
+- `jirafs init`
 - `jirafs use`
 - `jirafs mirror refresh`
 - `jirafs export issue`
