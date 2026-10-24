@@ -397,3 +397,16 @@ func TestFakeTransportCreateIssue(t *testing.T) {
 		t.Error("expected error")
 	}
 }
+
+func TestFakeTransportSearchPages(t *testing.T) {
+	fake := NewFakeTransport()
+	fake.SetSearchPages("all", []*schema.Issue{{Identity: schema.IssueIdentity{Key: "A-1"}}}, []*schema.Issue{{Identity: schema.IssueIdentity{Key: "A-2"}}}, []*schema.Issue{{Identity: schema.IssueIdentity{Key: "A-3"}}})
+	got, total, err := fake.SearchIssues(context.Background(), "all")
+	if err != nil || total != 3 || len(got) != 3 || got[2].Identity.Key != "A-3" {
+		t.Fatalf("got %v total %d err %v", got, total, err)
+	}
+	tokens := fake.SearchPageTokens()
+	if len(tokens) != 3 || tokens[0] != "all|" || tokens[1] != "all|page-2" || tokens[2] != "all|page-3" {
+		t.Errorf("tokens = %v", tokens)
+	}
+}

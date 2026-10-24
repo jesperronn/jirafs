@@ -17,6 +17,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"syscall"
 	"time"
 
@@ -139,6 +140,10 @@ type searchResponse struct {
 	Total      int                 `json:"total"`
 	Issues     []jiraIssueResponse `json:"issues"`
 	Names      map[string]string   `json:"names"`
+	// NextPageToken and IsLast are returned by /search/jql instead of
+	// startAt/total.
+	NextPageToken string `json:"nextPageToken"`
+	IsLast        bool   `json:"isLast"`
 }
 
 // statusesResponse is the JSON structure returned by the status API.
@@ -238,6 +243,8 @@ type JiraClient struct {
 	customFields []string
 	// sleep waits between retries; nil means real time.
 	sleep SleepFunc
+	// searchMode caches which search endpoint this instance supports.
+	searchMode atomic.Int32
 }
 
 // EpicLinkFieldEnv names the environment variable that configures the
@@ -537,107 +544,179 @@ func (c *JiraClient) FetchIssue(ctx context.Context, key string) (*schema.Issue,
 	return issue, nil
 }
 
-// SearchIssues POSTs the given JQL to the Jira /rest/api/2/search endpoint,
-// returning the matching issues.
+// Search endpoint modes cached per client.
+const (
+	searchModeUnknown int32 = iota
+	searchModeJQL
+	searchModeLegacy
+)
+
+const (
+	searchJQLPath    = "/rest/api/3/search/jql"
+	searchLegacyPath = "/rest/api/2/search"
+	searchPageSize   = 50
+)
+
+// SearchIssues runs the JQL query and returns all matching issues. It uses
+// the token-paginated POST /rest/api/3/search/jql endpoint (Jira Cloud). When
+// that endpoint answers 404 or 410 (Jira Server / Data Center), it falls back
+// to the startAt-paginated POST /rest/api/2/search endpoint; the choice is
+// made once per client and cached. The int is Jira's total when the endpoint
+// reports one, otherwise the number of issues returned.
 func (c *JiraClient) SearchIssues(ctx context.Context, jql string) ([]*schema.Issue, int, error) {
 	if strings.TrimSpace(jql) == "" {
 		return nil, 0, NewNotFoundError("jql: empty query")
 	}
+	if c.searchMode.Load() != searchModeLegacy {
+		issues, err := c.searchTokenPages(ctx, jql)
+		if err == nil {
+			c.searchMode.Store(searchModeJQL)
+			return issues, len(issues), nil
+		}
+		var fb *searchFallbackError
+		if !errors.As(err, &fb) {
+			return nil, 0, err
+		}
+		c.searchMode.Store(searchModeLegacy)
+	}
+	return c.searchStartAtPages(ctx, jql)
+}
 
-	url := c.baseURL + "/rest/api/2/search"
-	fields := c.issueFields()
-	const pageSize = 50
-	startAt := 0
+// searchFallbackError signals that the token endpoint does not exist.
+type searchFallbackError struct{ status int }
+
+func (e *searchFallbackError) Error() string {
+	return fmt.Sprintf("search/jql endpoint unavailable: HTTP %d", e.status)
+}
+
+func (c *JiraClient) searchTokenPages(ctx context.Context, jql string) ([]*schema.Issue, error) {
 	issues := make([]*schema.Issue, 0)
-	total := 0
+	token := ""
 	for {
 		body := map[string]interface{}{
 			"jql":        jql,
-			"maxResults": pageSize,
-			"fields":     fields,
+			"maxResults": searchPageSize,
+			"fields":     c.issueFields(),
+		}
+		if len(c.customFields) > 0 {
+			body["expand"] = "names"
+		}
+		if token != "" {
+			body["nextPageToken"] = token
+		}
+		sr, status, err := c.postSearch(ctx, searchJQLPath, jql, body)
+		if err != nil {
+			if status == http.StatusNotFound || status == http.StatusGone {
+				if c.searchMode.Load() == searchModeUnknown && token == "" {
+					return nil, &searchFallbackError{status: status}
+				}
+			}
+			return nil, err
+		}
+		issues = append(issues, c.searchIssues(sr)...)
+		if sr.IsLast || sr.NextPageToken == "" || sr.NextPageToken == token {
+			return issues, nil
+		}
+		token = sr.NextPageToken
+	}
+}
+
+func (c *JiraClient) searchStartAtPages(ctx context.Context, jql string) ([]*schema.Issue, int, error) {
+	issues := make([]*schema.Issue, 0)
+	total := 0
+	startAt := 0
+	for {
+		body := map[string]interface{}{
+			"jql":        jql,
+			"maxResults": searchPageSize,
+			"fields":     c.issueFields(),
 			"startAt":    startAt,
 		}
 		if len(c.customFields) > 0 {
 			body["expand"] = []string{"names"}
 		}
-		payload, err := json.Marshal(body)
+		sr, _, err := c.postSearch(ctx, searchLegacyPath, jql, body)
 		if err != nil {
-			return nil, 0, NewUnknownErr("cannot marshal search request: " + err.Error())
+			return nil, 0, err
 		}
-
-		req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(payload))
-		if err != nil {
-			return nil, 0, NewTransportError("cannot create search request: " + err.Error())
-		}
-		req.Header.Set("Content-Type", "application/json")
-		req, err = BuildAuthenticatedRequest(req, c.credential)
-		if err != nil {
-			return nil, 0, NewUnknownErr("cannot authenticate search request: " + err.Error())
-		}
-
-		resp, err := c.do(req)
-		if err != nil {
-			return nil, 0, NewTransportError("search request failed: " + err.Error())
-		}
-
-		if resp.StatusCode == http.StatusNotFound {
-			resp.Body.Close()
-			return nil, 0, NewNotFoundError("search:" + jql)
-		}
-		if resp.StatusCode >= 400 && resp.StatusCode < 500 {
-			if resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden {
-				resp.Body.Close()
-				return nil, 0, NewAuthError("HTTP " + fmt.Sprintf("%d", resp.StatusCode))
-			}
-			defer resp.Body.Close()
-			return nil, 0, mapHTTPErr(resp)
-		}
-		if resp.StatusCode >= 500 {
-			defer resp.Body.Close()
-			return nil, 0, mapHTTPErr(resp)
-		}
-
-		var sr searchResponse
-		if err := json.NewDecoder(resp.Body).Decode(&sr); err != nil {
-			resp.Body.Close()
-			return nil, 0, NewUnknownErr("cannot parse search response: " + err.Error())
-		}
-		resp.Body.Close()
-
 		if sr.Total > 0 {
 			total = sr.Total
 		}
-		for _, ir := range sr.Issues {
-			issue := &schema.Issue{
-				Identity: schema.IssueIdentity{
-					Key:  schema.IssueKey(ir.Key),
-					Type: schema.IssueType(""),
-				},
-			}
-			if ir.Fields != nil {
-				if issuetype, ok := ir.Fields["issuetype"]; ok {
-					if mt, ok := issuetype.(map[string]interface{}); ok {
-						if name, ok := mt["name"]; ok {
-							if s, ok := name.(string); ok {
-								issue.Identity.Type = schema.IssueType(s)
-							}
-						}
-					}
-				}
-				export.NormalizeIssue(issue, ir.Fields)
-				export.NormalizeLinkedIssues(issue, ir.Fields)
-				export.NormalizeContext(issue, ir.Fields, c.epicLinkField)
-				export.NormalizeCustomFieldValues(issue, ir.Fields, c.customFields, sr.Names)
-			}
-			issues = append(issues, issue)
-		}
+		issues = append(issues, c.searchIssues(sr)...)
 		if len(sr.Issues) == 0 || len(issues) >= total {
 			break
 		}
 		startAt += len(sr.Issues)
 	}
-
+	if total == 0 {
+		total = len(issues)
+	}
 	return issues, total, nil
+}
+
+// postSearch POSTs one search page. On failure it returns the HTTP status
+// (0 for transport errors) alongside the mapped error.
+func (c *JiraClient) postSearch(ctx context.Context, path, jql string, body map[string]interface{}) (*searchResponse, int, error) {
+	payload, err := json.Marshal(body)
+	if err != nil {
+		return nil, 0, NewUnknownErr("cannot marshal search request: " + err.Error())
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.baseURL+path, bytes.NewReader(payload))
+	if err != nil {
+		return nil, 0, NewTransportError("cannot create search request: " + err.Error())
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req, err = BuildAuthenticatedRequest(req, c.credential)
+	if err != nil {
+		return nil, 0, NewUnknownErr("cannot authenticate search request: " + err.Error())
+	}
+	resp, err := c.do(req)
+	if err != nil {
+		return nil, 0, NewTransportError("search request failed: " + err.Error())
+	}
+	defer resp.Body.Close()
+
+	switch {
+	case resp.StatusCode == http.StatusNotFound:
+		return nil, resp.StatusCode, NewNotFoundError("search:" + jql)
+	case resp.StatusCode == http.StatusGone:
+		return nil, resp.StatusCode, mapHTTPErr(resp)
+	case resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden:
+		return nil, resp.StatusCode, NewAuthError("HTTP " + fmt.Sprintf("%d", resp.StatusCode))
+	case resp.StatusCode >= 400:
+		return nil, resp.StatusCode, mapHTTPErr(resp)
+	}
+	var sr searchResponse
+	if err := json.NewDecoder(resp.Body).Decode(&sr); err != nil {
+		return nil, resp.StatusCode, NewUnknownErr("cannot parse search response: " + err.Error())
+	}
+	return &sr, resp.StatusCode, nil
+}
+
+// searchIssues converts one search response page into schema issues.
+func (c *JiraClient) searchIssues(sr *searchResponse) []*schema.Issue {
+	out := make([]*schema.Issue, 0, len(sr.Issues))
+	for _, ir := range sr.Issues {
+		issue := &schema.Issue{
+			Identity: schema.IssueIdentity{
+				Key:  schema.IssueKey(ir.Key),
+				Type: schema.IssueType(""),
+			},
+		}
+		if ir.Fields != nil {
+			if mt, ok := ir.Fields["issuetype"].(map[string]interface{}); ok {
+				if s, ok := mt["name"].(string); ok {
+					issue.Identity.Type = schema.IssueType(s)
+				}
+			}
+			export.NormalizeIssue(issue, ir.Fields)
+			export.NormalizeLinkedIssues(issue, ir.Fields)
+			export.NormalizeContext(issue, ir.Fields, c.epicLinkField)
+			export.NormalizeCustomFieldValues(issue, ir.Fields, c.customFields, sr.Names)
+		}
+		out = append(out, issue)
+	}
+	return out
 }
 
 // CurrentUser calls the Jira /rest/api/2/myself endpoint to retrieve

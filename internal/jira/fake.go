@@ -19,6 +19,8 @@ type FakeTransport struct {
 	errOn         string                     // "fetch", "search", or "user"
 	issuesByScope map[string][]*schema.Issue // scope -> issues
 	searches      []string
+	pagesByScope  map[string][][]*schema.Issue // scope -> token-paginated pages
+	pageTokens    []string                     // "scope|token" per simulated page request
 	// Registry data for registry refresh tests.
 	comments    map[string][]schema.Comment
 	statuses    []StatusEntry
@@ -87,6 +89,27 @@ func (f *FakeTransport) FetchIssue(_ context.Context, key string) (*schema.Issue
 	return issue, nil
 }
 
+// SetSearchPages registers a multi-page result for the scope, mimicking the
+// token-paginated /search/jql endpoint: each slice is one page, and the fake
+// chains them with nextPageToken values ("page-2", "page-3", ...). The pages
+// are concatenated in order and the total is the number of issues.
+func (f *FakeTransport) SetSearchPages(scope string, pages ...[]*schema.Issue) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.pagesByScope == nil {
+		f.pagesByScope = make(map[string][][]*schema.Issue)
+	}
+	f.pagesByScope[scope] = pages
+}
+
+// SearchPageTokens returns one "scope|token" entry per simulated page request
+// made through SetSearchPages data; the first page has an empty token.
+func (f *FakeTransport) SearchPageTokens() []string {
+	f.mu.RLock()
+	defer f.mu.RUnlock()
+	return append([]string(nil), f.pageTokens...)
+}
+
 // SearchIssues returns the issues registered for the given scope, or the
 // configured error if ErrOn == "search". When no explicit issues are set
 // for the scope, it falls back to GenerateScopeIssues for known scopes.
@@ -96,6 +119,18 @@ func (f *FakeTransport) SearchIssues(_ context.Context, scope string) ([]*schema
 	f.searches = append(f.searches, scope)
 	if f.errOn == "search" {
 		return nil, 0, f.err
+	}
+	if pages, ok := f.pagesByScope[scope]; ok {
+		var all []*schema.Issue
+		for i, page := range pages {
+			token := ""
+			if i > 0 {
+				token = fmt.Sprintf("page-%d", i+1)
+			}
+			f.pageTokens = append(f.pageTokens, scope+"|"+token)
+			all = append(all, page...)
+		}
+		return all, len(all), nil
 	}
 	// The query is JQL; the two built-in scope queries map to their names.
 	switch scope {

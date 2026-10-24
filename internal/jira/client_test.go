@@ -806,7 +806,7 @@ func TestSearchIssuesMyIssues(t *testing.T) {
 		if r.Method != http.MethodPost {
 			t.Errorf("method = %s, want POST", r.Method)
 		}
-		wantPath := "/rest/api/2/search"
+		wantPath := "/rest/api/3/search/jql"
 		if r.URL.Path != wantPath {
 			t.Errorf("path = %s, want %s", r.URL.Path, wantPath)
 		}
@@ -889,8 +889,8 @@ func TestSearchIssuesCurrentSprint(t *testing.T) {
 		if r.Method != http.MethodPost {
 			t.Errorf("method = %s, want POST", r.Method)
 		}
-		if r.URL.Path != "/rest/api/2/search" {
-			t.Errorf("path = %s, want /rest/api/2/search", r.URL.Path)
+		if r.URL.Path != "/rest/api/3/search/jql" {
+			t.Errorf("path = %s, want /rest/api/3/search/jql", r.URL.Path)
 		}
 		if r.Header.Get("Content-Type") != "application/json" {
 			t.Errorf("Content-Type = %q, want application/json", r.Header.Get("Content-Type"))
@@ -2041,5 +2041,135 @@ func TestRealSleepReturnsOnCancel(t *testing.T) {
 	start := time.Now()
 	if err := realSleep(ctx, time.Minute); err == nil || time.Since(start) > time.Second {
 		t.Fatalf("realSleep err=%v elapsed=%v, want prompt cancellation", err, time.Since(start))
+	}
+}
+
+type searchLogEntry struct{ method, path, token string }
+
+func searchTestClient(url string) *JiraClient {
+	c := NewJiraClient(url)
+	c.SetCredentials(config.ResolvedInstanceCredentials{
+		AuthType: "basic",
+		Credential: config.ResolvedCredential{
+			Fields: map[string]string{"username": "u@example.com", "password": "secret"},
+		},
+	})
+	return c
+}
+
+func TestSearchIssuesChainsNextPageTokens(t *testing.T) {
+	var log []searchLogEntry
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var body map[string]interface{}
+		json.NewDecoder(r.Body).Decode(&body)
+		tok, _ := body["nextPageToken"].(string)
+		log = append(log, searchLogEntry{r.Method, r.URL.Path, tok})
+		if _, ok := body["startAt"]; ok {
+			t.Errorf("startAt sent to search/jql")
+		}
+		switch tok {
+		case "":
+			w.Write([]byte(`{"issues":[{"key":"P-1"},{"key":"P-2"}],"nextPageToken":"tokA"}`))
+		case "tokA":
+			w.Write([]byte(`{"issues":[{"key":"P-3"}],"nextPageToken":"tokB"}`))
+		case "tokB":
+			w.Write([]byte(`{"issues":[{"key":"P-4"}],"isLast":true}`))
+		default:
+			t.Errorf("unexpected token %q", tok)
+		}
+	}))
+	defer srv.Close()
+
+	issues, total, err := searchTestClient(srv.URL).SearchIssues(context.Background(), "project = P")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var keys []string
+	for _, i := range issues {
+		keys = append(keys, string(i.Identity.Key))
+	}
+	if strings.Join(keys, ",") != "P-1,P-2,P-3,P-4" || total != 4 {
+		t.Errorf("keys = %v total = %d", keys, total)
+	}
+	for i, e := range log {
+		t.Logf("request %d: %s %s token=%q", i+1, e.method, e.path, e.token)
+	}
+	want := []searchLogEntry{
+		{"POST", "/rest/api/3/search/jql", ""},
+		{"POST", "/rest/api/3/search/jql", "tokA"},
+		{"POST", "/rest/api/3/search/jql", "tokB"},
+	}
+	if len(log) != len(want) {
+		t.Fatalf("log = %v", log)
+	}
+	for i := range want {
+		if log[i] != want[i] {
+			t.Errorf("log[%d] = %v, want %v", i, log[i], want[i])
+		}
+	}
+}
+
+func TestSearchIssuesFallsBackOnceToLegacy(t *testing.T) {
+	for _, status := range []int{http.StatusNotFound, http.StatusGone} {
+		var paths []string
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			paths = append(paths, r.URL.Path)
+			if r.URL.Path == "/rest/api/3/search/jql" {
+				w.WriteHeader(status)
+				return
+			}
+			var body map[string]interface{}
+			json.NewDecoder(r.Body).Decode(&body)
+			if body["startAt"] == nil {
+				t.Errorf("startAt missing on legacy path")
+			}
+			w.Write([]byte(`{"total":1,"issues":[{"key":"P-9"}]}`))
+		}))
+		c := searchTestClient(srv.URL)
+		for call := 0; call < 2; call++ {
+			issues, total, err := c.SearchIssues(context.Background(), "project = P")
+			if err != nil || len(issues) != 1 || total != 1 {
+				t.Fatalf("status %d call %d: %v %d %v", status, call, issues, total, err)
+			}
+		}
+		srv.Close()
+		want := "/rest/api/3/search/jql,/rest/api/2/search,/rest/api/2/search"
+		if strings.Join(paths, ",") != want {
+			t.Errorf("status %d paths = %v, want %s", status, paths, want)
+		}
+	}
+}
+
+func TestSearchIssuesCustomFieldsBothPaths(t *testing.T) {
+	const resp = `{"total":1,"issues":[{"key":"P-1","fields":{"customfield_12601":"x"}}],"names":{"customfield_12601":"Accept"},"isLast":true}`
+	for _, legacy := range []bool{false, true} {
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if legacy && r.URL.Path == "/rest/api/3/search/jql" {
+				w.WriteHeader(http.StatusNotFound)
+				return
+			}
+			w.Write([]byte(resp))
+		}))
+		c := searchTestClient(srv.URL)
+		c.customFields = []string{"customfield_12601"}
+		issues, _, err := c.SearchIssues(context.Background(), "project = P")
+		srv.Close()
+		if err != nil || len(issues) != 1 {
+			t.Fatalf("legacy=%v: %v", legacy, err)
+		}
+		if issues[0].CustomFields["customfield_12601"] != "x" || issues[0].Context.CustomFieldNames["customfield_12601"] != "Accept" {
+			t.Errorf("legacy=%v: %+v", legacy, issues[0])
+		}
+	}
+}
+
+func TestSearchIssuesNotFoundOnBothEndpoints(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	defer srv.Close()
+	_, _, err := searchTestClient(srv.URL).SearchIssues(context.Background(), "project = P")
+	if !IsClientError(err, ErrNotFound) {
+		t.Errorf("err = %v", err)
 	}
 }
