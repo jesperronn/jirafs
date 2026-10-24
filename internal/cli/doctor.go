@@ -9,7 +9,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/jirafs/jirafs/internal/color"
 	"github.com/jirafs/jirafs/internal/config"
 	jcontext "github.com/jirafs/jirafs/internal/context"
 	"github.com/jirafs/jirafs/internal/jira"
@@ -313,17 +312,7 @@ func RunDoctor(args []string) int {
 
 // printDoctorHelp prints usage information for the doctor subcommand.
 func printDoctorHelp() {
-	fmt.Fprintf(doctorStdout, "%s\n", color.BoldBlue(doctorStdout, "Usage:"))
-	fmt.Fprintf(doctorStdout, "  jirafs %s [flags]\n\n", color.Blue(doctorStdout, "doctor"))
-
-	fmt.Fprintf(doctorStdout, "%s\n", color.Dim(doctorStdout, "Reports the health of a jirafs workspace: config, credential resolution,"))
-	fmt.Fprintf(doctorStdout, "%s\n\n", color.Dim(doctorStdout, "and live-probe connectivity for each configured Jira instance."))
-
-	fmt.Fprintf(doctorStdout, "%s:\n", color.BoldGreen(doctorStdout, "Flags"))
-	fmt.Fprintf(doctorStdout, "  %s    %s\n", color.Yellow(doctorStdout, "--project NAME"), color.Dim(doctorStdout, "name of a configured project (default: resolved from --cwd or the remembered project)"))
-	fmt.Fprintf(doctorStdout, "  %s    %s\n", color.Yellow(doctorStdout, "--cwd DIR"), color.Dim(doctorStdout, "working directory to resolve the project from (default: current directory)"))
-	fmt.Fprintf(doctorStdout, "  %s    %s\n", color.Yellow(doctorStdout, "--verbose"), color.Dim(doctorStdout, "print request URLs during checks"))
-	fmt.Fprintf(doctorStdout, "  %s   %s\n", color.Yellow(doctorStdout, "--help, -h"), color.Dim(doctorStdout, "show this help message"))
+	PrintCommandHelp(doctorStdout, "doctor")
 }
 
 func onboardingCommands(snap DoctorSnapshot) []string {

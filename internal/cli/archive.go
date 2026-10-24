@@ -10,7 +10,6 @@ import (
 	"strings"
 
 	"github.com/jirafs/jirafs/internal/archive"
-	"github.com/jirafs/jirafs/internal/color"
 	"github.com/jirafs/jirafs/internal/config"
 	"github.com/jirafs/jirafs/internal/context"
 	"github.com/jirafs/jirafs/internal/mirror"
@@ -259,61 +258,20 @@ func RunArchive(args []string) int {
 }
 
 func printArchiveIssueHelp() {
-	PrintUsage(archiveStdout, Usage{
-		Synopsis:    []string{"archive issue <KEY> [flags]"},
-		Description: []string{"Moves one resolved issue file into the project's _archive directory."},
-		Sections: []UsageSection{{Title: "Flags", Rows: [][2]string{
-			{"--project KEY", "name of a configured project"},
-			{"--cwd DIR", "working directory to resolve the project from"},
-			{"--dry-run", "print what would be archived; move nothing"},
-			{"--help, -h", "show this help message"},
-		}}},
-	})
+	PrintCommandHelp(archiveStdout, "archive issue")
 }
 
 func printArchiveSweepHelp() {
-	PrintUsage(archiveStdout, Usage{
-		Synopsis:    []string{"archive sweep [flags]"},
-		Description: []string{"Reports archive-eligible issues in the project's local directories; with --apply, archives them."},
-		Sections: []UsageSection{{Title: "Flags", Rows: [][2]string{
-			{"--project KEY", "name of a configured project"},
-			{"--cwd DIR", "working directory for project resolution"},
-			{"--apply", "actually archive eligible issues"},
-			{"--dry-run", "list eligible issues only (the default)"},
-			{"--help, -h", "show this help message"},
-		}}},
-	})
+	PrintCommandHelp(archiveStdout, "archive sweep")
 }
 
 func printArchiveListHelp() {
-	PrintUsage(archiveStdout, Usage{
-		Synopsis:    []string{"archive list [flags]"},
-		Description: []string{"Lists archived issue snapshots in the project's _archive directory."},
-		Sections: []UsageSection{{Title: "Flags", Rows: [][2]string{
-			{"--project KEY", "name of a configured project"},
-			{"--cwd DIR", "working directory to resolve the project from"},
-			{"--help, -h", "show this help message"},
-		}}},
-	})
+	PrintCommandHelp(archiveStdout, "archive list")
 }
 
 // printArchiveHelp prints usage information for the archive subcommand.
 func printArchiveHelp() {
-	fmt.Fprintf(archiveStdout, "%s\n", color.BoldBlue(archiveStdout, "Usage:"))
-	fmt.Fprintf(archiveStdout, "  jirafs %s <subcommand> [flags]\n\n", color.Blue(archiveStdout, "archive"))
-
-	fmt.Fprintf(archiveStdout, "%s\n", color.Dim(archiveStdout, "Moves resolved issues out of the live workspace into a per-project"))
-	fmt.Fprintf(archiveStdout, "%s\n\n", color.Dim(archiveStdout, "_archive directory and lists what has been archived."))
-
-	fmt.Fprintf(archiveStdout, "%s:\n", color.BoldGreen(archiveStdout, "Subcommands"))
-	fmt.Fprintf(archiveStdout, "  %s   %s\n", color.Yellow(archiveStdout, "issue"), color.Dim(archiveStdout, "archive a single issue by key"))
-	fmt.Fprintf(archiveStdout, "  %s   %s\n", color.Yellow(archiveStdout, "sweep"), color.Dim(archiveStdout, "report (or with --apply, archive) archive-eligible issues"))
-	fmt.Fprintf(archiveStdout, "  %s   %s\n", color.Yellow(archiveStdout, "list"), color.Dim(archiveStdout, "list archived issue snapshots"))
-
-	fmt.Fprintf(archiveStdout, "%s:\n", color.BoldGreen(archiveStdout, "Flags"))
-	fmt.Fprintf(archiveStdout, "  %s   %s\n", color.Yellow(archiveStdout, "--project"), color.Dim(archiveStdout, "name of a configured project"))
-	fmt.Fprintf(archiveStdout, "  %s   %s\n", color.Yellow(archiveStdout, "--cwd"), color.Dim(archiveStdout, "working directory to resolve the project from"))
-	fmt.Fprintf(archiveStdout, "  %s   %s\n", color.Yellow(archiveStdout, "--help, -h"), color.Dim(archiveStdout, "show this help message"))
+	PrintCommandHelp(archiveStdout, "archive")
 }
 
 // runArchiveSweep handles `jirafs archive sweep`.

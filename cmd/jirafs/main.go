@@ -55,6 +55,8 @@ func run(args []string, stdout, stderr io.Writer) int {
 		return cli.RunStatus(rest)
 	case "doctor":
 		return cli.RunDoctor(rest)
+	case "docs":
+		return runDocs(rest, stdout, stderr)
 	default:
 		fmt.Fprintf(stderr, "jirafs: unknown command: %q\nUse --help for usage.\n", args[0])
 		return 2
@@ -66,19 +68,9 @@ func printHelp(stderr io.Writer) {
 	fmt.Fprintf(stderr, "  %s <command> [arguments]\n\n", color.Bold(stderr, "jirafs"))
 
 	fmt.Fprintf(stderr, "%s:\n", color.BoldGreen(stderr, "Commands"))
-	commands := [][2]string{
-		{"init", "configure a Jira instance and project, and create its mirror directory"},
-		{"pull", "fetch Jira issues into local Markdown files (one issue or a scope)"},
-		{"diff", "show what push would change in Jira (read-only)"},
-		{"status", "show workspace status and next-step hints"},
-		{"doctor", "run health checks on config, credentials, and live connectivity"},
-		{"new", "create a new issue from a template"},
-		{"push", "create drafts and update modified issues in Jira (dry run unless --apply)"},
-		{"registry", "manage local registry files for typed references"},
-		{"board", "show a local kanban-style board view"},
-		{"archive", "archive resolved issues and list archived files"},
-		{"use", "update remembered project context"},
-		{"help", "show this help message"},
+	var commands [][2]string
+	for _, c := range cli.TopLevelCommands() {
+		commands = append(commands, [2]string{c.Name, c.Summary})
 	}
 	for _, cmd := range commands {
 		fmt.Fprintf(stderr, "  %s  %s\n", color.Blue(stderr, cmd[0]), color.Dim(stderr, cmd[1]))

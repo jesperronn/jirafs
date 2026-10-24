@@ -10,7 +10,6 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/jirafs/jirafs/internal/color"
 	"github.com/jirafs/jirafs/internal/config"
 	"github.com/jirafs/jirafs/internal/context"
 	"github.com/jirafs/jirafs/internal/jira"
@@ -350,18 +349,5 @@ func runDiffAll(cmdCtx stdcontext.Context, settings *config.Settings, project, c
 
 // printDiffHelp prints usage information for the diff subcommand.
 func printDiffHelp() {
-	fmt.Fprintf(diffStdout, "%s\n", color.BoldBlue(diffStdout, "Usage:"))
-	fmt.Fprintf(diffStdout, "  jirafs %s [%s...] [flags]\n\n", color.Blue(diffStdout, "diff"), color.Yellow(diffStdout, "issue-key"))
-
-	fmt.Fprintf(diffStdout, "%s\n", color.Dim(diffStdout, "Fetches each remote issue from Jira, reads the local copy from the file"))
-	fmt.Fprintf(diffStdout, "%s\n", color.Dim(diffStdout, "system, and prints the operations needed to bring the remote in line"))
-	fmt.Fprintf(diffStdout, "%s\n", color.Dim(diffStdout, "with the local copy. Without a key, diffs every locally changed issue."))
-	fmt.Fprintf(diffStdout, "%s\n\n", color.Dim(diffStdout, "Read-only: nothing is written to Jira or to local files."))
-
-	fmt.Fprintf(diffStdout, "%s:\n", color.BoldGreen(diffStdout, "Flags"))
-	fmt.Fprintf(diffStdout, "  %s NAME  %s\n", color.Yellow(diffStdout, "--project"), color.Dim(diffStdout, "name of a configured project"))
-	fmt.Fprintf(diffStdout, "  %s DIR   %s\n", color.Yellow(diffStdout, "--cwd"), color.Dim(diffStdout, "working directory for project resolution"))
-	fmt.Fprintf(diffStdout, "  %s   %s\n\n", color.Yellow(diffStdout, "--exit-code"), color.Dim(diffStdout, "exit 1 when any issue differs (default exit 0)"))
-
-	fmt.Fprintf(diffStdout, "%s\n", color.Cyan(diffStdout, `Run "jirafs diff --help" for more information about flags.`))
+	PrintCommandHelp(diffStdout, "diff")
 }

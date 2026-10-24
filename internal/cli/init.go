@@ -3,7 +3,6 @@ package cli
 
 import (
 	"bufio"
-	"flag"
 	"fmt"
 	"io"
 	"os"
@@ -55,7 +54,7 @@ func RunInit(args []string) int {
 		return nil
 	})
 	if wantsHelpOrWord(args) {
-		printInitHelp(fs)
+		printInitHelp()
 		return 0
 	}
 	positionals, err := parseInterspersed(fs, args)
@@ -390,16 +389,6 @@ func expandTilde(p string) (string, error) {
 }
 
 // printInitHelp prints usage information for the init subcommand.
-func printInitHelp(fs *flag.FlagSet) {
-	PrintUsage(initStdout, Usage{
-		Synopsis: []string{"init [flags] <project-name>"},
-		Description: []string{
-			"Configures one Jira instance and one project: records them in",
-			"~/.jirafs/settings.toml, creates the mirror directory and writes",
-			"mirror.yml plus the six registry files (users, projects, statuses,",
-			"sprints, fix_versions, issue_types). Existing files are left untouched.",
-			"Missing values are prompted for in a terminal.",
-		},
-		Sections: []UsageSection{{Title: "Flags", Rows: append(FlagRows(fs), [2]string{"--help, -h", "show this help message"})}},
-	})
+func printInitHelp() {
+	PrintCommandHelp(initStdout, "init")
 }

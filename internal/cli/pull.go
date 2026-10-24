@@ -537,31 +537,7 @@ func resolveMirrorContext(settings *config.Settings, project, cwd, subcommand st
 }
 
 func printPullHelp() {
-	PrintUsage(pullStdout, Usage{
-		Synopsis: []string{"pull [scope|KEY] [flags]"},
-		Description: []string{
-			"Fetches issues from Jira into the local mirror.",
-			"KEY (PROJ-123, or a Jira URL) pulls that one issue to <local_dirs[0]>/<KEY>.md.",
-			"A scope name from mirror.yml (or the built-ins my-issues and current-sprint) is refreshed incrementally; files with local edits are kept.",
-			"With no argument, every scope configured in mirror.yml is pulled.",
-		},
-		Sections: []UsageSection{
-			{Title: "Examples", Rows: [][2]string{
-				{"jirafs pull", "pull every configured scope"},
-				{"jirafs pull my-issues", "refresh one scope"},
-				{"jirafs pull PLAT-123", "pull one issue"},
-				{"jirafs pull PLAT-123 --stdout", "print one issue instead of writing a file"},
-			}},
-			{Title: "Flags", Rows: [][2]string{
-				{"--project NAME", "name of a configured project (default: resolved from --cwd or the remembered project)"},
-				{"--cwd DIR", "working directory for project resolution"},
-				{"--full", "scope only: ignore the last-sync cursor and refetch every issue"},
-				{"--stdout", "KEY only: print the document and write no file"},
-				{"--dry-run", "print what would be fetched and the real command; write nothing"},
-				{"--help, -h", "show this help message"},
-			}},
-		},
-	})
+	PrintCommandHelp(pullStdout, "pull")
 }
 
 // printUnknownScope reports an unknown scope name, listing the configured

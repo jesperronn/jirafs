@@ -153,8 +153,8 @@ These commands should expose `--project` and must resolve exactly one project:
 
 - `jirafs new`
 - `jirafs board`
-- `jirafs export backlog`
-- `jirafs export sprint current`
+- `jirafs pull current-sprint`
+- `jirafs pull my-issues`
 - `jirafs registry refresh` when refreshing project-scoped metadata
 
 If interactive and unresolved, they may prompt.
@@ -180,7 +180,6 @@ These commands should avoid hidden project defaults unless the user explicitly
 asks to scope them:
 
 - `jirafs registry show projects`
-- `jirafs export jql 'assignee = currentUser()'`
 - `jirafs archive issue ABC-111`
 
 For these commands:
@@ -278,11 +277,8 @@ project memory to `OPS`, but it must not rewrite `jira/config.yaml`.
 ### Non-Interactive Scripted Use
 
 ```text
-$ jirafs export backlog --non-interactive --project ABC --json
-{
-  "project": "ABC",
-  "issues": [...]
-}
+$ jirafs registry show projects --non-interactive --project ABC --json
+[...]
 ```
 
 ### Conflicting Explicit Inputs

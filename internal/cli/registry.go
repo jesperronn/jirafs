@@ -9,7 +9,6 @@ import (
 	"path/filepath"
 	"sort"
 
-	"github.com/jirafs/jirafs/internal/color"
 	"github.com/jirafs/jirafs/internal/config"
 	"github.com/jirafs/jirafs/internal/context"
 	"github.com/jirafs/jirafs/internal/registry"
@@ -303,22 +302,5 @@ func resolveRegistryContext(settings *config.Settings, project, cwd string) (*co
 
 // printRegistryHelp prints usage information for the registry subcommand.
 func printRegistryHelp() {
-	fmt.Fprintf(registryStdout, "%s\n", color.BoldBlue(registryStdout, "Usage:"))
-	fmt.Fprintf(registryStdout, "  jirafs %s [flags] <subcommand> [args]\n\n", color.Blue(registryStdout, "registry"))
-
-	fmt.Fprintf(registryStdout, "%s\n", color.Dim(registryStdout, "Manage local typed-reference registry files (users, projects, statuses,"))
-	fmt.Fprintf(registryStdout, "%s\n\n", color.Dim(registryStdout, "sprints, fix_versions). These live in the active project's mirror directory."))
-
-	fmt.Fprintf(registryStdout, "%s:\n", color.BoldGreen(registryStdout, "Subcommands"))
-	fmt.Fprintf(registryStdout, "  %s   %s\n", color.Yellow(registryStdout, "show <type>"), color.Dim(registryStdout, "display a registry; add --json for JSON output"))
-	fmt.Fprintf(registryStdout, "  %s   %s\n", color.Yellow(registryStdout, "init <type>"), color.Dim(registryStdout, "create an empty registry file"))
-	fmt.Fprintf(registryStdout, "  %s   %s\n\n", color.Yellow(registryStdout, "refresh <type>"), color.Dim(registryStdout, "populate a registry from Jira (requires network access)"))
-
-	fmt.Fprintf(registryStdout, "%s:\n", color.BoldGreen(registryStdout, "Types"))
-	fmt.Fprintf(registryStdout, "  %s\n\n", color.Dim(registryStdout, "users, projects, statuses, sprints, fix_versions"))
-
-	fmt.Fprintf(registryStdout, "%s:\n", color.BoldGreen(registryStdout, "Flags"))
-	fmt.Fprintf(registryStdout, "  %s   %s\n", color.Yellow(registryStdout, "--project"), color.Dim(registryStdout, "name of a configured project"))
-	fmt.Fprintf(registryStdout, "  %s   %s\n", color.Yellow(registryStdout, "--cwd"), color.Dim(registryStdout, "working directory for project resolution"))
-	fmt.Fprintf(registryStdout, "  %s   %s\n", color.Yellow(registryStdout, "--json"), color.Dim(registryStdout, "output registries as JSON (show)"))
+	PrintCommandHelp(registryStdout, "registry")
 }

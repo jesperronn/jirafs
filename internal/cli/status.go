@@ -10,7 +10,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/jirafs/jirafs/internal/color"
 	"github.com/jirafs/jirafs/internal/config"
 	"github.com/jirafs/jirafs/internal/context"
 	"github.com/jirafs/jirafs/internal/mirror"
@@ -445,16 +444,5 @@ func RunStatus(args []string) int {
 
 // printStatusHelp prints usage information for the status subcommand.
 func printStatusHelp() {
-	fmt.Fprintf(statusStdout, "%s\n", color.BoldBlue(statusStdout, "Usage:"))
-	fmt.Fprintf(statusStdout, "  jirafs %s [flags]\n\n", color.Blue(statusStdout, "status"))
-
-	fmt.Fprintf(statusStdout, "%s\n", color.Dim(statusStdout, "Reports the current state of a jirafs workspace: config, mirror files,"))
-	fmt.Fprintf(statusStdout, "%s\n", color.Dim(statusStdout, "scopes, local changes (modified, draft, conflicted; offline), and a"))
-	fmt.Fprintf(statusStdout, "%s\n\n", color.Dim(statusStdout, "next-step hint for onboarding."))
-
-	fmt.Fprintf(statusStdout, "%s:\n", color.BoldGreen(statusStdout, "Flags"))
-	fmt.Fprintf(statusStdout, "  %s   %s\n", color.Yellow(statusStdout, "--help, -h"), color.Dim(statusStdout, "show this help message"))
-	fmt.Fprintf(statusStdout, "  %s   %s\n", color.Yellow(statusStdout, "--project NAME"), color.Dim(statusStdout, "name of a configured project (default: resolved from --cwd or the remembered project)"))
-	fmt.Fprintf(statusStdout, "  %s   %s\n", color.Yellow(statusStdout, "--cwd DIR"), color.Dim(statusStdout, "working directory to resolve the project from (default: current directory)"))
-	fmt.Fprintf(statusStdout, "  %s   %s\n", color.Yellow(statusStdout, "--porcelain"), color.Dim(statusStdout, "print STATE<TAB>KEY<TAB>PATH lines only, for scripts"))
+	PrintCommandHelp(statusStdout, "status")
 }

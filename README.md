@@ -178,13 +178,28 @@ macOS) and `jirafs` will trust it.
 
 ## Command Surface
 
-The most important commands right now are:
+Run `jirafs <command> --help` for flags. The table below is generated from the
+command registry; edit `internal/cli/commands.go` and run `bin/gendocs`.
 
-- `jirafs init`
-- `jirafs use`
-- `jirafs pull`
-- `jirafs diff`
-- `jirafs push`
+<!-- BEGIN GENERATED: commands -->
+| Command | Description |
+| --- | --- |
+| `jirafs init` | configure a Jira instance and project, and create its mirror directory |
+| `jirafs pull` | fetch Jira issues into local Markdown files (one issue or a scope) |
+| `jirafs diff` | show what push would change in Jira (read-only) |
+| `jirafs status` | show workspace status and next-step hints |
+| `jirafs doctor` | run health checks on config, credentials, and live connectivity |
+| `jirafs new` | create a new issue from a template |
+| `jirafs push` | create drafts and update modified issues in Jira (dry run unless --apply) |
+| `jirafs registry` | manage local registry files for typed references |
+| `jirafs board` | show a local kanban-style board view |
+| `jirafs archive` | archive resolved issues and list archived files |
+| `jirafs archive issue` | archive a single resolved issue by key |
+| `jirafs archive sweep` | report (or with --apply, archive) archive-eligible issues |
+| `jirafs archive list` | list archived issue snapshots |
+| `jirafs use` | update remembered project context |
+| `jirafs help` | show this help message |
+<!-- END GENERATED -->
 
 ## Creating Issues With An AI
 

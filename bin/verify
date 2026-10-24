@@ -5,4 +5,4 @@ set -euo pipefail
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "${REPO_ROOT}"
 
-bin/lint && bin/test
+bin/lint && bin/gendocs --check && bin/test

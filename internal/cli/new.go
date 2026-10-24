@@ -102,34 +102,7 @@ func templateFor(typeName string) (string, bool) {
 
 // printNewHelp writes the `jirafs new` usage to newStdout.
 func printNewHelp() {
-	fmt.Fprint(newStdout, `jirafs new - create a local draft issue from a template
-
-Usage:
-  jirafs new <story|bug|epic> [flags]
-  jirafs new --template <path.md> [flags]
-  jirafs new <story|bug|epic> --prompt [--idea <text>]
-  jirafs new --from <file|-> [flags]
-
-The command writes a new draft issue file to the project's local directory.
-It does not contact Jira.
-
-Arguments:
-  <template>    Built-in template name: story, bug, or epic.
-
-Flags:
-  --summary <text>   Set the issue summary.
-  --project <name>   Name of a configured project.
-  --assignee <name>  Set the assignee.
-  --cwd <dir>        Working directory to resolve the project from.
-  --template <path>  Use a user-supplied template file instead of a built-in.
-  --prompt           Print the template plus instructions for an AI; no draft is written.
-  --idea <text>      With --prompt: the idea the AI should turn into the issue.
-  --force            Overwrite the draft file if it already exists.
-  --from <file|->    Create a draft from a filled document (- reads stdin).
-
-AI pipe:
-  jirafs new story --prompt --idea "..." | llm | jirafs new --from -
-`)
+	PrintCommandHelp(newStdout, "new")
 }
 
 // slugify lowercases s, replaces every run of non-alphanumeric characters with

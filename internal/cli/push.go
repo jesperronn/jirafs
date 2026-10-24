@@ -29,29 +29,7 @@ var (
 )
 
 func printPushHelp() {
-	PrintUsage(pushStdout, Usage{
-		Synopsis: []string{"push [KEY|file...] [flags]"},
-		Description: []string{
-			"Writes local issue files to Jira. A draft file (state: draft) is created as a",
-			"new issue and rewritten as KEY.md; an existing issue (a KEY, or its file) is",
-			"updated, including a status change through Jira's transitions.",
-			"Without arguments it pushes every locally modified file and every draft, as",
-			"listed by `jirafs status`. Files whose remote copy changed since the last",
-			"pull are skipped and reported as conflicts.",
-			"Without --apply (or with --dry-run) it only prints what would be written.",
-			"Every issue is reported as ok, skipped or failed; one failure never stops",
-			"the others, and the exit code is 1 when any issue failed.",
-		},
-		Sections: []UsageSection{{Title: "Flags", Rows: [][2]string{
-			{"--apply", "perform the Jira writes (without it, push is a dry run)"},
-			{"--dry-run", "print what would be written and write nothing (the default)"},
-			{"--write-local", "after a successful update, write the refreshed remote to the local file"},
-			{"--project NAME", "name of a configured project"},
-			{"--cwd DIR", "working directory to resolve the project from"},
-			{"--help, -h", "show this help message"},
-		}}},
-		Footer: `Run "jirafs push --help" for more information about flags.`,
-	})
+	PrintCommandHelp(pushStdout, "push")
 }
 
 // pushOptions are the mutation flags of one `jirafs push` run. Jira is only

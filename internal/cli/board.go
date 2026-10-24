@@ -185,16 +185,5 @@ func renderBoard(w io.Writer, b *board.Board) {
 
 // printBoardHelp prints usage information for the board subcommand.
 func printBoardHelp() {
-	fmt.Fprintf(boardStdout, "%s\n", color.BoldBlue(boardStdout, "Usage:"))
-	fmt.Fprintf(boardStdout, "  jirafs %s [flags]\n\n", color.Blue(boardStdout, "board"))
-
-	fmt.Fprintf(boardStdout, "%s\n", color.Dim(boardStdout, "Displays a local kanban-style board view of issues grouped by"))
-	fmt.Fprintf(boardStdout, "%s\n\n", color.Dim(boardStdout, "status, assignee, or epic."))
-
-	fmt.Fprintf(boardStdout, "%s:\n", color.BoldGreen(boardStdout, "Flags"))
-	fmt.Fprintf(boardStdout, "  %s MODE  %s\n", color.Yellow(boardStdout, "--group-by"), color.Dim(boardStdout, "status, assignee, or epic (default: status)"))
-	fmt.Fprintf(boardStdout, "  %s KEY   %s\n", color.Yellow(boardStdout, "--project"), color.Dim(boardStdout, "name of a configured project"))
-	fmt.Fprintf(boardStdout, "  %s DIR   %s\n\n", color.Yellow(boardStdout, "--cwd"), color.Dim(boardStdout, "working directory for project resolution"))
-
-	fmt.Fprintf(boardStdout, "%s\n", color.Cyan(boardStdout, `Run "jirafs board --help" for more information about flags.`))
+	PrintCommandHelp(boardStdout, "board")
 }

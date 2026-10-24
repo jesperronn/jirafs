@@ -1,0 +1,42 @@
+#!/usr/bin/env bash
+
+set -euo pipefail
+
+# Usage: bin/gendocs [--check]
+#
+# Regenerates the regions between "<!-- BEGIN GENERATED: name -->" and
+# "<!-- END GENERATED -->" in README.md and docs/cli.md from the command
+# registry in internal/cli/commands.go. With --check, writes nothing: prints a
+# diff and exits 1 when a file is stale.
+
+REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+cd "${REPO_ROOT}"
+
+FILES=(README.md docs/cli.md)
+CHECK=0
+case "${1:-}" in
+    "") ;;
+    --check) CHECK=1 ;;
+    *) echo "usage: bin/gendocs [--check]" >&2; exit 2 ;;
+esac
+
+tmp="$(mktemp -d)"
+trap 'rm -rf "${tmp}"' EXIT
+go build -o "${tmp}/jirafs" ./cmd/jirafs
+
+stale=0
+for f in "${FILES[@]}"; do
+    "${tmp}/jirafs" docs --render "${f}" > "${tmp}/out"
+    if cmp -s "${f}" "${tmp}/out"; then
+        continue
+    fi
+    if [ "${CHECK}" -eq 1 ]; then
+        diff -u "${f}" "${tmp}/out" || true
+        echo "gendocs: ${f} is stale; run: bin/gendocs" >&2
+        stale=1
+    else
+        cp "${tmp}/out" "${f}"
+        echo "gendocs: updated ${f}"
+    fi
+done
+exit "${stale}"

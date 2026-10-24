@@ -139,3 +139,18 @@ func isDigits(s string) bool {
 	}
 	return s != ""
 }
+
+func TestDocsCommand(t *testing.T) {
+	var out, errb bytes.Buffer
+	if code := run([]string{"docs", "--markdown"}, &out, &errb); code != 0 || !strings.Contains(out.String(), "`jirafs archive sweep`") || strings.Contains(out.String(), "jirafs docs") {
+		t.Errorf("docs --markdown: code=%d out=%q err=%q", code, out.String(), errb.String())
+	}
+	out.Reset()
+	errb.Reset()
+	if code := run([]string{"docs"}, &out, &errb); code != 2 {
+		t.Errorf("docs without flags: code=%d, want 2", code)
+	}
+	if code := run([]string{"docs", "--render", "/nonexistent/file.md"}, &out, &errb); code != 1 {
+		t.Errorf("docs --render missing file: code=%d, want 1", code)
+	}
+}

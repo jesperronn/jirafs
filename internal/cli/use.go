@@ -1,7 +1,6 @@
 package cli
 
 import (
-	"flag"
 	"fmt"
 	"io"
 	"os"
@@ -79,7 +78,7 @@ func RunUse(args []string) int {
 	project := fs.String("project", "", "name of the configured project to set as current")
 	clear := fs.Bool("clear", false, "clear the remembered current project")
 	if wantsHelpOrWord(args) {
-		printUseHelp(fs)
+		printUseHelp()
 		return 0
 	}
 	if err := parseFlags(fs, args); err != nil {
@@ -183,13 +182,6 @@ func sortedProjectNames(s *config.Settings) []string {
 }
 
 // printUseHelp prints usage information for `jirafs use` to stdout.
-func printUseHelp(fs *flag.FlagSet) {
-	PrintUsage(useStdout, Usage{
-		Synopsis: []string{"use [flags] [project]"},
-		Description: []string{
-			"Shows, sets or clears the remembered current project.",
-			"With no arguments it shows the current project.",
-		},
-		Sections: []UsageSection{{Title: "Flags", Rows: append(FlagRows(fs), [2]string{"--help, -h", "show this help message"})}},
-	})
+func printUseHelp() {
+	PrintCommandHelp(useStdout, "use")
 }
