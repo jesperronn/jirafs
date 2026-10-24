@@ -100,11 +100,11 @@ func TestRunMirrorRefresh_FlagAndArgErrors(t *testing.T) {
 		args []string
 		want string
 	}{
-		{[]string{"refresh", "--bogus"}, "invalid flags"},
+		{[]string{"refresh", "--bogus"}, "flag provided but not defined"},
 		{[]string{"refresh", "--project", "test"}, "missing scope name"},
 	} {
 		_, stderr := withMirrorTestIO(t)
-		if code := RunMirror(c.args); code != 1 || !strings.Contains(stderr.String(), c.want) {
+		if code := RunMirror(c.args); code != 2 || !strings.Contains(stderr.String(), c.want) {
 			t.Errorf("RunMirror(%v) = %d stderr=%q", c.args, code, stderr.String())
 		}
 	}

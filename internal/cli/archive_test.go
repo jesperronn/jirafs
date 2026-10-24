@@ -98,14 +98,14 @@ Body.
 // TestRunArchive_Help verifies that --help returns exit code 0 and prints
 // usage information.
 func TestRunArchive_Help(t *testing.T) {
-	_, stderr := withArchiveTestIO(t)
+	stdout, stderr := withArchiveTestIO(t)
 
 	code := RunArchive([]string{"--help"})
 	if code != 0 {
 		t.Fatalf("RunArchive --help = %d, want 0", code)
 	}
-	if !strings.Contains(stderr.String(), "Usage:") {
-		t.Errorf("stderr = %q, want it to contain usage", stderr.String())
+	if !strings.Contains(stdout.String(), "Usage:") || stderr.Len() != 0 {
+		t.Errorf("stdout = %q stderr = %q, want usage on stdout only", stdout.String(), stderr.String())
 	}
 }
 
@@ -286,8 +286,8 @@ func TestRunArchive_UnknownSubcommand(t *testing.T) {
 	_, stderr := withArchiveTestIO(t)
 
 	code := RunArchive([]string{"bogus"})
-	if code != 1 {
-		t.Fatalf("RunArchive bogus = %d, want 1", code)
+	if code != 2 {
+		t.Fatalf("RunArchive bogus = %d, want 2", code)
 	}
 	if !strings.Contains(stderr.String(), "unknown subcommand") {
 		t.Errorf("stderr = %q, want it to mention unknown subcommand", stderr.String())
@@ -326,8 +326,8 @@ func TestRunArchive_Issue_MissingKey(t *testing.T) {
 	_, stderr := withArchiveTestIO(t)
 
 	code := RunArchive([]string{"issue", "--project", "test"})
-	if code != 1 {
-		t.Fatalf("RunArchive issue (no key) = %d, want 1", code)
+	if code != 2 {
+		t.Fatalf("RunArchive issue (no key) = %d, want 2", code)
 	}
 	if !strings.Contains(stderr.String(), "missing issue key") {
 		t.Errorf("stderr = %q, want it to mention missing issue key", stderr.String())

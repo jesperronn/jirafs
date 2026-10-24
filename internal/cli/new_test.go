@@ -262,11 +262,11 @@ func TestRunNewMissingSubcommand(t *testing.T) {
 	_, errBuf := withNewTestIO(t)
 
 	code := RunNew(nil)
-	if code != 1 {
-		t.Fatalf("RunNew(nil) exit = %d, want 1", code)
+	if code != 2 {
+		t.Fatalf("RunNew(nil) exit = %d, want 2", code)
 	}
-	if !strings.Contains(errBuf.String(), "missing subcommand") {
-		t.Fatalf("stderr = %q, want 'missing subcommand'", errBuf.String())
+	if !strings.Contains(errBuf.String(), "missing template name") {
+		t.Fatalf("stderr = %q, want 'missing template name'", errBuf.String())
 	}
 }
 

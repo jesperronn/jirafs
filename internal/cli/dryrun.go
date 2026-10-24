@@ -10,7 +10,7 @@ import (
 // of --dry-run with --apply. cmd is the command prefix, e.g. "jirafs push".
 func dryRunConflicts(stderr io.Writer, cmd string, dry, apply bool) bool {
 	if dry && apply {
-		fmt.Fprintf(stderr, "%s: --dry-run and --apply cannot be used together; drop one of them\n", cmd)
+		fmt.Fprintf(stderr, "%s: --dry-run and --apply cannot be used together; drop one of them\nUse --help for usage.\n", cmd)
 		return true
 	}
 	return false

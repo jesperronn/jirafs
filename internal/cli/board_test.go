@@ -204,7 +204,7 @@ Body.
 // TestRunBoard_Help verifies that --help returns exit code 0 and prints
 // usage information.
 func TestRunBoard_Help(t *testing.T) {
-	_, stderr := withBoardTestIO(t)
+	stderr, _ := withBoardTestIO(t)
 	exit := RunBoard([]string{"--help"})
 	if exit != 0 {
 		t.Fatalf("RunBoard([\"--help\"]) = %d, want 0", exit)
@@ -247,8 +247,8 @@ func TestRunBoard_InvalidGroupBy(t *testing.T) {
 
 	_, stderr := withBoardTestIO(t)
 	exit := RunBoard([]string{"--group-by", "invalid"})
-	if exit != 1 {
-		t.Fatalf("RunBoard([\"--group-by\", \"invalid\"]) = %d, want 1", exit)
+	if exit != 2 {
+		t.Fatalf("RunBoard([\"--group-by\", \"invalid\"]) = %d, want 2", exit)
 	}
 	if !strings.Contains(stderr.String(), "invalid --group-by") {
 		t.Fatalf("stderr = %q, want 'invalid --group-by'", stderr.String())
@@ -831,8 +831,8 @@ func TestRunBoard_InvalidGroupByWithProject(t *testing.T) {
 
 	_, stderr := withBoardTestIO(t)
 	exit := RunBoard([]string{"--project", "test", "--group-by", "priority"})
-	if exit != 1 {
-		t.Fatalf("RunBoard([\"--project\", \"test\", \"--group-by\", \"priority\"]) = %d, want 1", exit)
+	if exit != 2 {
+		t.Fatalf("RunBoard([\"--project\", \"test\", \"--group-by\", \"priority\"]) = %d, want 2", exit)
 	}
 	if !strings.Contains(stderr.String(), "invalid --group-by") {
 		t.Fatalf("stderr = %q, want 'invalid --group-by'", stderr.String())
@@ -851,8 +851,8 @@ func TestRunBoard_InvalidGroupByWithCwd(t *testing.T) {
 
 	_, stderr := withBoardTestIO(t)
 	exit := RunBoard([]string{"--cwd", filepath.Join(tmpDir, "nowhere"), "--group-by", "sprint"})
-	if exit != 1 {
-		t.Fatalf("RunBoard([\"--cwd\", \"nowhere\", \"--group-by\", \"sprint\"]) = %d, want 1", exit)
+	if exit != 2 {
+		t.Fatalf("RunBoard([\"--cwd\", \"nowhere\", \"--group-by\", \"sprint\"]) = %d, want 2", exit)
 	}
 	if !strings.Contains(stderr.String(), "invalid --group-by") {
 		t.Fatalf("stderr = %q, want 'invalid --group-by'", stderr.String())

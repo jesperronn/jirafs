@@ -670,7 +670,7 @@ func TestRunSync_NoKeyBlocked(t *testing.T) {
 	if exit != 2 {
 		t.Fatalf("exit = %d, want 2", exit)
 	}
-	want := "jirafs sync: syncing multiple issues is not implemented yet; sync one issue at a time: jirafs sync <KEY>\n"
+	want := "jirafs sync: syncing multiple issues is not implemented yet; sync one issue at a time: jirafs sync <KEY>\nUse --help for usage.\n"
 	if stderr.String() != want {
 		t.Fatalf("stderr = %q, want %q", stderr.String(), want)
 	}

@@ -2,7 +2,6 @@ package cli
 
 import (
 	"context"
-	"flag"
 	"fmt"
 	"io"
 	"os"
@@ -167,19 +166,15 @@ func BuildDoctorSnapshot(settings *config.Settings, cwd string) DoctorSnapshot {
 // live-probe connectivity for each configured instance.
 func RunDoctor(args []string) int {
 	// Check for help before flag parsing.
-	for _, arg := range args {
-		if arg == "--help" || arg == "-h" {
-			printDoctorHelp()
-			return 0
-		}
+	if wantsHelpOrWord(args) {
+		printDoctorHelp()
+		return 0
 	}
 
-	fs := flag.NewFlagSet("doctor", flag.ContinueOnError)
-	fs.SetOutput(doctorStderr)
+	fs := quietFlagSet("doctor")
 	verbose := fs.Bool("verbose", false, "print request URLs during checks")
 	if err := parseFlags(fs, args); err != nil {
-		fmt.Fprintf(doctorStderr, "jirafs doctor: invalid flags: %v\n", err)
-		return 1
+		return flagError(doctorStderr, "jirafs doctor", err)
 	}
 	doctorVerbose = *verbose
 
@@ -302,15 +297,15 @@ func RunDoctor(args []string) int {
 
 // printDoctorHelp prints usage information for the doctor subcommand.
 func printDoctorHelp() {
-	fmt.Fprintf(doctorStderr, "%s\n", color.BoldBlue(doctorStderr, "Usage:"))
-	fmt.Fprintf(doctorStderr, "  jirafs %s [flags]\n\n", color.Blue(doctorStderr, "doctor"))
+	fmt.Fprintf(doctorStdout, "%s\n", color.BoldBlue(doctorStdout, "Usage:"))
+	fmt.Fprintf(doctorStdout, "  jirafs %s [flags]\n\n", color.Blue(doctorStdout, "doctor"))
 
-	fmt.Fprintf(doctorStderr, "%s\n", color.Dim(doctorStderr, "Reports the health of a jirafs workspace: config, credential resolution,"))
-	fmt.Fprintf(doctorStderr, "%s\n\n", color.Dim(doctorStderr, "and live-probe connectivity for each configured Jira instance."))
+	fmt.Fprintf(doctorStdout, "%s\n", color.Dim(doctorStdout, "Reports the health of a jirafs workspace: config, credential resolution,"))
+	fmt.Fprintf(doctorStdout, "%s\n\n", color.Dim(doctorStdout, "and live-probe connectivity for each configured Jira instance."))
 
-	fmt.Fprintf(doctorStderr, "%s:\n", color.BoldGreen(doctorStderr, "Flags"))
-	fmt.Fprintf(doctorStderr, "  %s    %s\n", color.Yellow(doctorStderr, "--verbose"), color.Dim(doctorStderr, "print request URLs during checks"))
-	fmt.Fprintf(doctorStderr, "  %s   %s\n", color.Yellow(doctorStderr, "--help, -h"), color.Dim(doctorStderr, "show this help message"))
+	fmt.Fprintf(doctorStdout, "%s:\n", color.BoldGreen(doctorStdout, "Flags"))
+	fmt.Fprintf(doctorStdout, "  %s    %s\n", color.Yellow(doctorStdout, "--verbose"), color.Dim(doctorStdout, "print request URLs during checks"))
+	fmt.Fprintf(doctorStdout, "  %s   %s\n", color.Yellow(doctorStdout, "--help, -h"), color.Dim(doctorStdout, "show this help message"))
 }
 
 func onboardingCommands(snap DoctorSnapshot) []string {

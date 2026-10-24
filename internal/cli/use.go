@@ -1,7 +1,6 @@
 package cli
 
 import (
-	"flag"
 	"fmt"
 	"io"
 	"os"
@@ -74,12 +73,11 @@ func BuildUseSnapshot(settings *config.Settings, cwd string) UseSnapshot {
 // remembered current_project in state, writes it back, and prints a message.
 // Returns an exit code (0 on success, 1 on error).
 func RunUse(args []string) int {
-	fs := flag.NewFlagSet("use", flag.ExitOnError)
+	fs := quietFlagSet("use")
 	project := fs.String("project", "", "project key to set as current")
 	clear := fs.Bool("clear", false, "clear the remembered current project")
 	if err := parseFlags(fs, args); err != nil {
-		fmt.Fprintf(useStderr, "jirafs use: invalid flags: %v\n", err)
-		return 1
+		return flagError(useStderr, "jirafs use", err)
 	}
 
 	// --clear takes priority.

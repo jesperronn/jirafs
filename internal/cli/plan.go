@@ -3,7 +3,6 @@ package cli
 
 import (
 	stdcontext "context"
-	"flag"
 	"fmt"
 	"io"
 	"os"
@@ -35,9 +34,17 @@ func RunPlan(args []string) int {
 	cmdCtx, stop := commandContext()
 	defer stop()
 	// Check for help before loading settings.
-	if len(args) > 0 && (args[0] == "help" || args[0] == "--help" || args[0] == "-h") {
+	if wantsHelpOrWord(args) {
 		printPlanHelp()
 		return 0
+	}
+
+	// Parse flags first to extract --project and --cwd.
+	fs := quietFlagSet("plan")
+	projectFlag := fs.String("project", "", "project key or name to use")
+	cwdFlag := fs.String("cwd", "", "working directory to use for project resolution")
+	if err := parseFlags(fs, args); err != nil {
+		return flagError(planStderr, "jirafs plan", err)
 	}
 
 	// Load settings and create resolver.
@@ -45,12 +52,6 @@ func RunPlan(args []string) int {
 	if !ok {
 		return 1
 	}
-
-	// Parse flags first to extract --project and --cwd.
-	fs := flag.NewFlagSet("plan", flag.ContinueOnError)
-	projectFlag := fs.String("project", "", "project key or name to use")
-	cwdFlag := fs.String("cwd", "", "working directory to use for project resolution")
-	_ = parseFlags(fs, args)
 
 	// When no issue key is provided, resolve the project and list all local issues.
 	if len(fs.Args()) == 0 {
@@ -319,16 +320,16 @@ func runPlanList(cmdCtx stdcontext.Context, settings *config.Settings, project, 
 
 // printPlanHelp prints usage information for the plan subcommand.
 func printPlanHelp() {
-	fmt.Fprintf(planStderr, "%s\n", color.BoldBlue(planStderr, "Usage:"))
-	fmt.Fprintf(planStderr, "  jirafs %s <%s> [flags]\n\n", color.Blue(planStderr, "plan"), color.Yellow(planStderr, "issue-key"))
+	fmt.Fprintf(planStdout, "%s\n", color.BoldBlue(planStdout, "Usage:"))
+	fmt.Fprintf(planStdout, "  jirafs %s <%s> [flags]\n\n", color.Blue(planStdout, "plan"), color.Yellow(planStdout, "issue-key"))
 
-	fmt.Fprintf(planStderr, "%s\n", color.Dim(planStderr, "Fetches the remote issue from Jira, reads the local copy from the file"))
-	fmt.Fprintf(planStderr, "%s\n", color.Dim(planStderr, "system, and displays the plan of operations needed to bring the remote"))
-	fmt.Fprintf(planStderr, "%s\n\n", color.Dim(planStderr, "in line with the local copy."))
+	fmt.Fprintf(planStdout, "%s\n", color.Dim(planStdout, "Fetches the remote issue from Jira, reads the local copy from the file"))
+	fmt.Fprintf(planStdout, "%s\n", color.Dim(planStdout, "system, and displays the plan of operations needed to bring the remote"))
+	fmt.Fprintf(planStdout, "%s\n\n", color.Dim(planStdout, "in line with the local copy."))
 
-	fmt.Fprintf(planStderr, "%s:\n", color.BoldGreen(planStderr, "Flags"))
-	fmt.Fprintf(planStderr, "  %s KEY   %s\n", color.Yellow(planStderr, "--project"), color.Dim(planStderr, "project key or name to use"))
-	fmt.Fprintf(planStderr, "  %s DIR   %s\n\n", color.Yellow(planStderr, "--cwd"), color.Dim(planStderr, "working directory for project resolution"))
+	fmt.Fprintf(planStdout, "%s:\n", color.BoldGreen(planStdout, "Flags"))
+	fmt.Fprintf(planStdout, "  %s KEY   %s\n", color.Yellow(planStdout, "--project"), color.Dim(planStdout, "project key or name to use"))
+	fmt.Fprintf(planStdout, "  %s DIR   %s\n\n", color.Yellow(planStdout, "--cwd"), color.Dim(planStdout, "working directory for project resolution"))
 
-	fmt.Fprintf(planStderr, "%s\n", color.Cyan(planStderr, `Run "jirafs plan <issue-key> --help" for more information about flags.`))
+	fmt.Fprintf(planStdout, "%s\n", color.Cyan(planStdout, `Run "jirafs plan <issue-key> --help" for more information about flags.`))
 }

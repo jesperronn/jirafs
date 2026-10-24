@@ -3,7 +3,6 @@ package cli
 
 import (
 	stdcontext "context"
-	"flag"
 	"fmt"
 	"io"
 	"os"
@@ -31,14 +30,22 @@ func RunExport(args []string) int {
 	cmdCtx, stop := commandContext()
 	defer stop()
 	if len(args) == 0 {
-		fmt.Fprintln(exportStderr, "jirafs export: missing subcommand. Use --help for usage.")
-		return 1
+		return usageError(exportStderr, "jirafs export", "missing subcommand")
 	}
 
-	// Check for help before loading settings.
-	if args[0] == "help" || args[0] == "--help" || args[0] == "-h" {
+	// Help and usage errors never need settings.
+	if wantsHelpOrWord(args[:1]) {
 		printExportHelp()
 		return 0
+	}
+	switch args[0] {
+	case "issue":
+		if wantsHelp(args[1:]) {
+			printExportIssueHelp()
+			return 0
+		}
+	default:
+		return usageError(exportStderr, "jirafs export", "unknown subcommand %q", args[0])
 	}
 
 	// Load settings and create resolver.
@@ -48,26 +55,14 @@ func RunExport(args []string) int {
 	}
 	resolver := context.NewResolver(settings, "")
 
-	switch args[0] {
-	case "issue":
-		return runExportIssue(cmdCtx, args[1:], settings, resolver)
-	default:
-		fmt.Fprintf(exportStderr, "jirafs export: unknown subcommand %q. Use --help for usage.\n", args[0])
-		return 1
-	}
+	return runExportIssue(cmdCtx, args[1:], settings, resolver)
 }
 
 // runExportIssue handles `jirafs export issue KEY`. It resolves the project
 // context, fetches the issue from Jira through the real service path, and
 // exports it through the canonical codec.
 func runExportIssue(cmdCtx stdcontext.Context, args []string, settings *config.Settings, resolver *context.Resolver) int {
-	fs := flag.NewFlagSet("export issue", flag.ExitOnError)
-	fs.Usage = func() {
-		fmt.Fprintf(exportStderr, "Usage: jirafs export issue <KEY|URL> [--project NAME] [--cwd DIR] [--stdout] [--dry-run]\n\n")
-		fmt.Fprintf(exportStderr, "By default the issue is written to <local_dirs[0]>/<KEY>.md and the path is printed.\n\n")
-		fmt.Fprintf(exportStderr, "KEY is an issue key (PROJ-123); URL is <base_url>/browse/PROJ-123 or a URL with selectedIssue=PROJ-123.\n\n")
-		fs.PrintDefaults()
-	}
+	fs := quietFlagSet("export issue")
 	// --project overrides the auto-detected project.
 	projectFlag := fs.String("project", "", "project key or name to use")
 	// --cwd overrides the working directory for project resolution.
@@ -76,17 +71,14 @@ func runExportIssue(cmdCtx stdcontext.Context, args []string, settings *config.S
 	stdoutFlag := fs.Bool("stdout", false, "print the document to stdout and write no file")
 	dryRunFlag := fs.Bool("dry-run", false, "print the target path and whether it would be overwritten; write nothing")
 	if err := parseFlags(fs, args); err != nil {
-		fmt.Fprintf(exportStderr, "jirafs export issue: invalid flags: %v\n", err)
-		return 1
+		return flagError(exportStderr, "jirafs export issue", err)
 	}
 
 	if len(fs.Args()) == 0 {
-		fmt.Fprintln(exportStderr, "jirafs export issue: missing issue key")
-		return 1
+		return usageError(exportStderr, "jirafs export issue", "missing issue key")
 	}
 	if len(fs.Args()) > 1 {
-		fmt.Fprintln(exportStderr, "jirafs export issue: too many positional arguments")
-		return 1
+		return usageError(exportStderr, "jirafs export issue", "too many positional arguments")
 	}
 	arg := fs.Args()[0]
 
@@ -189,20 +181,38 @@ func resolveExportContext(settings *config.Settings, project, cwd string) (*cont
 
 // printExportHelp prints usage information for the export subcommand.
 func printExportHelp() {
-	fmt.Fprintf(exportStderr, "%s\n", color.BoldBlue(exportStderr, "Usage:"))
-	fmt.Fprintf(exportStderr, "  jirafs %s <%s> [flags]\n", color.Blue(exportStderr, "export"), color.Yellow(exportStderr, "subcommand"))
+	fmt.Fprintf(exportStdout, "%s\n", color.BoldBlue(exportStdout, "Usage:"))
+	fmt.Fprintf(exportStdout, "  jirafs %s <%s> [flags]\n", color.Blue(exportStdout, "export"), color.Yellow(exportStdout, "subcommand"))
 
-	fmt.Fprintf(exportStderr, "  %s\n\n", color.Dim(exportStderr, "issue accepts a key (PROJ-123) or a Jira URL (<base_url>/browse/PROJ-123)"))
+	fmt.Fprintf(exportStdout, "  %s\n\n", color.Dim(exportStdout, "issue accepts a key (PROJ-123) or a Jira URL (<base_url>/browse/PROJ-123)"))
 
-	fmt.Fprintf(exportStderr, "%s:\n", color.BoldGreen(exportStderr, "Subcommands"))
-	fmt.Fprintf(exportStderr, "  %s    %s\n", color.Blue(exportStderr, "issue"), color.Dim(exportStderr, "export one issue through the real service path"))
-	fmt.Fprintf(exportStderr, "  %s    %s\n\n", color.Blue(exportStderr, "help"), color.Dim(exportStderr, "show this help message"))
+	fmt.Fprintf(exportStdout, "%s:\n", color.BoldGreen(exportStdout, "Subcommands"))
+	fmt.Fprintf(exportStdout, "  %s    %s\n", color.Blue(exportStdout, "issue"), color.Dim(exportStdout, "export one issue through the real service path"))
+	fmt.Fprintf(exportStdout, "  %s    %s\n\n", color.Blue(exportStdout, "help"), color.Dim(exportStdout, "show this help message"))
 
-	fmt.Fprintf(exportStderr, "%s:\n", color.BoldGreen(exportStderr, "Flags"))
-	fmt.Fprintf(exportStderr, "  %s KEY   %s\n", color.Yellow(exportStderr, "--project"), color.Dim(exportStderr, "project key or name to use"))
-	fmt.Fprintf(exportStderr, "  %s DIR   %s\n", color.Yellow(exportStderr, "--cwd"), color.Dim(exportStderr, "working directory for project resolution"))
-	fmt.Fprintf(exportStderr, "  %s     %s\n", color.Yellow(exportStderr, "--stdout"), color.Dim(exportStderr, "print the document to stdout instead of writing <local_dirs[0]>/<KEY>.md"))
-	fmt.Fprintf(exportStderr, "  %s    %s\n\n", color.Yellow(exportStderr, "--dry-run"), color.Dim(exportStderr, "print the target path and whether it would be overwritten; write nothing"))
+	fmt.Fprintf(exportStdout, "%s:\n", color.BoldGreen(exportStdout, "Flags"))
+	fmt.Fprintf(exportStdout, "  %s KEY   %s\n", color.Yellow(exportStdout, "--project"), color.Dim(exportStdout, "project key or name to use"))
+	fmt.Fprintf(exportStdout, "  %s DIR   %s\n", color.Yellow(exportStdout, "--cwd"), color.Dim(exportStdout, "working directory for project resolution"))
+	fmt.Fprintf(exportStdout, "  %s     %s\n", color.Yellow(exportStdout, "--stdout"), color.Dim(exportStdout, "print the document to stdout instead of writing <local_dirs[0]>/<KEY>.md"))
+	fmt.Fprintf(exportStdout, "  %s    %s\n\n", color.Yellow(exportStdout, "--dry-run"), color.Dim(exportStdout, "print the target path and whether it would be overwritten; write nothing"))
 
-	fmt.Fprintf(exportStderr, "%s\n", color.Cyan(exportStderr, `Run "jirafs export <subcommand> --help" for more information about a subcommand.`))
+	fmt.Fprintf(exportStdout, "%s\n", color.Cyan(exportStdout, `Run "jirafs export <subcommand> --help" for more information about a subcommand.`))
+}
+
+// printExportIssueHelp prints usage information for `jirafs export issue`.
+func printExportIssueHelp() {
+	PrintUsage(exportStdout, Usage{
+		Synopsis: []string{"export issue <KEY|URL> [flags]"},
+		Description: []string{
+			"Fetches one issue from Jira and writes it to <local_dirs[0]>/<KEY>.md.",
+			"KEY is an issue key (PROJ-123); URL is <base_url>/browse/PROJ-123 or a URL with selectedIssue=PROJ-123.",
+		},
+		Sections: []UsageSection{{Title: "Flags", Rows: [][2]string{
+			{"--project KEY", "project key or name to use"},
+			{"--cwd DIR", "working directory for project resolution"},
+			{"--stdout", "print the document to stdout and write no file"},
+			{"--dry-run", "print the target path and whether it would be overwritten; write nothing"},
+			{"--help, -h", "show this help message"},
+		}}},
+	})
 }

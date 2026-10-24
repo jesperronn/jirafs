@@ -1,7 +1,6 @@
 package cli
 
 import (
-	"flag"
 	"fmt"
 	"io"
 	"os"
@@ -148,11 +147,9 @@ func slugify(s string) string {
 // RunNew implements `jirafs new`. It returns a process exit code.
 func RunNew(args []string) int {
 	if len(args) == 0 {
-		fmt.Fprintf(newStderr, "jirafs new: missing subcommand; use --help\n")
-		return 1
+		return usageError(newStderr, "jirafs new", "missing template name")
 	}
-	switch args[0] {
-	case "help", "--help", "-h":
+	if wantsHelpOrWord(args) {
 		printNewHelp()
 		return 0
 	}
@@ -169,11 +166,7 @@ func RunNew(args []string) int {
 		flagArgs = args
 	}
 
-	fs := flag.NewFlagSet("new", flag.ExitOnError)
-	fs.Usage = func() {
-		fmt.Fprintf(newStderr, "jirafs new: invalid flags\n")
-		fs.PrintDefaults()
-	}
+	fs := quietFlagSet("new")
 	summaryFlag := fs.String("summary", "", "issue summary")
 	projectFlag := fs.String("project", "", "project key or name to override")
 	assigneeFlag := fs.String("assignee", "", "assignee to set")
@@ -186,7 +179,7 @@ func RunNew(args []string) int {
 	dryRunFlag := fs.Bool("dry-run", false, "print the target path and whether it would be overwritten; write nothing")
 
 	if err := parseFlags(fs, flagArgs); err != nil {
-		return 1
+		return flagError(newStderr, "jirafs new", err)
 	}
 	if templateName == "" && len(fs.Args()) > 0 {
 		templateName = fs.Args()[0]

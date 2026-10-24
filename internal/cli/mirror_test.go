@@ -20,8 +20,8 @@ import (
 // subcommand returns exit code 1 and prints a usage hint.
 func TestRunMirror_NoSubcommand(t *testing.T) {
 	exit := RunMirror([]string{})
-	if exit != 1 {
-		t.Errorf("RunMirror([]) = %d, want 1", exit)
+	if exit != 2 {
+		t.Errorf("RunMirror([]) = %d, want 2", exit)
 	}
 }
 
@@ -29,8 +29,8 @@ func TestRunMirror_NoSubcommand(t *testing.T) {
 // returns exit code 1.
 func TestRunMirror_UnknownSubcommand(t *testing.T) {
 	exit := RunMirror([]string{"bogus"})
-	if exit != 1 {
-		t.Errorf("RunMirror([\"bogus\"]) = %d, want 1", exit)
+	if exit != 2 {
+		t.Errorf("RunMirror([\"bogus\"]) = %d, want 2", exit)
 	}
 }
 
@@ -197,8 +197,8 @@ func TestRunMirrorRefresh_MissingScope(t *testing.T) {
 	defer os.Setenv("HOME", oldHome)
 	_, stderr := withMirrorTestIO(t)
 	exit := RunMirror([]string{"refresh"})
-	if exit != 1 {
-		t.Fatalf("RunMirror([\"refresh\"]) = %d, want 1", exit)
+	if exit != 2 {
+		t.Fatalf("RunMirror([\"refresh\"]) = %d, want 2", exit)
 	}
 	if !strings.Contains(stderr.String(), "missing scope name") {
 		t.Fatalf("stderr = %q, want missing scope name", stderr.String())
@@ -399,10 +399,10 @@ func TestRunMirrorRefresh_BuiltinScopeWithoutMirrorEntry(t *testing.T) {
 }
 
 func TestMirrorHelpListsOnlySupportedScopes(t *testing.T) {
-	_, stderr := withMirrorTestIO(t)
+	stdout, _ := withMirrorTestIO(t)
 	printMirrorHelp()
 	printMirrorRefreshHelp()
-	out := stderr.String()
+	out := stdout.String()
 	for _, banned := range []string{"backlog", "next-sprint"} {
 		if strings.Contains(out, banned) {
 			t.Errorf("help mentions unsupported scope %q:\n%s", banned, out)
@@ -413,8 +413,8 @@ func TestMirrorHelpListsOnlySupportedScopes(t *testing.T) {
 			t.Errorf("help missing %q", want)
 		}
 	}
-	if exit := RunMirror([]string{"backlog"}); exit != 1 {
-		t.Errorf("RunMirror(backlog) = %d, want 1 (unknown subcommand)", exit)
+	if exit := RunMirror([]string{"backlog"}); exit != 2 {
+		t.Errorf("RunMirror(backlog) = %d, want 2 (unknown subcommand)", exit)
 	}
 }
 
@@ -427,8 +427,8 @@ func TestRunMirrorRefresh_TooManyArgs(t *testing.T) {
 	_, stderr := withMirrorTestIO(t)
 
 	exit := RunMirror([]string{"refresh", "my-issues", "extra"})
-	if exit != 1 {
-		t.Fatalf("RunMirror(refresh too many args) = %d, want 1", exit)
+	if exit != 2 {
+		t.Fatalf("RunMirror(refresh too many args) = %d, want 2", exit)
 	}
 	if !strings.Contains(stderr.String(), "too many positional arguments") {
 		t.Fatalf("stderr = %q, want too many positional arguments", stderr.String())

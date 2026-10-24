@@ -2,7 +2,6 @@
 package cli
 
 import (
-	"flag"
 	"fmt"
 	"io"
 	"os"
@@ -37,11 +36,9 @@ const registryEntryContent = "entries: {}\n"
 // reported as created or skipped. With --set-current it also records the
 // project as the remembered current project in ~/.jirafs/settings.toml.
 func RunInit(args []string) int {
-	for _, arg := range args {
-		if arg == "--help" || arg == "-h" || arg == "help" {
-			printInitHelp()
-			return 0
-		}
+	if wantsHelpOrWord(args) {
+		printInitHelp()
+		return 0
 	}
 
 	// init can create a project layout even when settings do not exist yet;
@@ -57,8 +54,7 @@ func RunInit(args []string) int {
 }
 
 func runInit(args []string, settings *config.Settings) int {
-	fs := flag.NewFlagSet("init", flag.ContinueOnError)
-	fs.SetOutput(initStderr)
+	fs := quietFlagSet("init")
 	projectFlag := fs.String("project", "", "settings key for the project (required unless run inside a mapped dir)")
 	keyFlag := fs.String("key", "", "Jira project key (e.g. PLAT)")
 	instanceFlag := fs.String("instance", "", "Jira instance name")
@@ -66,8 +62,7 @@ func runInit(args []string, settings *config.Settings) int {
 	mirrorDirFlag := fs.String("mirror-dir", "", "mirror directory (default ~/jira/<project>)")
 	setCurrentFlag := fs.Bool("set-current", false, "also set the remembered current project")
 	if err := parseFlags(fs, args); err != nil {
-		fmt.Fprintf(initStderr, "jirafs init: invalid flags: %v\n", err)
-		return 1
+		return flagError(initStderr, "jirafs init", err)
 	}
 
 	// Validate the Jira URL when provided.
@@ -241,15 +236,15 @@ func expandTilde(p string) (string, error) {
 
 // printInitHelp prints usage information for the init subcommand.
 func printInitHelp() {
-	fmt.Fprintf(initStderr, "Usage: jirafs init [flags]\n\n")
-	fmt.Fprintf(initStderr, "Initialize a new jirafs project layout in a mirror directory. Creates\n")
-	fmt.Fprintf(initStderr, "mirror.yml and the six registry files (users, projects, statuses,\n")
-	fmt.Fprintf(initStderr, "sprints, fix_versions, issue_types). Existing files are left untouched.\n\n")
-	fmt.Fprintf(initStderr, "Flags:\n")
-	fmt.Fprintf(initStderr, "  --project NAME     settings key for the project (required unless run inside a mapped dir)\n")
-	fmt.Fprintf(initStderr, "  --key KEY          Jira project key (e.g. PLAT)\n")
-	fmt.Fprintf(initStderr, "  --instance NAME    Jira instance name\n")
-	fmt.Fprintf(initStderr, "  --jira-url URL     Jira base URL (http:// or https://)\n")
-	fmt.Fprintf(initStderr, "  --mirror-dir PATH  mirror directory (default ~/jira/<project>)\n")
-	fmt.Fprintf(initStderr, "  --set-current      also set the remembered current project\n")
+	fmt.Fprintf(initStdout, "Usage: jirafs init [flags]\n\n")
+	fmt.Fprintf(initStdout, "Initialize a new jirafs project layout in a mirror directory. Creates\n")
+	fmt.Fprintf(initStdout, "mirror.yml and the six registry files (users, projects, statuses,\n")
+	fmt.Fprintf(initStdout, "sprints, fix_versions, issue_types). Existing files are left untouched.\n\n")
+	fmt.Fprintf(initStdout, "Flags:\n")
+	fmt.Fprintf(initStdout, "  --project NAME     settings key for the project (required unless run inside a mapped dir)\n")
+	fmt.Fprintf(initStdout, "  --key KEY          Jira project key (e.g. PLAT)\n")
+	fmt.Fprintf(initStdout, "  --instance NAME    Jira instance name\n")
+	fmt.Fprintf(initStdout, "  --jira-url URL     Jira base URL (http:// or https://)\n")
+	fmt.Fprintf(initStdout, "  --mirror-dir PATH  mirror directory (default ~/jira/<project>)\n")
+	fmt.Fprintf(initStdout, "  --set-current      also set the remembered current project\n")
 }

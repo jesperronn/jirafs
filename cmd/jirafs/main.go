@@ -2,7 +2,6 @@ package main
 
 import (
 	"bufio"
-	"errors"
 	"flag"
 	"fmt"
 	"io"
@@ -28,13 +27,13 @@ func main() {
 // os.Stderr, which in-process tests redirect.
 func run(args []string, stdout, stderr io.Writer) int {
 	if len(args) < 1 {
-		printHelp(stderr)
+		printHelp(stdout)
 		return 0
 	}
 	rest := args[1:]
 	switch args[0] {
 	case "help", "--help", "-h":
-		printHelp(stderr)
+		printHelp(stdout)
 		return 0
 	case "--version", "-v":
 		fmt.Fprintln(stdout, "jirafs", version)
@@ -68,9 +67,8 @@ func run(args []string, stdout, stderr io.Writer) int {
 	case "doctor":
 		return cli.RunDoctor(rest)
 	default:
-		fmt.Fprintf(stderr, "jirafs: unknown command: %q\n\n", args[0])
-		printHelp(stderr)
-		return 1
+		fmt.Fprintf(stderr, "jirafs: unknown command: %q\nUse --help for usage.\n", args[0])
+		return 2
 	}
 }
 
@@ -85,21 +83,22 @@ func run(args []string, stdout, stderr io.Writer) int {
 // Returns an exit code (0 on success, 1 on error).
 func runUse(args []string, stdout, stderr io.Writer) int {
 	fs := flag.NewFlagSet("use", flag.ContinueOnError)
-	fs.SetOutput(stderr)
+	fs.SetOutput(io.Discard)
+	fs.Usage = func() {}
 	project := fs.String("project", "", "project key to set as current")
 	clear := fs.Bool("clear", false, "clear the remembered current project")
+	if hasHelpFlag(args) {
+		printUseHelp(stdout, fs)
+		return 0
+	}
 	if err := fs.Parse(args); err != nil {
-		if errors.Is(err, flag.ErrHelp) {
-			return 0
-		}
-		return 2
+		return usageErr(stderr, "jirafs use", err.Error())
 	}
 
 	// --clear takes priority.
 	if *clear {
 		if *project != "" {
-			fmt.Fprintf(stderr, "jirafs use: --project and --clear are mutually exclusive\n")
-			return 1
+			return usageErr(stderr, "jirafs use", "--project and --clear are mutually exclusive")
 		}
 		s, err := config.Load()
 		if err != nil {
@@ -122,8 +121,7 @@ func runUse(args []string, stdout, stderr io.Writer) int {
 	} else if len(fs.Args()) == 1 {
 		key = fs.Args()[0]
 	} else if len(fs.Args()) > 1 {
-		fmt.Fprintf(stderr, "jirafs use: too many positional arguments\n")
-		return 1
+		return usageErr(stderr, "jirafs use", "too many positional arguments")
 	}
 
 	// No project given → show current state and list other
@@ -188,7 +186,7 @@ func runUse(args []string, stdout, stderr io.Writer) int {
 //   - --base-url <URL>: the Jira base URL
 //   - --auth-type <type>: the auth type (basic, atlassian_api_token, bearer_token, oauth1)
 //   - --credential-ref <ref>: one credential reference (can be repeated)
-//   - --set-current: also set the remembered current project (B018d)
+//   - --set-current: also set the remembered current project
 //
 // Example:
 //
@@ -201,24 +199,26 @@ func runUse(args []string, stdout, stderr io.Writer) int {
 // without extra flags.
 func runSetup(args []string, stdout, stderr io.Writer) int {
 	fs := flag.NewFlagSet("setup", flag.ContinueOnError)
-	fs.SetOutput(stderr)
+	fs.SetOutput(io.Discard)
+	fs.Usage = func() {}
 	projectName := fs.String("project", "", "settings key for the project entry")
 	projectKey := fs.String("key", "", "Jira project key (e.g. PLAT)")
 	instanceName := fs.String("instance", "", "settings key for the instance entry")
 	baseURL := fs.String("base-url", "", "Jira base URL (https://...)")
 	authType := fs.String("auth-type", "", "auth type: basic, atlassian_api_token, bearer_token, or oauth1 (default: atlassian_api_token)")
 	mirrorDir := fs.String("mirror-dir", "", "local mirror directory path (default: ~/jira/<project>)")
-	setCurrent := fs.Bool("set-current", false, "also set the remembered current project (B018d)")
+	setCurrent := fs.Bool("set-current", false, "also set the remembered current project")
 	var credentialRefs []string
 	fs.Func("credential-ref", "credential reference (env://..., file://..., or op://...); may be repeated", func(v string) error {
 		credentialRefs = append(credentialRefs, v)
 		return nil
 	})
+	if hasHelpFlag(args) {
+		printSetupHelp(stdout, fs)
+		return 0
+	}
 	if err := fs.Parse(args); err != nil {
-		if errors.Is(err, flag.ErrHelp) {
-			return 0
-		}
-		return 2
+		return usageErr(stderr, "jirafs setup", err.Error())
 	}
 
 	if isInteractiveInput() {
@@ -234,13 +234,10 @@ func runSetup(args []string, stdout, stderr io.Writer) int {
 	defaultsUsed := applySetupDefaults(projectName, authType, mirrorDir)
 
 	if missing := missingSetupFlags(*projectName, *projectKey, *instanceName, *baseURL); len(missing) > 0 {
-		fmt.Fprintf(stderr, "jirafs setup: missing required flags: %s\n", strings.Join(missing, ", "))
-		fmt.Fprintln(stderr, "jirafs setup: pass them as flags or run setup interactively from a terminal")
-		return 1
+		return usageErr(stderr, "jirafs setup", "missing required flags: "+strings.Join(missing, ", ")+" (pass them as flags or run setup interactively from a terminal)")
 	}
 	if *baseURL != "" && (!strings.HasPrefix(*baseURL, "http://") && !strings.HasPrefix(*baseURL, "https://")) {
-		fmt.Fprintf(stderr, "jirafs setup: --base-url must start with http:// or https://\n")
-		return 1
+		return usageErr(stderr, "jirafs setup", "--base-url must start with http:// or https://")
 	}
 
 	fmt.Fprintf(
@@ -294,7 +291,7 @@ func runSetup(args []string, stdout, stderr io.Writer) int {
 		return 1
 	}
 
-	// Optionally set the remembered current project (B018d).
+	// Optionally set the remembered current project.
 	if *setCurrent {
 		s.State.CurrentProject = *projectName
 		if err := s.SaveState(); err != nil {
@@ -425,4 +422,48 @@ func printHelp(stderr io.Writer) {
 	}
 
 	fmt.Fprintf(stderr, "\n%s\n", color.Cyan(stderr, `Run "jirafs <command> --help" for more information about a command.`))
+}
+
+// hasHelpFlag reports whether args ask for help before any "--" terminator.
+func hasHelpFlag(args []string) bool {
+	for i, a := range args {
+		if a == "--" {
+			return false
+		}
+		if a == "--help" || a == "-h" || a == "-help" || (i == 0 && a == "help") {
+			return true
+		}
+	}
+	return false
+}
+
+// usageErr prints one error line plus the standard hint and returns the
+// usage-error exit code 2.
+func usageErr(stderr io.Writer, cmd, msg string) int {
+	fmt.Fprintf(stderr, "%s: %s\nUse --help for usage.\n", cmd, msg)
+	return 2
+}
+
+// printUseHelp prints usage information for `jirafs use` to w.
+func printUseHelp(w io.Writer, fs *flag.FlagSet) {
+	cli.PrintUsage(w, cli.Usage{
+		Synopsis: []string{"use [flags] [project]"},
+		Description: []string{
+			"Shows, sets or clears the remembered current project.",
+			"With no arguments it shows the current project.",
+		},
+		Sections: []cli.UsageSection{{Title: "Flags", Rows: append(cli.FlagRows(fs), [2]string{"--help, -h", "show this help message"})}},
+	})
+}
+
+// printSetupHelp prints usage information for `jirafs setup` to w.
+func printSetupHelp(w io.Writer, fs *flag.FlagSet) {
+	cli.PrintUsage(w, cli.Usage{
+		Synopsis: []string{"setup [flags]"},
+		Description: []string{
+			"Records one Jira instance and one project in ~/.jirafs/settings.toml,",
+			"creating the file if needed. Missing values are prompted for in a terminal.",
+		},
+		Sections: []cli.UsageSection{{Title: "Flags", Rows: append(cli.FlagRows(fs), [2]string{"--help, -h", "show this help message"})}},
+	})
 }

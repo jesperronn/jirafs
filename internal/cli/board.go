@@ -2,7 +2,6 @@
 package cli
 
 import (
-	"flag"
 	"fmt"
 	"io"
 	"os"
@@ -27,29 +26,28 @@ var (
 // renders a kanban-style board view to stdout.
 func RunBoard(args []string) int {
 	// Check for help before loading settings.
-	for _, arg := range args {
-		if arg == "--help" || arg == "-h" {
-			printBoardHelp()
-			return 0
-		}
+	if wantsHelpOrWord(args) {
+		printBoardHelp()
+		return 0
+	}
+
+	// Parse flags first to extract --project, --group-by, and --cwd.
+	fs := quietFlagSet("board")
+	projectFlag := fs.String("project", "", "project key or name to use")
+	groupByFlag := fs.String("group-by", "status", "grouping mode: status, assignee, or epic")
+	cwdFlag := fs.String("cwd", "", "working directory to use for project resolution")
+	if err := parseFlags(fs, args); err != nil {
+		return flagError(boardStderr, "jirafs board", err)
+	}
+
+	// Validate --group-by.
+	if *groupByFlag != "status" && *groupByFlag != "assignee" && *groupByFlag != "epic" {
+		return usageError(boardStderr, "jirafs board", "invalid --group-by %q: must be status, assignee, or epic", *groupByFlag)
 	}
 
 	// Load settings and create resolver.
 	settings, ok := loadSettingsOrHint(boardStderr, "board")
 	if !ok {
-		return 1
-	}
-
-	// Parse flags first to extract --project, --group-by, and --cwd.
-	fs := flag.NewFlagSet("board", flag.ContinueOnError)
-	projectFlag := fs.String("project", "", "project key or name to use")
-	groupByFlag := fs.String("group-by", "status", "grouping mode: status, assignee, or epic")
-	cwdFlag := fs.String("cwd", "", "working directory to use for project resolution")
-	_ = parseFlags(fs, args)
-
-	// Validate --group-by.
-	if *groupByFlag != "status" && *groupByFlag != "assignee" && *groupByFlag != "epic" {
-		fmt.Fprintf(boardStderr, "jirafs board: invalid --group-by %q: must be status, assignee, or epic\n", *groupByFlag)
 		return 1
 	}
 
@@ -187,16 +185,16 @@ func renderBoard(w io.Writer, b *board.Board) {
 
 // printBoardHelp prints usage information for the board subcommand.
 func printBoardHelp() {
-	fmt.Fprintf(boardStderr, "%s\n", color.BoldBlue(boardStderr, "Usage:"))
-	fmt.Fprintf(boardStderr, "  jirafs %s [flags]\n\n", color.Blue(boardStderr, "board"))
+	fmt.Fprintf(boardStdout, "%s\n", color.BoldBlue(boardStdout, "Usage:"))
+	fmt.Fprintf(boardStdout, "  jirafs %s [flags]\n\n", color.Blue(boardStdout, "board"))
 
-	fmt.Fprintf(boardStderr, "%s\n", color.Dim(boardStderr, "Displays a local kanban-style board view of issues grouped by"))
-	fmt.Fprintf(boardStderr, "%s\n\n", color.Dim(boardStderr, "status, assignee, or epic."))
+	fmt.Fprintf(boardStdout, "%s\n", color.Dim(boardStdout, "Displays a local kanban-style board view of issues grouped by"))
+	fmt.Fprintf(boardStdout, "%s\n\n", color.Dim(boardStdout, "status, assignee, or epic."))
 
-	fmt.Fprintf(boardStderr, "%s:\n", color.BoldGreen(boardStderr, "Flags"))
-	fmt.Fprintf(boardStderr, "  %s MODE  %s\n", color.Yellow(boardStderr, "--group-by"), color.Dim(boardStderr, "status, assignee, or epic (default: status)"))
-	fmt.Fprintf(boardStderr, "  %s KEY   %s\n", color.Yellow(boardStderr, "--project"), color.Dim(boardStderr, "project key or name to use"))
-	fmt.Fprintf(boardStderr, "  %s DIR   %s\n\n", color.Yellow(boardStderr, "--cwd"), color.Dim(boardStderr, "working directory for project resolution"))
+	fmt.Fprintf(boardStdout, "%s:\n", color.BoldGreen(boardStdout, "Flags"))
+	fmt.Fprintf(boardStdout, "  %s MODE  %s\n", color.Yellow(boardStdout, "--group-by"), color.Dim(boardStdout, "status, assignee, or epic (default: status)"))
+	fmt.Fprintf(boardStdout, "  %s KEY   %s\n", color.Yellow(boardStdout, "--project"), color.Dim(boardStdout, "project key or name to use"))
+	fmt.Fprintf(boardStdout, "  %s DIR   %s\n\n", color.Yellow(boardStdout, "--cwd"), color.Dim(boardStdout, "working directory for project resolution"))
 
-	fmt.Fprintf(boardStderr, "%s\n", color.Cyan(boardStderr, `Run "jirafs board --help" for more information about flags.`))
+	fmt.Fprintf(boardStdout, "%s\n", color.Cyan(boardStdout, `Run "jirafs board --help" for more information about flags.`))
 }

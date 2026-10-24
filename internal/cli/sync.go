@@ -3,7 +3,6 @@ package cli
 
 import (
 	stdcontext "context"
-	"flag"
 	"fmt"
 	"io"
 	"os"
@@ -35,25 +34,23 @@ func RunSync(args []string) int {
 	cmdCtx, stop := commandContext()
 	defer stop()
 	// Check for help before loading settings.
-	if len(args) > 0 && (args[0] == "help" || args[0] == "--help" || args[0] == "-h") {
+	if wantsHelpOrWord(args) {
 		printSyncHelp()
 		return 0
 	}
 
-	fs := flag.NewFlagSet("sync", flag.ExitOnError)
+	fs := quietFlagSet("sync")
 	projectFlag := fs.String("project", "", "project key or name to use")
 	fs.String("cwd", "", "ignored; sync resolves the project from the current directory")
 	applyFlag := fs.Bool("apply", false, "write the updated remote to the local issue file")
 	dryRunFlag := fs.Bool("dry-run", false, "print the plan; update neither Jira nor the local file")
 	if err := parseFlags(fs, args); err != nil {
-		fmt.Fprintf(syncStderr, "jirafs sync: invalid flags: %v\n", err)
-		return 1
+		return flagError(syncStderr, "jirafs sync", err)
 	}
 
 	// Multi-issue sync is blocked for now; reject before loading anything.
 	if len(fs.Args()) == 0 {
-		fmt.Fprintln(syncStderr, "jirafs sync: syncing multiple issues is not implemented yet; sync one issue at a time: jirafs sync <KEY>")
-		return 2
+		return usageError(syncStderr, "jirafs sync", "syncing multiple issues is not implemented yet; sync one issue at a time: jirafs sync <KEY>")
 	}
 
 	if dryRunConflicts(syncStderr, "jirafs sync", *dryRunFlag, *applyFlag) {
@@ -312,20 +309,20 @@ func resolveSyncContext(settings *config.Settings, resolver *context.Resolver) (
 
 // printSyncHelp prints usage information for the sync subcommand.
 func printSyncHelp() {
-	fmt.Fprintf(syncStderr, "%s\n", color.BoldBlue(syncStderr, "Usage:"))
-	fmt.Fprintf(syncStderr, "  jirafs %s <%s> [flags]\n\n", color.Blue(syncStderr, "sync"), color.Yellow(syncStderr, "issue-key"))
+	fmt.Fprintf(syncStdout, "%s\n", color.BoldBlue(syncStdout, "Usage:"))
+	fmt.Fprintf(syncStdout, "  jirafs %s <%s> [flags]\n\n", color.Blue(syncStdout, "sync"), color.Yellow(syncStdout, "issue-key"))
 
-	fmt.Fprintf(syncStderr, "%s\n\n", color.Dim(syncStderr, "An issue key is required: syncing multiple issues is not implemented yet."))
+	fmt.Fprintf(syncStdout, "%s\n\n", color.Dim(syncStdout, "An issue key is required: syncing multiple issues is not implemented yet."))
 
-	fmt.Fprintf(syncStderr, "%s\n", color.Dim(syncStderr, "When called with an issue key, fetches the remote issue from Jira, reads"))
-	fmt.Fprintf(syncStderr, "%s\n", color.Dim(syncStderr, "the local copy from the file system, builds and validates a plan, applies"))
-	fmt.Fprintf(syncStderr, "%s\n\n", color.Dim(syncStderr, "the plan, and pushes the updated remote back to Jira through the real"))
-	fmt.Fprintf(syncStderr, "%s\n\n", color.Dim(syncStderr, "service path."))
+	fmt.Fprintf(syncStdout, "%s\n", color.Dim(syncStdout, "When called with an issue key, fetches the remote issue from Jira, reads"))
+	fmt.Fprintf(syncStdout, "%s\n", color.Dim(syncStdout, "the local copy from the file system, builds and validates a plan, applies"))
+	fmt.Fprintf(syncStdout, "%s\n\n", color.Dim(syncStdout, "the plan, and pushes the updated remote back to Jira through the real"))
+	fmt.Fprintf(syncStdout, "%s\n\n", color.Dim(syncStdout, "service path."))
 
-	fmt.Fprintf(syncStderr, "%s:\n", color.BoldGreen(syncStderr, "Flags"))
-	fmt.Fprintf(syncStderr, "  %s KEY    %s\n", color.Yellow(syncStderr, "--project"), color.Dim(syncStderr, "project key or name to use"))
-	fmt.Fprintf(syncStderr, "  %s        %s\n", color.Yellow(syncStderr, "--apply"), color.Dim(syncStderr, "write the updated remote to the local issue file"))
-	fmt.Fprintf(syncStderr, "  %s      %s\n\n", color.Yellow(syncStderr, "--dry-run"), color.Dim(syncStderr, "print the plan; no Jira update and no local write"))
+	fmt.Fprintf(syncStdout, "%s:\n", color.BoldGreen(syncStdout, "Flags"))
+	fmt.Fprintf(syncStdout, "  %s KEY    %s\n", color.Yellow(syncStdout, "--project"), color.Dim(syncStdout, "project key or name to use"))
+	fmt.Fprintf(syncStdout, "  %s        %s\n", color.Yellow(syncStdout, "--apply"), color.Dim(syncStdout, "write the updated remote to the local issue file"))
+	fmt.Fprintf(syncStdout, "  %s      %s\n\n", color.Yellow(syncStdout, "--dry-run"), color.Dim(syncStdout, "print the plan; no Jira update and no local write"))
 
-	fmt.Fprintf(syncStderr, "%s\n", color.Cyan(syncStderr, `Run "jirafs sync --help" for more information about flags.`))
+	fmt.Fprintf(syncStdout, "%s\n", color.Cyan(syncStdout, `Run "jirafs sync --help" for more information about flags.`))
 }

@@ -3,7 +3,6 @@ package cli
 
 import (
 	"encoding/json"
-	"flag"
 	"fmt"
 	"io"
 	"os"
@@ -35,14 +34,19 @@ var (
 //	"jirafs registry help"                  → show this help
 func RunRegistry(args []string) int {
 	if len(args) == 0 {
-		fmt.Fprintln(registryStderr, "unknown subcommand; use --help")
-		return 1
+		return usageError(registryStderr, "jirafs registry", "missing subcommand")
+	}
+	if wantsHelpOrWord(args[:1]) {
+		printRegistryHelp()
+		return 0
+	}
+
+	if wantsHelp(args[1:]) {
+		printRegistryHelp()
+		return 0
 	}
 
 	switch args[0] {
-	case "help", "--help", "-h":
-		printRegistryHelp()
-		return 0
 	case "show":
 		return runRegistryShow(args[1:])
 	case "init":
@@ -50,8 +54,7 @@ func RunRegistry(args []string) int {
 	case "refresh":
 		return runRegistryRefresh(args[1:])
 	default:
-		fmt.Fprintln(registryStderr, "unknown subcommand; use --help")
-		return 1
+		return usageError(registryStderr, "jirafs registry", "unknown subcommand %q", args[0])
 	}
 }
 
@@ -59,12 +62,10 @@ func RunRegistry(args []string) int {
 func runRegistryShow(args []string) int {
 	project, cwd, jsonOut, positionals, err := parseRegistryFlags(args, true)
 	if err != nil {
-		fmt.Fprintf(registryStderr, "jirafs registry show: invalid flags: %v\n", err)
-		return 1
+		return flagError(registryStderr, "jirafs registry show", err)
 	}
 	if len(positionals) == 0 {
-		fmt.Fprintln(registryStderr, "jirafs registry show: missing <type>")
-		return 1
+		return usageError(registryStderr, "jirafs registry show", "missing <type>")
 	}
 	typ := positionals[0]
 
@@ -140,12 +141,10 @@ func runRegistryShow(args []string) int {
 func runRegistryInit(args []string) int {
 	project, cwd, _, positionals, err := parseRegistryFlags(args, false)
 	if err != nil {
-		fmt.Fprintf(registryStderr, "jirafs registry init: invalid flags: %v\n", err)
-		return 1
+		return flagError(registryStderr, "jirafs registry init", err)
 	}
 	if len(positionals) == 0 {
-		fmt.Fprintln(registryStderr, "jirafs registry init: missing <type>")
-		return 1
+		return usageError(registryStderr, "jirafs registry init", "missing <type>")
 	}
 	typ := positionals[0]
 
@@ -193,12 +192,10 @@ func runRegistryInit(args []string) int {
 func runRegistryRefresh(args []string) int {
 	_, _, _, positionals, err := parseRegistryFlags(args, false)
 	if err != nil {
-		fmt.Fprintf(registryStderr, "jirafs registry refresh: invalid flags: %v\n", err)
-		return 1
+		return flagError(registryStderr, "jirafs registry refresh", err)
 	}
 	if len(positionals) == 0 {
-		fmt.Fprintln(registryStderr, "jirafs registry refresh: missing <type>")
-		return 1
+		return usageError(registryStderr, "jirafs registry refresh", "missing <type>")
 	}
 	typ := positionals[0]
 
@@ -211,9 +208,7 @@ func runRegistryRefresh(args []string) int {
 // positional <type> argument, so flags are extracted in a loop that stops at
 // each positional and resumes parsing the remainder.
 func parseRegistryFlags(args []string, withJSON bool) (project, cwd string, jsonOut bool, positionals []string, callErr error) {
-	fs := flag.NewFlagSet("registry", flag.ContinueOnError)
-	fs.SetOutput(registryStderr)
-	fs.Usage = func() {}
+	fs := quietFlagSet("registry")
 
 	jsonFlag := fs.Bool("json", false, "output registries as JSON (show)")
 	projectFlag := fs.String("project", "", "project key or name to use")
@@ -309,22 +304,22 @@ func resolveRegistryContext(settings *config.Settings, project, cwd string) (*co
 
 // printRegistryHelp prints usage information for the registry subcommand.
 func printRegistryHelp() {
-	fmt.Fprintf(registryStderr, "%s\n", color.BoldBlue(registryStderr, "Usage:"))
-	fmt.Fprintf(registryStderr, "  jirafs %s [flags] <subcommand> [args]\n\n", color.Blue(registryStderr, "registry"))
+	fmt.Fprintf(registryStdout, "%s\n", color.BoldBlue(registryStdout, "Usage:"))
+	fmt.Fprintf(registryStdout, "  jirafs %s [flags] <subcommand> [args]\n\n", color.Blue(registryStdout, "registry"))
 
-	fmt.Fprintf(registryStderr, "%s\n", color.Dim(registryStderr, "Manage local typed-reference registry files (users, projects, statuses,"))
-	fmt.Fprintf(registryStderr, "%s\n\n", color.Dim(registryStderr, "sprints, fix_versions). These live in the active project's mirror directory."))
+	fmt.Fprintf(registryStdout, "%s\n", color.Dim(registryStdout, "Manage local typed-reference registry files (users, projects, statuses,"))
+	fmt.Fprintf(registryStdout, "%s\n\n", color.Dim(registryStdout, "sprints, fix_versions). These live in the active project's mirror directory."))
 
-	fmt.Fprintf(registryStderr, "%s:\n", color.BoldGreen(registryStderr, "Subcommands"))
-	fmt.Fprintf(registryStderr, "  %s   %s\n", color.Yellow(registryStderr, "show <type>"), color.Dim(registryStderr, "display a registry; add --json for JSON output"))
-	fmt.Fprintf(registryStderr, "  %s   %s\n", color.Yellow(registryStderr, "init <type>"), color.Dim(registryStderr, "create an empty registry file"))
-	fmt.Fprintf(registryStderr, "  %s   %s\n\n", color.Yellow(registryStderr, "refresh <type>"), color.Dim(registryStderr, "populate a registry from Jira (requires network access)"))
+	fmt.Fprintf(registryStdout, "%s:\n", color.BoldGreen(registryStdout, "Subcommands"))
+	fmt.Fprintf(registryStdout, "  %s   %s\n", color.Yellow(registryStdout, "show <type>"), color.Dim(registryStdout, "display a registry; add --json for JSON output"))
+	fmt.Fprintf(registryStdout, "  %s   %s\n", color.Yellow(registryStdout, "init <type>"), color.Dim(registryStdout, "create an empty registry file"))
+	fmt.Fprintf(registryStdout, "  %s   %s\n\n", color.Yellow(registryStdout, "refresh <type>"), color.Dim(registryStdout, "populate a registry from Jira (requires network access)"))
 
-	fmt.Fprintf(registryStderr, "%s:\n", color.BoldGreen(registryStderr, "Types"))
-	fmt.Fprintf(registryStderr, "  %s\n\n", color.Dim(registryStderr, "users, projects, statuses, sprints, fix_versions"))
+	fmt.Fprintf(registryStdout, "%s:\n", color.BoldGreen(registryStdout, "Types"))
+	fmt.Fprintf(registryStdout, "  %s\n\n", color.Dim(registryStdout, "users, projects, statuses, sprints, fix_versions"))
 
-	fmt.Fprintf(registryStderr, "%s:\n", color.BoldGreen(registryStderr, "Flags"))
-	fmt.Fprintf(registryStderr, "  %s   %s\n", color.Yellow(registryStderr, "--project"), color.Dim(registryStderr, "project key or name to use"))
-	fmt.Fprintf(registryStderr, "  %s   %s\n", color.Yellow(registryStderr, "--cwd"), color.Dim(registryStderr, "working directory for project resolution"))
-	fmt.Fprintf(registryStderr, "  %s   %s\n", color.Yellow(registryStderr, "--json"), color.Dim(registryStderr, "output registries as JSON (show)"))
+	fmt.Fprintf(registryStdout, "%s:\n", color.BoldGreen(registryStdout, "Flags"))
+	fmt.Fprintf(registryStdout, "  %s   %s\n", color.Yellow(registryStdout, "--project"), color.Dim(registryStdout, "project key or name to use"))
+	fmt.Fprintf(registryStdout, "  %s   %s\n", color.Yellow(registryStdout, "--cwd"), color.Dim(registryStdout, "working directory for project resolution"))
+	fmt.Fprintf(registryStdout, "  %s   %s\n", color.Yellow(registryStdout, "--json"), color.Dim(registryStdout, "output registries as JSON (show)"))
 }

@@ -241,20 +241,22 @@ func TestRunRegistry_Help(t *testing.T) {
 			t.Fatalf("RunRegistry(%v) = %d, want 0", args, exit)
 		}
 	}
-	help := stderr.String()
+	help := stdout.String()
+	if stderr.Len() != 0 {
+		t.Fatalf("help wrote to stderr: %q", stderr.String())
+	}
 	for _, want := range []string{"show", "init", "refresh", "--json"} {
 		if !strings.Contains(help, want) {
 			t.Fatalf("help output missing %q: %q", want, help)
 		}
 	}
-	_ = stdout
 }
 
 func TestRunRegistry_UnknownSubcommand(t *testing.T) {
 	stdout, stderr := withRegistryTestIO(t)
 	exit := RunRegistry([]string{"frobnicate"})
-	if exit != 1 {
-		t.Fatalf("RunRegistry([frobnicate]) = %d, want 1", exit)
+	if exit != 2 {
+		t.Fatalf("RunRegistry([frobnicate]) = %d, want 2", exit)
 	}
 	if !strings.Contains(stderr.String(), "unknown subcommand") {
 		t.Fatalf("stderr = %q, want 'unknown subcommand'", stderr.String())
@@ -265,11 +267,11 @@ func TestRunRegistry_UnknownSubcommand(t *testing.T) {
 func TestRunRegistry_NoArgs(t *testing.T) {
 	stdout, stderr := withRegistryTestIO(t)
 	exit := RunRegistry(nil)
-	if exit != 1 {
-		t.Fatalf("RunRegistry(nil) = %d, want 1", exit)
+	if exit != 2 {
+		t.Fatalf("RunRegistry(nil) = %d, want 2", exit)
 	}
-	if !strings.Contains(stderr.String(), "unknown subcommand") {
-		t.Fatalf("stderr = %q, want 'unknown subcommand'", stderr.String())
+	if !strings.Contains(stderr.String(), "missing subcommand") {
+		t.Fatalf("stderr = %q, want 'missing subcommand'", stderr.String())
 	}
 	_ = stdout
 }
@@ -304,8 +306,8 @@ func TestRunRegistry_Refresh_MissingType(t *testing.T) {
 	t.Setenv("HOME", writeRegistrySettings(t, t.TempDir()))
 	_, stderr := withRegistryTestIO(t)
 	exit := RunRegistry([]string{"refresh"})
-	if exit != 1 {
-		t.Fatalf("RunRegistry([refresh]) = %d, want 1, stderr = %q", exit, stderr.String())
+	if exit != 2 {
+		t.Fatalf("RunRegistry([refresh]) = %d, want 2, stderr = %q", exit, stderr.String())
 	}
 	if !strings.Contains(stderr.String(), "missing <type>") {
 		t.Fatalf("stderr = %q, want 'missing <type>'", stderr.String())
@@ -317,11 +319,11 @@ func TestRunRegistry_Refresh_InvalidFlags(t *testing.T) {
 	t.Setenv("HOME", writeRegistrySettings(t, t.TempDir()))
 	_, stderr := withRegistryTestIO(t)
 	exit := RunRegistry([]string{"refresh", "--bogus", "users"})
-	if exit != 1 {
-		t.Fatalf("RunRegistry([refresh --bogus users]) = %d, want 1, stderr = %q", exit, stderr.String())
+	if exit != 2 {
+		t.Fatalf("RunRegistry([refresh --bogus users]) = %d, want 2, stderr = %q", exit, stderr.String())
 	}
-	if !strings.Contains(stderr.String(), "invalid flags") {
-		t.Fatalf("stderr = %q, want 'invalid flags'", stderr.String())
+	if !strings.Contains(stderr.String(), "flag provided but not defined") {
+		t.Fatalf("stderr = %q, want 'flag provided but not defined'", stderr.String())
 	}
 }
 

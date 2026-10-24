@@ -249,13 +249,13 @@ func TestRunInit_DefaultMirrorDir(t *testing.T) {
 }
 
 func TestRunInit_Help(t *testing.T) {
-	_, stderr := withInitTestIO(t)
+	stdout, stderr := withInitTestIO(t)
 
 	exit := RunInit([]string{"--help"})
 	if exit != 0 {
 		t.Fatalf("RunInit([--help]) = %d, want 0, stderr = %q", exit, stderr.String())
 	}
-	if !strings.Contains(stderr.String(), "Usage: jirafs init") {
-		t.Fatalf("expected usage in help output, got %q", stderr.String())
+	if !strings.Contains(stdout.String(), "Usage: jirafs init") || stderr.Len() != 0 {
+		t.Fatalf("expected usage on stdout only, got stdout %q stderr %q", stdout.String(), stderr.String())
 	}
 }

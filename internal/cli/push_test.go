@@ -97,7 +97,7 @@ func TestPushErrors(t *testing.T) {
 	dir := setupNewTest(t)
 	fake := jira.NewFakeTransport()
 	_, errBuf := withPushTestIO(t, fake)
-	if code := RunPush(nil); code != 1 || !strings.Contains(errBuf.String(), "jirafs push <draft.md>") {
+	if code := RunPush(nil); code != 2 || !strings.Contains(errBuf.String(), "jirafs push <draft.md>") {
 		t.Errorf("no args: %s", errBuf)
 	}
 	if code := RunPush([]string{filepath.Join(dir, "none.md")}); code != 1 {
@@ -126,7 +126,7 @@ func TestPushErrors(t *testing.T) {
 	if code := RunPush([]string{"--help"}); code != 0 {
 		t.Error("help should succeed")
 	}
-	if code := RunPush([]string{"--bogus"}); code != 1 {
+	if code := RunPush([]string{"--bogus"}); code != 2 {
 		t.Error("bad flag should fail")
 	}
 }

@@ -2,7 +2,6 @@
 package cli
 
 import (
-	"flag"
 	"fmt"
 	"io"
 	"os"
@@ -331,19 +330,15 @@ type IssueKey = schema.IssueKey
 // scopes, and a next-step hint.
 func RunStatus(args []string) int {
 	// Check for help before loading settings.
-	for _, arg := range args {
-		if arg == "--help" || arg == "-h" {
-			printStatusHelp()
-			return 0
-		}
+	if wantsHelpOrWord(args) {
+		printStatusHelp()
+		return 0
 	}
 
-	fs := flag.NewFlagSet("status", flag.ContinueOnError)
-	fs.SetOutput(statusStderr)
+	fs := quietFlagSet("status")
 	porcelain := fs.Bool("porcelain", false, "print STATE<TAB>KEY<TAB>PATH lines only")
 	if err := parseFlags(fs, args); err != nil {
-		fmt.Fprintf(statusStderr, "jirafs status: invalid flags: %v\n", err)
-		return 2
+		return flagError(statusStderr, "jirafs status", err)
 	}
 
 	// Load settings.
@@ -439,14 +434,14 @@ func RunStatus(args []string) int {
 
 // printStatusHelp prints usage information for the status subcommand.
 func printStatusHelp() {
-	fmt.Fprintf(statusStderr, "%s\n", color.BoldBlue(statusStderr, "Usage:"))
-	fmt.Fprintf(statusStderr, "  jirafs %s [flags]\n\n", color.Blue(statusStderr, "status"))
+	fmt.Fprintf(statusStdout, "%s\n", color.BoldBlue(statusStdout, "Usage:"))
+	fmt.Fprintf(statusStdout, "  jirafs %s [flags]\n\n", color.Blue(statusStdout, "status"))
 
-	fmt.Fprintf(statusStderr, "%s\n", color.Dim(statusStderr, "Reports the current state of a jirafs workspace: config, mirror files,"))
-	fmt.Fprintf(statusStderr, "%s\n", color.Dim(statusStderr, "scopes, local changes (modified, draft, conflicted; offline), and a"))
-	fmt.Fprintf(statusStderr, "%s\n\n", color.Dim(statusStderr, "next-step hint for onboarding."))
+	fmt.Fprintf(statusStdout, "%s\n", color.Dim(statusStdout, "Reports the current state of a jirafs workspace: config, mirror files,"))
+	fmt.Fprintf(statusStdout, "%s\n", color.Dim(statusStdout, "scopes, local changes (modified, draft, conflicted; offline), and a"))
+	fmt.Fprintf(statusStdout, "%s\n\n", color.Dim(statusStdout, "next-step hint for onboarding."))
 
-	fmt.Fprintf(statusStderr, "%s:\n", color.BoldGreen(statusStderr, "Flags"))
-	fmt.Fprintf(statusStderr, "  %s   %s\n", color.Yellow(statusStderr, "--help, -h"), color.Dim(statusStderr, "show this help message"))
-	fmt.Fprintf(statusStderr, "  %s   %s\n", color.Yellow(statusStderr, "--porcelain"), color.Dim(statusStderr, "print STATE<TAB>KEY<TAB>PATH lines only, for scripts"))
+	fmt.Fprintf(statusStdout, "%s:\n", color.BoldGreen(statusStdout, "Flags"))
+	fmt.Fprintf(statusStdout, "  %s   %s\n", color.Yellow(statusStdout, "--help, -h"), color.Dim(statusStdout, "show this help message"))
+	fmt.Fprintf(statusStdout, "  %s   %s\n", color.Yellow(statusStdout, "--porcelain"), color.Dim(statusStdout, "print STATE<TAB>KEY<TAB>PATH lines only, for scripts"))
 }

@@ -22,8 +22,8 @@ func ptrString(s string) *string {
 // subcommand returns exit code 1 and prints a usage hint.
 func TestRunExport_NoSubcommand(t *testing.T) {
 	exit := RunExport([]string{})
-	if exit != 1 {
-		t.Errorf("RunExport([]) = %d, want 1", exit)
+	if exit != 2 {
+		t.Errorf("RunExport([]) = %d, want 2", exit)
 	}
 }
 
@@ -39,8 +39,8 @@ func TestRunExport_UnknownSubcommand(t *testing.T) {
 
 	_, stderr := withExportTestIO(t)
 	exit := RunExport([]string{"bogus"})
-	if exit != 1 {
-		t.Fatalf("RunExport([\"bogus\"]) = %d, want 1", exit)
+	if exit != 2 {
+		t.Fatalf("RunExport([\"bogus\"]) = %d, want 2", exit)
 	}
 	if !strings.Contains(stderr.String(), "unknown subcommand") {
 		t.Fatalf("stderr = %q, want unknown subcommand", stderr.String())
@@ -91,8 +91,8 @@ func TestRunExportIssue_MissingKey(t *testing.T) {
 
 	_, stderr := withExportTestIO(t)
 	exit := RunExport([]string{"issue", "--cwd", filepath.Join(tmpDir, "outside")})
-	if exit != 1 {
-		t.Fatalf("RunExport([\"issue\", \"--cwd\", ...]) = %d, want 1", exit)
+	if exit != 2 {
+		t.Fatalf("RunExport([\"issue\", \"--cwd\", ...]) = %d, want 2", exit)
 	}
 	if !strings.Contains(stderr.String(), "missing issue key") {
 		t.Fatalf("stderr = %q, want missing issue key", stderr.String())
@@ -215,8 +215,8 @@ func TestRunExportIssue_TooManyArgs(t *testing.T) {
 
 	_, stderr := withExportTestIO(t)
 	exit := RunExport([]string{"issue", "--cwd", filepath.Join(tmpDir, "outside"), "PROJ-1", "extra"})
-	if exit != 1 {
-		t.Fatalf("RunExport([\"issue\", \"PROJ-1\", \"extra\"]) = %d, want 1", exit)
+	if exit != 2 {
+		t.Fatalf("RunExport([\"issue\", \"PROJ-1\", \"extra\"]) = %d, want 2", exit)
 	}
 	if !strings.Contains(stderr.String(), "too many positional arguments") {
 		t.Fatalf("stderr = %q, want too many positional arguments", stderr.String())

@@ -3,7 +3,6 @@ package cli
 
 import (
 	stdcontext "context"
-	"flag"
 	"fmt"
 	"io"
 	"os"
@@ -44,14 +43,27 @@ func RunMirror(args []string) int {
 	cmdCtx, stop := commandContext()
 	defer stop()
 	if len(args) == 0 {
-		fmt.Fprintln(mirrorStderr, "jirafs mirror: missing subcommand. Use --help for usage.")
-		return 1
+		return usageError(mirrorStderr, "jirafs mirror", "missing subcommand")
 	}
 
-	// Check for help before loading settings.
-	if args[0] == "help" || args[0] == "--help" || args[0] == "-h" {
+	// Help and usage errors never need settings.
+	if wantsHelpOrWord(args[:1]) {
 		printMirrorHelp()
 		return 0
+	}
+	switch args[0] {
+	case "refresh", "current-sprint", "my-issues":
+		if wantsHelp(args[1:]) {
+			printMirrorRefreshHelp()
+			return 0
+		}
+	case "archive-sweep":
+		if wantsHelp(args[1:]) {
+			printMirrorArchiveSweepHelp()
+			return 0
+		}
+	default:
+		return usageError(mirrorStderr, "jirafs mirror", "unknown subcommand %q", args[0])
 	}
 
 	// Load settings and create resolver.
@@ -66,39 +78,25 @@ func RunMirror(args []string) int {
 		return runMirrorRefresh(cmdCtx, args[1:], settings, resolver)
 	case "archive-sweep":
 		return runMirrorArchiveSweep(args[1:], settings, resolver)
-	case "current-sprint", "my-issues":
+	default: // current-sprint, my-issues
 		return runMirrorRefresh(cmdCtx, append(args[1:], args[0]), settings, resolver)
-	default:
-		fmt.Fprintf(mirrorStderr, "jirafs mirror: unknown subcommand %q. Use --help for usage.\n", args[0])
-		return 1
 	}
 }
 
 func runMirrorRefresh(cmdCtx stdcontext.Context, args []string, settings *config.Settings, resolver *context.Resolver) int {
-	for _, arg := range args {
-		if arg == "--help" || arg == "-h" {
-			printMirrorRefreshHelp()
-			return 0
-		}
-	}
-
-	fs := flag.NewFlagSet("mirror refresh", flag.ContinueOnError)
-	fs.SetOutput(mirrorStderr)
+	fs := quietFlagSet("mirror refresh")
 	projectFlag := fs.String("project", "", "project key or name to refresh")
 	cwdFlag := fs.String("cwd", "", "working directory to use for project resolution")
 	dryRunFlag := fs.Bool("dry-run", false, "list the issue files that would be written; change nothing")
 	if err := parseFlags(fs, args); err != nil {
-		fmt.Fprintf(mirrorStderr, "jirafs mirror refresh: invalid flags: %v\n", err)
-		return 1
+		return flagError(mirrorStderr, "jirafs mirror refresh", err)
 	}
 
 	if len(fs.Args()) == 0 {
-		fmt.Fprintln(mirrorStderr, "jirafs mirror refresh: missing scope name")
-		return 1
+		return usageError(mirrorStderr, "jirafs mirror refresh", "missing scope name")
 	}
 	if len(fs.Args()) > 1 {
-		fmt.Fprintln(mirrorStderr, "jirafs mirror refresh: too many positional arguments")
-		return 1
+		return usageError(mirrorStderr, "jirafs mirror refresh", "too many positional arguments")
 	}
 	scopeName := fs.Args()[0]
 
@@ -303,7 +301,7 @@ func writeMirrorProgress(w io.Writer, label string, current, total int) {
 // mutation. With --apply, it also calls the archive service interface
 // to move eligible issues.
 func runMirrorArchiveSweep(args []string, settings *config.Settings, resolver *context.Resolver) int {
-	fs := flag.NewFlagSet("mirror archive-sweep", flag.ExitOnError)
+	fs := quietFlagSet("mirror archive-sweep")
 	// --project overrides the auto-detected project.
 	projectFlag := fs.String("project", "", "project key or name to scan")
 	// --cwd overrides the working directory for project resolution.
@@ -312,8 +310,7 @@ func runMirrorArchiveSweep(args []string, settings *config.Settings, resolver *c
 	applyFlag := fs.Bool("apply", false, "actually archive eligible issues")
 	dryRunFlag := fs.Bool("dry-run", false, "list eligible issues only (the default)")
 	if err := parseFlags(fs, args); err != nil {
-		fmt.Fprintf(os.Stderr, "jirafs mirror archive-sweep: invalid flags: %v\n", err)
-		return 1
+		return flagError(mirrorStderr, "jirafs mirror archive-sweep", err)
 	}
 	if dryRunConflicts(mirrorStderr, "jirafs mirror archive-sweep", *dryRunFlag, *applyFlag) {
 		return 2
@@ -579,52 +576,66 @@ func scanLocalDir(dir string, m *mirror.Mirror) ([]mirror.ArchiveEligible, error
 
 // printMirrorHelp prints usage information for the mirror subcommand.
 func printMirrorHelp() {
-	fmt.Fprintf(mirrorStderr, "%s\n", color.BoldBlue(mirrorStderr, "Usage:"))
-	fmt.Fprintf(mirrorStderr, "  jirafs %s <%s> [flags]\n\n", color.Blue(mirrorStderr, "mirror"), color.Yellow(mirrorStderr, "subcommand"))
+	fmt.Fprintf(mirrorStdout, "%s\n", color.BoldBlue(mirrorStdout, "Usage:"))
+	fmt.Fprintf(mirrorStdout, "  jirafs %s <%s> [flags]\n\n", color.Blue(mirrorStdout, "mirror"), color.Yellow(mirrorStdout, "subcommand"))
 
-	fmt.Fprintf(mirrorStderr, "%s:\n", color.BoldGreen(mirrorStderr, "Subcommands"))
-	fmt.Fprintf(mirrorStderr, "  %s  %s\n", color.Blue(mirrorStderr, "current-sprint"), color.Dim(mirrorStderr, "shorthand for \"refresh current-sprint\""))
-	fmt.Fprintf(mirrorStderr, "  %s       %s\n", color.Blue(mirrorStderr, "my-issues"), color.Dim(mirrorStderr, "shorthand for \"refresh my-issues\""))
-	fmt.Fprintf(mirrorStderr, "  %s         %s\n", color.Blue(mirrorStderr, "refresh"), color.Dim(mirrorStderr, "refresh one named live mirror scope"))
-	fmt.Fprintf(mirrorStderr, "  %s   %s\n", color.Blue(mirrorStderr, "archive-sweep"), color.Dim(mirrorStderr, "report archive-eligible issues without mutation"))
-	fmt.Fprintf(mirrorStderr, "  %s            %s\n\n", color.Blue(mirrorStderr, "help"), color.Dim(mirrorStderr, "show this help message"))
+	fmt.Fprintf(mirrorStdout, "%s:\n", color.BoldGreen(mirrorStdout, "Subcommands"))
+	fmt.Fprintf(mirrorStdout, "  %s  %s\n", color.Blue(mirrorStdout, "current-sprint"), color.Dim(mirrorStdout, "shorthand for \"refresh current-sprint\""))
+	fmt.Fprintf(mirrorStdout, "  %s       %s\n", color.Blue(mirrorStdout, "my-issues"), color.Dim(mirrorStdout, "shorthand for \"refresh my-issues\""))
+	fmt.Fprintf(mirrorStdout, "  %s         %s\n", color.Blue(mirrorStdout, "refresh"), color.Dim(mirrorStdout, "refresh one named live mirror scope"))
+	fmt.Fprintf(mirrorStdout, "  %s   %s\n", color.Blue(mirrorStdout, "archive-sweep"), color.Dim(mirrorStdout, "report archive-eligible issues without mutation"))
+	fmt.Fprintf(mirrorStdout, "  %s            %s\n\n", color.Blue(mirrorStdout, "help"), color.Dim(mirrorStdout, "show this help message"))
 
-	fmt.Fprintf(mirrorStderr, "%s:\n", color.BoldGreen(mirrorStderr, "Live mirror scopes"))
-	fmt.Fprintf(mirrorStderr, "  %s  %s\n", color.Magenta(mirrorStderr, "current-sprint"), color.Dim(mirrorStderr, "active sprint issues"))
-	fmt.Fprintf(mirrorStderr, "  %s       %s\n", color.Magenta(mirrorStderr, "my-issues"), color.Dim(mirrorStderr, "issues assigned to the current user"))
-	fmt.Fprintf(mirrorStderr, "  %s  %s\n\n", color.Magenta(mirrorStderr, "<name>"), color.Dim(mirrorStderr, "any scope (project, component or jql) defined in mirror.yml"))
+	fmt.Fprintf(mirrorStdout, "%s:\n", color.BoldGreen(mirrorStdout, "Live mirror scopes"))
+	fmt.Fprintf(mirrorStdout, "  %s  %s\n", color.Magenta(mirrorStdout, "current-sprint"), color.Dim(mirrorStdout, "active sprint issues"))
+	fmt.Fprintf(mirrorStdout, "  %s       %s\n", color.Magenta(mirrorStdout, "my-issues"), color.Dim(mirrorStdout, "issues assigned to the current user"))
+	fmt.Fprintf(mirrorStdout, "  %s  %s\n\n", color.Magenta(mirrorStdout, "<name>"), color.Dim(mirrorStdout, "any scope (project, component or jql) defined in mirror.yml"))
 
-	fmt.Fprintf(mirrorStderr, "%s:\n", color.BoldGreen(mirrorStderr, "Flags"))
-	fmt.Fprintf(mirrorStderr, "  %s KEY   %s\n", color.Yellow(mirrorStderr, "--project"), color.Dim(mirrorStderr, "project key or name to use"))
-	fmt.Fprintf(mirrorStderr, "  %s DIR   %s\n", color.Yellow(mirrorStderr, "--cwd"), color.Dim(mirrorStderr, "working directory for project resolution"))
-	fmt.Fprintf(mirrorStderr, "  %s         %s\n", color.Yellow(mirrorStderr, "--apply"), color.Dim(mirrorStderr, "actually archive eligible issues"))
-	fmt.Fprintf(mirrorStderr, "  %s       %s\n\n", color.Yellow(mirrorStderr, "--dry-run"), color.Dim(mirrorStderr, "list only; on refresh also list the files that would be written"))
+	fmt.Fprintf(mirrorStdout, "%s:\n", color.BoldGreen(mirrorStdout, "Flags"))
+	fmt.Fprintf(mirrorStdout, "  %s KEY   %s\n", color.Yellow(mirrorStdout, "--project"), color.Dim(mirrorStdout, "project key or name to use"))
+	fmt.Fprintf(mirrorStdout, "  %s DIR   %s\n", color.Yellow(mirrorStdout, "--cwd"), color.Dim(mirrorStdout, "working directory for project resolution"))
+	fmt.Fprintf(mirrorStdout, "  %s         %s\n", color.Yellow(mirrorStdout, "--apply"), color.Dim(mirrorStdout, "actually archive eligible issues"))
+	fmt.Fprintf(mirrorStdout, "  %s       %s\n\n", color.Yellow(mirrorStdout, "--dry-run"), color.Dim(mirrorStdout, "list only; on refresh also list the files that would be written"))
 
-	fmt.Fprintf(mirrorStderr, "%s\n", color.Cyan(mirrorStderr, `Run "jirafs mirror <subcommand> --help" for more information about a subcommand.`))
+	fmt.Fprintf(mirrorStdout, "%s\n", color.Cyan(mirrorStdout, `Run "jirafs mirror <subcommand> --help" for more information about a subcommand.`))
 }
 
 func printMirrorRefreshHelp() {
-	fmt.Fprintf(mirrorStderr, "%s\n", color.BoldBlue(mirrorStderr, "Usage:"))
-	fmt.Fprintf(mirrorStderr, "  jirafs %s %s [flags] <%s>\n", color.Blue(mirrorStderr, "mirror"), color.Blue(mirrorStderr, "refresh"), color.Yellow(mirrorStderr, "scope"))
-	fmt.Fprintf(mirrorStderr, "  jirafs %s <%s> [flags]\n\n", color.Blue(mirrorStderr, "mirror"), color.Yellow(mirrorStderr, "scope"))
+	fmt.Fprintf(mirrorStdout, "%s\n", color.BoldBlue(mirrorStdout, "Usage:"))
+	fmt.Fprintf(mirrorStdout, "  jirafs %s %s [flags] <%s>\n", color.Blue(mirrorStdout, "mirror"), color.Blue(mirrorStdout, "refresh"), color.Yellow(mirrorStdout, "scope"))
+	fmt.Fprintf(mirrorStdout, "  jirafs %s <%s> [flags]\n\n", color.Blue(mirrorStdout, "mirror"), color.Yellow(mirrorStdout, "scope"))
 
-	fmt.Fprintf(mirrorStderr, "%s\n\n", color.Dim(mirrorStderr, "Refreshes one named live mirror scope."))
+	fmt.Fprintf(mirrorStdout, "%s\n\n", color.Dim(mirrorStdout, "Refreshes one named live mirror scope."))
 
-	fmt.Fprintf(mirrorStderr, "%s:\n", color.BoldGreen(mirrorStderr, "Live mirror scopes"))
-	fmt.Fprintf(mirrorStderr, "  %s\n", color.Magenta(mirrorStderr, "current-sprint"))
-	fmt.Fprintf(mirrorStderr, "  %s\n", color.Magenta(mirrorStderr, "my-issues"))
-	fmt.Fprintf(mirrorStderr, "  %s\n", color.Magenta(mirrorStderr, "<name> (any scope in mirror.yml)"))
-	fmt.Fprintln(mirrorStderr)
+	fmt.Fprintf(mirrorStdout, "%s:\n", color.BoldGreen(mirrorStdout, "Live mirror scopes"))
+	fmt.Fprintf(mirrorStdout, "  %s\n", color.Magenta(mirrorStdout, "current-sprint"))
+	fmt.Fprintf(mirrorStdout, "  %s\n", color.Magenta(mirrorStdout, "my-issues"))
+	fmt.Fprintf(mirrorStdout, "  %s\n", color.Magenta(mirrorStdout, "<name> (any scope in mirror.yml)"))
+	fmt.Fprintln(mirrorStdout)
 
-	fmt.Fprintf(mirrorStderr, "%s:\n", color.BoldGreen(mirrorStderr, "Examples"))
-	fmt.Fprintf(mirrorStderr, "  %s\n", color.Cyan(mirrorStderr, "jirafs mirror my-issues"))
-	fmt.Fprintf(mirrorStderr, "  %s\n", color.Cyan(mirrorStderr, "jirafs mirror refresh my-issues"))
-	fmt.Fprintf(mirrorStderr, "  %s\n\n", color.Cyan(mirrorStderr, "jirafs mirror refresh current-sprint"))
+	fmt.Fprintf(mirrorStdout, "%s:\n", color.BoldGreen(mirrorStdout, "Examples"))
+	fmt.Fprintf(mirrorStdout, "  %s\n", color.Cyan(mirrorStdout, "jirafs mirror my-issues"))
+	fmt.Fprintf(mirrorStdout, "  %s\n", color.Cyan(mirrorStdout, "jirafs mirror refresh my-issues"))
+	fmt.Fprintf(mirrorStdout, "  %s\n\n", color.Cyan(mirrorStdout, "jirafs mirror refresh current-sprint"))
 
-	fmt.Fprintf(mirrorStderr, "%s:\n", color.BoldGreen(mirrorStderr, "Flags"))
-	fmt.Fprintf(mirrorStderr, "  %s KEY   %s\n", color.Yellow(mirrorStderr, "--project"), color.Dim(mirrorStderr, "project key or name to use"))
-	fmt.Fprintf(mirrorStderr, "  %s DIR   %s\n", color.Yellow(mirrorStderr, "--cwd"), color.Dim(mirrorStderr, "working directory for project resolution"))
-	fmt.Fprintf(mirrorStderr, "  %s          %s\n", color.Yellow(mirrorStderr, "--help"), color.Dim(mirrorStderr, "show this help message"))
+	fmt.Fprintf(mirrorStdout, "%s:\n", color.BoldGreen(mirrorStdout, "Flags"))
+	fmt.Fprintf(mirrorStdout, "  %s KEY   %s\n", color.Yellow(mirrorStdout, "--project"), color.Dim(mirrorStdout, "project key or name to use"))
+	fmt.Fprintf(mirrorStdout, "  %s DIR   %s\n", color.Yellow(mirrorStdout, "--cwd"), color.Dim(mirrorStdout, "working directory for project resolution"))
+	fmt.Fprintf(mirrorStdout, "  %s          %s\n", color.Yellow(mirrorStdout, "--help"), color.Dim(mirrorStdout, "show this help message"))
+}
+
+func printMirrorArchiveSweepHelp() {
+	PrintUsage(mirrorStdout, Usage{
+		Synopsis:    []string{"mirror archive-sweep [flags]"},
+		Description: []string{"Reports archive-eligible issues in the project's local directories; with --apply, archives them."},
+		Sections: []UsageSection{{Title: "Flags", Rows: [][2]string{
+			{"--project KEY", "project key or name to scan"},
+			{"--cwd DIR", "working directory for project resolution"},
+			{"--apply", "actually archive eligible issues"},
+			{"--dry-run", "list eligible issues only (the default)"},
+			{"--help, -h", "show this help message"},
+		}}},
+	})
 }
 
 // printUnknownScope reports an unknown scope name, listing the configured

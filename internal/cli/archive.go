@@ -2,7 +2,6 @@
 package cli
 
 import (
-	"flag"
 	"fmt"
 	"io"
 	"os"
@@ -39,19 +38,18 @@ func runArchiveIssue(args []string, settings *config.Settings) int {
 		flagArgs = args
 	}
 
-	fs := flag.NewFlagSet("archive issue", flag.ExitOnError)
+	fs := quietFlagSet("archive issue")
 	projectFlag := fs.String("project", "", "project key or name to use")
 	cwdFlag := fs.String("cwd", "", "working directory to resolve the project from")
 	dryRunFlag := fs.Bool("dry-run", false, "print what would be archived; move nothing")
 	if err := parseFlags(fs, flagArgs); err != nil {
-		return 1
+		return flagError(archiveStderr, "jirafs archive issue", err)
 	}
 	if keyPos == "" && fs.NArg() > 0 {
 		keyPos = fs.Arg(0)
 	}
 	if keyPos == "" {
-		fmt.Fprintln(archiveStderr, "jirafs archive issue: missing issue key")
-		return 1
+		return usageError(archiveStderr, "jirafs archive issue", "missing issue key")
 	}
 	key := keyPos
 
@@ -112,11 +110,11 @@ func runArchiveIssue(args []string, settings *config.Settings) int {
 // runArchiveList handles `jirafs archive list`. It prints the basenames of
 // every archived issue snapshot in the project's _archive directory.
 func runArchiveList(args []string, settings *config.Settings) int {
-	fs := flag.NewFlagSet("archive list", flag.ExitOnError)
+	fs := quietFlagSet("archive list")
 	projectFlag := fs.String("project", "", "project key or name to use")
 	cwdFlag := fs.String("cwd", "", "working directory to resolve the project from")
 	if err := parseFlags(fs, args); err != nil {
-		return 1
+		return flagError(archiveStderr, "jirafs archive list", err)
 	}
 
 	cwd := *cwdFlag
@@ -214,47 +212,79 @@ func resolveArchiveContext(settings *config.Settings, project, cwd string) (*con
 // handler. It returns an exit code (0 on success, 1 on error).
 func RunArchive(args []string) int {
 	if len(args) == 0 {
-		printArchiveHelp()
-		return 1
+		return usageError(archiveStderr, "jirafs archive", "missing subcommand")
 	}
 
-	switch args[0] {
-	case "help", "--help", "-h":
+	// Help and usage errors never need settings.
+	if wantsHelpOrWord(args[:1]) {
 		printArchiveHelp()
 		return 0
+	}
+	switch args[0] {
 	case "issue":
+		if wantsHelp(args[1:]) {
+			printArchiveIssueHelp()
+			return 0
+		}
 		settings, ok := loadSettingsOrHint(archiveStderr, "archive issue")
 		if !ok {
 			return 1
 		}
 		return runArchiveIssue(args[1:], settings)
 	case "list":
+		if wantsHelp(args[1:]) {
+			printArchiveListHelp()
+			return 0
+		}
 		settings, ok := loadSettingsOrHint(archiveStderr, "archive list")
 		if !ok {
 			return 1
 		}
 		return runArchiveList(args[1:], settings)
 	default:
-		fmt.Fprintln(archiveStderr, "jirafs archive: unknown subcommand")
-		printArchiveHelp()
-		return 1
+		return usageError(archiveStderr, "jirafs archive", "unknown subcommand %q", args[0])
 	}
+}
+
+func printArchiveIssueHelp() {
+	PrintUsage(archiveStdout, Usage{
+		Synopsis:    []string{"archive issue <KEY> [flags]"},
+		Description: []string{"Moves one resolved issue file into the project's _archive directory."},
+		Sections: []UsageSection{{Title: "Flags", Rows: [][2]string{
+			{"--project KEY", "project key or name to use"},
+			{"--cwd DIR", "working directory to resolve the project from"},
+			{"--dry-run", "print what would be archived; move nothing"},
+			{"--help, -h", "show this help message"},
+		}}},
+	})
+}
+
+func printArchiveListHelp() {
+	PrintUsage(archiveStdout, Usage{
+		Synopsis:    []string{"archive list [flags]"},
+		Description: []string{"Lists archived issue snapshots in the project's _archive directory."},
+		Sections: []UsageSection{{Title: "Flags", Rows: [][2]string{
+			{"--project KEY", "project key or name to use"},
+			{"--cwd DIR", "working directory to resolve the project from"},
+			{"--help, -h", "show this help message"},
+		}}},
+	})
 }
 
 // printArchiveHelp prints usage information for the archive subcommand.
 func printArchiveHelp() {
-	fmt.Fprintf(archiveStderr, "%s\n", color.BoldBlue(archiveStderr, "Usage:"))
-	fmt.Fprintf(archiveStderr, "  jirafs %s <subcommand> [flags]\n\n", color.Blue(archiveStderr, "archive"))
+	fmt.Fprintf(archiveStdout, "%s\n", color.BoldBlue(archiveStdout, "Usage:"))
+	fmt.Fprintf(archiveStdout, "  jirafs %s <subcommand> [flags]\n\n", color.Blue(archiveStdout, "archive"))
 
-	fmt.Fprintf(archiveStderr, "%s\n", color.Dim(archiveStderr, "Moves resolved issues out of the live workspace into a per-project"))
-	fmt.Fprintf(archiveStderr, "%s\n\n", color.Dim(archiveStderr, "_archive directory and lists what has been archived."))
+	fmt.Fprintf(archiveStdout, "%s\n", color.Dim(archiveStdout, "Moves resolved issues out of the live workspace into a per-project"))
+	fmt.Fprintf(archiveStdout, "%s\n\n", color.Dim(archiveStdout, "_archive directory and lists what has been archived."))
 
-	fmt.Fprintf(archiveStderr, "%s:\n", color.BoldGreen(archiveStderr, "Subcommands"))
-	fmt.Fprintf(archiveStderr, "  %s   %s\n", color.Yellow(archiveStderr, "issue"), color.Dim(archiveStderr, "archive a single issue by key"))
-	fmt.Fprintf(archiveStderr, "  %s   %s\n", color.Yellow(archiveStderr, "list"), color.Dim(archiveStderr, "list archived issue snapshots"))
+	fmt.Fprintf(archiveStdout, "%s:\n", color.BoldGreen(archiveStdout, "Subcommands"))
+	fmt.Fprintf(archiveStdout, "  %s   %s\n", color.Yellow(archiveStdout, "issue"), color.Dim(archiveStdout, "archive a single issue by key"))
+	fmt.Fprintf(archiveStdout, "  %s   %s\n", color.Yellow(archiveStdout, "list"), color.Dim(archiveStdout, "list archived issue snapshots"))
 
-	fmt.Fprintf(archiveStderr, "%s:\n", color.BoldGreen(archiveStderr, "Flags"))
-	fmt.Fprintf(archiveStderr, "  %s   %s\n", color.Yellow(archiveStderr, "--project"), color.Dim(archiveStderr, "project key or name to use"))
-	fmt.Fprintf(archiveStderr, "  %s   %s\n", color.Yellow(archiveStderr, "--cwd"), color.Dim(archiveStderr, "working directory to resolve the project from"))
-	fmt.Fprintf(archiveStderr, "  %s   %s\n", color.Yellow(archiveStderr, "--help, -h"), color.Dim(archiveStderr, "show this help message"))
+	fmt.Fprintf(archiveStdout, "%s:\n", color.BoldGreen(archiveStdout, "Flags"))
+	fmt.Fprintf(archiveStdout, "  %s   %s\n", color.Yellow(archiveStdout, "--project"), color.Dim(archiveStdout, "project key or name to use"))
+	fmt.Fprintf(archiveStdout, "  %s   %s\n", color.Yellow(archiveStdout, "--cwd"), color.Dim(archiveStdout, "working directory to resolve the project from"))
+	fmt.Fprintf(archiveStdout, "  %s   %s\n", color.Yellow(archiveStdout, "--help, -h"), color.Dim(archiveStdout, "show this help message"))
 }

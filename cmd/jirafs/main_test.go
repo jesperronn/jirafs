@@ -60,10 +60,10 @@ func TestUnknownCommand(t *testing.T) {
 	if !strings.Contains(output.stderr, `jirafs: unknown command: "wat"`) {
 		t.Fatalf("stderr = %q, want unknown-command message", output.stderr)
 	}
-	if !strings.Contains(output.stderr, "Usage:") {
-		t.Fatalf("stderr = %q, want help text", output.stderr)
+	if !strings.Contains(output.stderr, "Use --help for usage.") {
+		t.Fatalf("stderr = %q, want usage hint", output.stderr)
 	}
-	if output.exitCode != 1 {
+	if output.exitCode != 2 {
 		t.Fatalf("exitCode = %d, want 1", output.exitCode)
 	}
 }
@@ -137,8 +137,8 @@ func TestCommandsWired(t *testing.T) {
 
 func TestExportCommand(t *testing.T) {
 	output := runMainHelper(t, "export")
-	if output.exitCode != 1 {
-		t.Fatalf("exitCode = %d, want 1", output.exitCode)
+	if output.exitCode != 2 {
+		t.Fatalf("exitCode = %d, want 2", output.exitCode)
 	}
 	if !strings.Contains(output.stderr, "jirafs export: missing subcommand") {
 		t.Fatalf("stderr = %q, want missing subcommand message", output.stderr)
@@ -191,8 +191,8 @@ func TestMirrorNoSubcommand(t *testing.T) {
 	if !strings.Contains(output.stderr, "jirafs mirror: missing subcommand") {
 		t.Fatalf("stderr = %q, want missing subcommand message", output.stderr)
 	}
-	if output.exitCode != 1 {
-		t.Fatalf("exitCode = %d, want 1", output.exitCode)
+	if output.exitCode != 2 {
+		t.Fatalf("exitCode = %d, want 2", output.exitCode)
 	}
 }
 
@@ -224,8 +224,8 @@ mirror_dir = "` + jirafsDir + `/jira/platform"
 	if !strings.Contains(output.stderr, `jirafs mirror: unknown subcommand "unknown-sub"`) {
 		t.Fatalf("stderr = %q, want unknown subcommand message", output.stderr)
 	}
-	if output.exitCode != 1 {
-		t.Fatalf("exitCode = %d, want 1", output.exitCode)
+	if output.exitCode != 2 {
+		t.Fatalf("exitCode = %d, want 2", output.exitCode)
 	}
 }
 
@@ -451,8 +451,8 @@ func TestUseClearWithProjectFlag(t *testing.T) {
 	if !strings.Contains(output.stderr, "--project and --clear are mutually exclusive") {
 		t.Fatalf("stderr = %q, want mutually exclusive message", output.stderr)
 	}
-	if output.exitCode != 1 {
-		t.Fatalf("exitCode = %d, want 1", output.exitCode)
+	if output.exitCode != 2 {
+		t.Fatalf("exitCode = %d, want 2", output.exitCode)
 	}
 }
 
@@ -461,8 +461,8 @@ func TestUseTooManyPositionalArgs(t *testing.T) {
 	if !strings.Contains(output.stderr, "too many positional arguments") {
 		t.Fatalf("stderr = %q, want too many positional arguments", output.stderr)
 	}
-	if output.exitCode != 1 {
-		t.Fatalf("exitCode = %d, want 1", output.exitCode)
+	if output.exitCode != 2 {
+		t.Fatalf("exitCode = %d, want 2", output.exitCode)
 	}
 }
 
@@ -688,7 +688,7 @@ func TestSetupHelp(t *testing.T) {
 	if output.exitCode != 0 {
 		t.Fatalf("exitCode = %d, want 0", output.exitCode)
 	}
-	if !strings.Contains(output.stderr, "Usage of setup") {
+	if !strings.Contains(output.stderr, "Usage:") {
 		t.Fatalf("stderr = %q, want usage text", output.stderr)
 	}
 	if !strings.Contains(output.stderr, "default: atlassian_api_token") {
@@ -701,8 +701,8 @@ func TestSetupHelp(t *testing.T) {
 
 func TestSetupMissingFlags(t *testing.T) {
 	output := runMainHelper(t, "setup")
-	if output.exitCode != 1 {
-		t.Fatalf("exitCode = %d, want 1", output.exitCode)
+	if output.exitCode != 2 {
+		t.Fatalf("exitCode = %d, want 2", output.exitCode)
 	}
 	if !strings.Contains(output.stderr, "missing required flags") {
 		t.Fatalf("stderr = %q, want aggregated missing-flags message", output.stderr)
@@ -717,8 +717,8 @@ func TestSetupMissingFlags(t *testing.T) {
 func TestSetupInvalidBaseURL(t *testing.T) {
 	tmpDir := t.TempDir()
 	output := runMainHelper(t, "setup", "--project", "p", "--key", "K", "--instance", "i", "--base-url", "not-a-url", "--auth-type", "basic", "--mirror-dir", filepath.Join(tmpDir, "mirror"))
-	if output.exitCode != 1 {
-		t.Fatalf("exitCode = %d, want 1", output.exitCode)
+	if output.exitCode != 2 {
+		t.Fatalf("exitCode = %d, want 2", output.exitCode)
 	}
 	if !strings.Contains(output.stderr, "--base-url must start with http:// or https://") {
 		t.Fatalf("stderr = %q, want invalid URL message", output.stderr)
@@ -1337,7 +1337,7 @@ func TestRealExitCodes(t *testing.T) {
 	for _, tc := range []struct {
 		args []string
 		want int
-	}{{[]string{"help"}, 0}, {[]string{"wat"}, 1}, {[]string{"use", "--bogus-flag"}, 2}} {
+	}{{[]string{"help"}, 0}, {[]string{"wat"}, 2}, {[]string{"use", "--bogus-flag"}, 2}} {
 		if got := runMainReexec(t, writeMinimalHome(t), tc.args...).exitCode; got != tc.want {
 			t.Fatalf("args %v: exit = %d, want %d", tc.args, got, tc.want)
 		}

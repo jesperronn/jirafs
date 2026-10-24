@@ -77,15 +77,15 @@ func TestRunRegistry_ShowInit_ArgErrors(t *testing.T) {
 		args []string
 		want string
 	}{
-		{[]string{"show", "--bogus"}, "invalid flags"},
+		{[]string{"show", "--bogus"}, "flag provided but not defined"},
 		{[]string{"show"}, "missing <type>"},
-		{[]string{"init", "--bogus"}, "invalid flags"},
+		{[]string{"init", "--bogus"}, "flag provided but not defined"},
 		{[]string{"init"}, "missing <type>"},
 		{[]string{"init", "nope", "--project", "test"}, "unknown type"},
 	}
 	for _, c := range cases {
 		_, stderr := withRegistryTestIO(t)
-		if exit := RunRegistry(c.args); exit != 1 || !strings.Contains(stderr.String(), c.want) {
+		if exit := RunRegistry(c.args); exit != wantExit(c.want) || !strings.Contains(stderr.String(), c.want) {
 			t.Errorf("RunRegistry(%v) = %d, stderr %q, want %q", c.args, exit, stderr.String(), c.want)
 		}
 	}
@@ -97,4 +97,12 @@ func TestRunRegistry_InitNoSettings(t *testing.T) {
 	if exit := RunRegistry([]string{"init", "users"}); exit != 1 || !strings.Contains(stderr.String(), "no settings found") {
 		t.Fatalf("exit/stderr = %d %q", exit, stderr.String())
 	}
+}
+
+// wantExit is 1 for runtime failures (unknown registry type) and 2 for usage errors.
+func wantExit(want string) int {
+	if want == "unknown type" {
+		return 1
+	}
+	return 2
 }

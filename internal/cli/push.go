@@ -3,7 +3,6 @@ package cli
 import (
 	stdcontext "context"
 	"encoding/json"
-	"flag"
 	"fmt"
 	"io"
 	"os"
@@ -41,7 +40,7 @@ are missing), then creates the issue in Jira, rewrites the file with the new key
 func RunPush(args []string) int {
 	cmdCtx, stop := commandContext()
 	defer stop()
-	if len(args) > 0 && (args[0] == "help" || args[0] == "--help" || args[0] == "-h") {
+	if wantsHelpOrWord(args) {
 		printPushHelp()
 		return 0
 	}
@@ -52,14 +51,13 @@ func RunPush(args []string) int {
 	} else {
 		flagArgs = args
 	}
-	fs := flag.NewFlagSet("push", flag.ContinueOnError)
-	fs.SetOutput(pushStderr)
+	fs := quietFlagSet("push")
 	applyFlag := fs.Bool("apply", false, "create the issue in Jira")
 	dryRunFlag := fs.Bool("dry-run", false, "show what would be created (the default)")
 	projectFlag := fs.String("project", "", "project key or name to use")
 	cwdFlag := fs.String("cwd", "", "working directory to resolve the project from")
 	if err := parseFlags(fs, flagArgs); err != nil {
-		return 1
+		return flagError(pushStderr, "jirafs push", err)
 	}
 	if dryRunConflicts(pushStderr, "jirafs push", *dryRunFlag, *applyFlag) {
 		return 2
@@ -68,8 +66,7 @@ func RunPush(args []string) int {
 		path = fs.Arg(0)
 	}
 	if path == "" {
-		fmt.Fprintln(pushStderr, "jirafs push: missing draft file; try: jirafs push <draft.md>")
-		return 1
+		return usageError(pushStderr, "jirafs push", "missing draft file; try: jirafs push <draft.md>")
 	}
 
 	data, err := os.ReadFile(path)
