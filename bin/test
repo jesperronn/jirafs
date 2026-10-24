@@ -98,6 +98,8 @@ for _c in op security secret-tool pass gpg gcloud aws; do
 done
 export HOME="${HERMETIC_DIR}/home" XDG_CONFIG_HOME="${HERMETIC_DIR}/home"
 export PATH="${HERMETIC_DIR}/stubs:${PATH}"
+# Git-backed mirror tests must run, never skip, under bin/test (and bin/verify).
+export JIRAFS_REQUIRE_GIT=1
 
 # Translate POSITIONAL → PACKAGE.
 if [ -n "${POSITIONAL}" ]; then

@@ -11,6 +11,8 @@ import (
 	"strings"
 
 	"github.com/jirafs/jirafs/internal/config"
+	"github.com/jirafs/jirafs/internal/gitx"
+	"github.com/jirafs/jirafs/internal/mirror"
 	"github.com/jirafs/jirafs/internal/registry"
 )
 
@@ -45,6 +47,7 @@ func RunInit(args []string) int {
 	baseURLFlag := fs.String("base-url", "", "Jira base URL (http:// or https://)")
 	authTypeFlag := fs.String("auth-type", "", "auth type: basic, atlassian_api_token, bearer_token or oauth1 (default: atlassian_api_token)")
 	mirrorDirFlag := fs.String("mirror-dir", "", "mirror directory (default: ~/jira/<project>)")
+	gitFlag := fs.Bool("git", false, "make the mirror git-backed: set git: true in mirror.yml, run git init if needed, write .gitignore")
 	setCurrentFlag := fs.Bool("set-current", false, "also set the remembered current project")
 	var credentialRefs []string
 	fs.Func("credential-ref", "credential reference (env://..., file://... or op://...); may be repeated", func(v string) error {
@@ -85,6 +88,11 @@ func RunInit(args []string) int {
 	}
 	if !strings.HasPrefix(baseURL, "http://") && !strings.HasPrefix(baseURL, "https://") {
 		return usageError(initStderr, "jirafs init", "--base-url must start with http:// or https://")
+	}
+
+	if *gitFlag && !gitx.Available() {
+		fmt.Fprintln(initStderr, gitx.NotInstalledHint)
+		return 1
 	}
 
 	fmt.Fprintf(initStderr, "jirafs init: configuring project %q (key %q) on instance %q at %q using auth %q\n", name, key, instance, baseURL, authType)
@@ -130,6 +138,13 @@ func RunInit(args []string) int {
 		return 1
 	}
 
+	if *gitFlag {
+		if err := initGitMirror(initStderr, expanded); err != nil {
+			fmt.Fprintf(initStderr, "jirafs init: %v\n", err)
+			return 1
+		}
+	}
+
 	if *setCurrentFlag {
 		s.State.CurrentProject = name
 		if err := s.SaveState(); err != nil {
@@ -157,6 +172,90 @@ func initLayout(mirrorDir, key string) []layoutFile {
 		files = append(files, layoutFile{name: name, content: registryEntryContent})
 	}
 	return files
+}
+
+// gitignoreEntries are the derived or transient paths a git-backed mirror
+// never tracks. base/ is derived data.
+var gitignoreEntries = []string{".jirafs/backup/", ".jirafs/intents/", ".jirafs/tmp/", ".jirafs/base/"}
+
+// initGitMirror makes dir a git-backed mirror: it sets `git: true` in the
+// mirror config, runs git init unless dir is already inside a repository
+// (its own or a parent's, which is reused), and appends the missing
+// gitignore entries to dir/.gitignore without touching existing lines.
+func initGitMirror(w io.Writer, dir string) error {
+	if err := ensureGitSetting(dir); err != nil {
+		return err
+	}
+	if gitx.IsRepo(dir) {
+		top, err := gitx.Toplevel(dir)
+		if err != nil {
+			return err
+		}
+		fmt.Fprintf(w, "jirafs init: reusing existing git repository at %s\n", top)
+	} else {
+		if err := gitx.Init(dir); err != nil {
+			return err
+		}
+		fmt.Fprintf(w, "jirafs init: created new git repository in %s\n", dir)
+	}
+	return ensureGitignore(dir)
+}
+
+// ensureGitSetting appends `git: true` to the mirror config unless present.
+func ensureGitSetting(dir string) error {
+	path := filepath.Join(dir, "mirror.yml")
+	if _, err := os.Stat(filepath.Join(dir, "mirror.yaml")); err == nil {
+		path = filepath.Join(dir, "mirror.yaml")
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return fmt.Errorf("cannot read %s: %w", path, err)
+	}
+	m, err := mirror.UnmarshalMirror(data)
+	if err != nil {
+		return fmt.Errorf("cannot parse %s: %w", path, err)
+	}
+	if m.Git {
+		return nil
+	}
+	if len(data) > 0 && !strings.HasSuffix(string(data), "\n") {
+		data = append(data, '\n')
+	}
+	data = append(data, "git: true\n"...)
+	if err := os.WriteFile(path, data, 0o644); err != nil {
+		return fmt.Errorf("cannot write %s: %w", path, err)
+	}
+	return nil
+}
+
+// ensureGitignore appends any missing gitignoreEntries to dir/.gitignore.
+func ensureGitignore(dir string) error {
+	path := filepath.Join(dir, ".gitignore")
+	data, err := os.ReadFile(path)
+	if err != nil && !os.IsNotExist(err) {
+		return fmt.Errorf("cannot read %s: %w", path, err)
+	}
+	have := map[string]bool{}
+	for _, line := range strings.Split(string(data), "\n") {
+		have[strings.TrimSpace(line)] = true
+	}
+	var add strings.Builder
+	for _, e := range gitignoreEntries {
+		if !have[e] {
+			add.WriteString(e + "\n")
+		}
+	}
+	if add.Len() == 0 {
+		return nil
+	}
+	out := string(data)
+	if out != "" && !strings.HasSuffix(out, "\n") {
+		out += "\n"
+	}
+	if err := os.WriteFile(path, []byte(out+add.String()), 0o644); err != nil {
+		return fmt.Errorf("cannot write %s: %w", path, err)
+	}
+	return nil
 }
 
 // isInteractiveInput reports whether stdin is a terminal. /dev/null is a

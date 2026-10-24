@@ -381,3 +381,15 @@ merge.
 Set `epic_link_field = "customfield_10014"` under `[projects.<name>]` in
 `~/.jirafs/settings.toml` to export epic links. `JIRAFS_EPIC_LINK_FIELD`
 overrides it; `jirafs doctor` shows the effective value.
+
+## Git-backed mirror (opt-in)
+
+`jirafs init <name> ... --git` makes the mirror a git repository so every
+change is reviewable and reversible. It sets `git: true` in the mirror's
+`mirror.yml` (default `false`; nothing changes when off), runs `git init` in
+the mirror directory unless it already sits inside a repository (an existing
+repo, including a parent repo, is reused and init says which), and appends
+`.jirafs/backup/`, `.jirafs/intents/`, `.jirafs/tmp/` and `.jirafs/base/` to
+`.gitignore` (an existing `.gitignore` is appended to, never overwritten).
+Re-running is idempotent. Without git on PATH, init fails with an install hint;
+a commit without `user.name`/`user.email` hints at `git config --global`.

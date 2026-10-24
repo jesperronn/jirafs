@@ -255,6 +255,9 @@ type Mirror struct {
 	// at the last export, refresh or sync. status compares it with the local
 	// file to detect that Jira moved on, without any network access.
 	RemoteUpdated map[schema.IssueKey]string `yaml:"remote_updated,omitempty"`
+	// Git marks the mirror as git-backed (`git: true` in mirror.yml). It
+	// defaults to false and is written by `jirafs init --git`.
+	Git bool `yaml:"git,omitempty"`
 }
 
 // SetScopeLastSynced records t as the cursor of scope. A scope that is not in

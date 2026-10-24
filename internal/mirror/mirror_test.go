@@ -541,3 +541,14 @@ func TestMirror_RemoteUpdatedRoundTrip(t *testing.T) {
 		t.Fatalf("round trip lost data: %+v", got.RemoteUpdated)
 	}
 }
+
+func TestUnmarshalMirror_GitSetting(t *testing.T) {
+	m, err := UnmarshalMirror([]byte("project:\n  type: project\n  value: PLAT\ngit: true\n"))
+	if err != nil || !m.Git {
+		t.Fatalf("git = %v err = %v", m != nil && m.Git, err)
+	}
+	m, err = UnmarshalMirror([]byte("project:\n  type: project\n  value: PLAT\n"))
+	if err != nil || m.Git {
+		t.Fatalf("default git should be false, err = %v", err)
+	}
+}
