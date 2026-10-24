@@ -125,6 +125,12 @@ func parseFrontmatter(frontmatter string) (*schema.Issue, *schema.ParseError) {
 	if resolvedStatus, ok := raw["resolved_status"]; ok {
 		issue.RemoteMetadata.ResolvedStatus = resolvedStatus.(string)
 	}
+	if rs, ok := raw["remote_state"].(string); ok {
+		issue.RemoteMetadata.RemoteState = rs
+	}
+	if mt, ok := raw["moved_to"].(string); ok {
+		issue.RemoteMetadata.MovedTo = mt
+	}
 	if pinned, ok := raw["pinned"]; ok {
 		issue.RemoteMetadata.Pinned = pinned.(bool)
 	}

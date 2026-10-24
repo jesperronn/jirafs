@@ -96,7 +96,7 @@ func RunPull(args []string) int {
 			fmt.Fprintf(pullStderr, "jirafs pull: %q is both an issue key and a scope name in mirror.yml; rename the scope in mirror.yml (e.g. %q) and re-run\n", arg, strings.ToLower(arg))
 			return 1
 		}
-		return runPullIssue(cmdCtx, arg, settings, ctx, cwd, *stdoutFlag, *dryRunFlag)
+		return runPullIssue(cmdCtx, arg, settings, ctx, m, mirrorPath, cwd, *stdoutFlag, *dryRunFlag)
 	}
 
 	var names []string
@@ -151,7 +151,7 @@ func realArgs(arg string, full bool) string {
 
 // runPullIssue pulls one issue: it fetches it from Jira and writes it to
 // <local_dirs[0]>/<KEY>.md, or prints it with --stdout.
-func runPullIssue(cmdCtx stdcontext.Context, arg string, settings *config.Settings, ctx *context.Context, cwd string, toStdout, dryRun bool) int {
+func runPullIssue(cmdCtx stdcontext.Context, arg string, settings *config.Settings, ctx *context.Context, m *mirror.Mirror, mirrorPath, cwd string, toStdout, dryRun bool) int {
 	key, err := jira.ParseIssueRef(arg, settings.Instances[ctx.Instance].BaseURL)
 	if err != nil {
 		fmt.Fprintf(pullStderr, "jirafs pull: %s\n", strings.ReplaceAll(err.Error(), "<name>", ctx.Name))
@@ -165,8 +165,23 @@ func runPullIssue(cmdCtx stdcontext.Context, arg string, settings *config.Settin
 	}
 	issue, err := client.FetchIssue(cmdCtx, key)
 	if err != nil {
+		if !toStdout && jira.IsClientError(err, jira.ErrNotFound) {
+			pc := &pullGitCommit{Label: key, Host: hostOf(settings.Instances[ctx.Instance].BaseURL)}
+			gs := beginPullGit(ctx.MirrorDir, dryRun, pullStderr)
+			if code, handled := pullGoneIssue(pc, m, mirrorPath, settings, ctx, key, dryRun); handled {
+				gs.commit(*pc, pullNow(), pullStdout, pullStderr)
+				return code
+			}
+		}
 		fmt.Fprintf(pullStderr, "jirafs pull: %v\n", err)
 		return 1
+	}
+	if !toStdout && issue.Identity.Key != "" && !strings.EqualFold(string(issue.Identity.Key), key) {
+		pc := &pullGitCommit{Label: key, Host: hostOf(settings.Instances[ctx.Instance].BaseURL)}
+		gs := beginPullGit(ctx.MirrorDir, dryRun, pullStderr)
+		code := pullMovedIssue(pc, m, mirrorPath, settings, ctx, key, issue, dryRun)
+		gs.commit(*pc, pullNow(), pullStdout, pullStderr)
+		return code
 	}
 	jira.AttachComments(cmdCtx, client, issue, pullStderr)
 
@@ -223,7 +238,7 @@ func runPullScope(cmdCtx stdcontext.Context, client jira.Client, settings *confi
 	}
 
 	if dryRun {
-		return pullScopeDryRun(cmdCtx, client, settings, ctx, scopeName, jql)
+		return pullScopeDryRun(cmdCtx, client, settings, ctx, m, scopeName, jql, full)
 	}
 
 	startedAt := pullNow()
@@ -238,6 +253,11 @@ func runPullScope(cmdCtx stdcontext.Context, client jira.Client, settings *confi
 	if err != nil {
 		fmt.Fprintf(pullStderr, "jirafs pull: cannot write issue snapshots: %v\n", err)
 		return 1
+	}
+	checkFailed := 0
+	pc := &pullGitCommit{Label: scopeName, Scope: true, Host: hostOf(settings.Instances[ctx.Instance].BaseURL), Written: res.Written}
+	if full {
+		_, checkFailed = checkVanishedMembers(pc, cmdCtx, client, m, scope.Name, settings.Projects[ctx.Name].LocalDirs[0], ctx.MirrorDir, res.Seen, false)
 	}
 	// Newly added members whose file failed to write are not recorded.
 	failures := res.Failures
@@ -261,7 +281,7 @@ func runPullScope(cmdCtx stdcontext.Context, client jira.Client, settings *confi
 		m.SetRemoteUpdated(key, updated)
 	}
 	// The cursor only advances after a pull without any failure.
-	if len(failures) == 0 {
+	if len(failures) == 0 && checkFailed == 0 {
 		m.SetScopeLastSynced(scope, startedAt)
 	}
 
@@ -289,8 +309,11 @@ func runPullScope(cmdCtx stdcontext.Context, client jira.Client, settings *confi
 	for _, key := range res.LocalEdits {
 		fmt.Fprintf(pullStderr, "%s: local edits kept, not overwritten (inspect: jirafs status; overwrite: jirafs pull %s)\n", key, key)
 	}
-	gitState.commit(pullGitCommit{Label: scopeName, Scope: true, Host: hostOf(settings.Instances[ctx.Instance].BaseURL), Written: res.Written}, pullNow(), pullStdout, pullStderr)
+	gitState.commit(*pc, pullNow(), pullStdout, pullStderr)
 	if len(failures) == 0 {
+		if checkFailed > 0 {
+			return 1
+		}
 		return 0
 	}
 	for _, f := range failures {
@@ -306,7 +329,7 @@ func runPullScope(cmdCtx stdcontext.Context, client jira.Client, settings *confi
 
 // pullScopeDryRun lists the issue files a pull of scopeName would write,
 // using only read calls, and changes nothing locally or remotely.
-func pullScopeDryRun(cmdCtx stdcontext.Context, client jira.Client, settings *config.Settings, ctx *context.Context, scopeName, jql string) int {
+func pullScopeDryRun(cmdCtx stdcontext.Context, client jira.Client, settings *config.Settings, ctx *context.Context, m *mirror.Mirror, scopeName, jql string, full bool) int {
 	proj, ok := settings.Projects[ctx.Name]
 	if !ok || len(proj.LocalDirs) == 0 {
 		fmt.Fprintf(pullStderr, "jirafs pull: project %q has no local_dirs configured\n", ctx.Name)
@@ -318,10 +341,12 @@ func pullScopeDryRun(cmdCtx stdcontext.Context, client jira.Client, settings *co
 		return 1
 	}
 	var lines []string
+	seen := map[schema.IssueKey]bool{}
 	for _, issue := range issues {
 		if issue == nil || issue.Identity.Key == "" {
 			continue
 		}
+		seen[issue.Identity.Key] = true
 		dest := filepath.Join(proj.LocalDirs[0], string(issue.Identity.Key)+".md")
 		lines = append(lines, fmt.Sprintf("  would %s %s", writeVerb(dest), dest))
 	}
@@ -329,6 +354,11 @@ func pullScopeDryRun(cmdCtx stdcontext.Context, client jira.Client, settings *co
 	fmt.Fprintf(pullStdout, "jirafs pull: would write %d issue file(s) for scope %q in %q and update mirror.yml:\n", len(lines), scopeName, ctx.Name)
 	for _, l := range lines {
 		fmt.Fprintln(pullStdout, l)
+	}
+	if full {
+		if _, failed := checkVanishedMembers(&pullGitCommit{}, cmdCtx, client, m, scopeName, proj.LocalDirs[0], ctx.MirrorDir, seen, true); failed > 0 {
+			return 1
+		}
 	}
 	return 0
 }
@@ -357,6 +387,8 @@ type pullResult struct {
 	Written map[string]schema.IssueKey
 	// RemoteUpdated holds the remote updated timestamp to record per issue.
 	RemoteUpdated map[schema.IssueKey]string
+	// Seen holds every issue key the search returned.
+	Seen map[schema.IssueKey]bool
 }
 
 // localIssueState classifies an existing local issue file against the remote
@@ -421,7 +453,7 @@ func materializeScopeIssues(ctx stdcontext.Context, client jira.Client, settings
 		}
 	}
 	total := len(writable)
-	res := &pullResult{Fetched: total, RemoteUpdated: map[schema.IssueKey]string{}, Written: map[string]schema.IssueKey{}}
+	res := &pullResult{Fetched: total, RemoteUpdated: map[schema.IssueKey]string{}, Written: map[string]schema.IssueKey{}, Seen: map[schema.IssueKey]bool{}}
 	writeMirrorProgress(pullStdout, "fetching", 0, total)
 	if total == 0 {
 		writeMirrorProgress(pullStdout, "fetched", 0, total)
@@ -432,6 +464,7 @@ func materializeScopeIssues(ctx stdcontext.Context, client jira.Client, settings
 	for _, issue := range writable {
 		completed++
 		key := issue.Identity.Key
+		res.Seen[key] = true
 		dest := filepath.Join(proj.LocalDirs[0], string(key)+".md")
 		switch classifyLocalIssue(dest, issue.Context.Updated) {
 		case localCurrent:

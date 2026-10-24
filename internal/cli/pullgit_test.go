@@ -320,3 +320,51 @@ func TestPullGitHelpers(t *testing.T) {
 		t.Fatal("beginPullGit should be nil")
 	}
 }
+
+func TestPullGit_GoneAndMovedAreCommitted(t *testing.T) {
+	e := newGitPullEnv(t, true)
+	e.initRepo(t)
+	for _, k := range []string{"TEST-1", "TEST-2"} {
+		e.fake.SetIssue(k, &schema.Issue{
+			Identity:     schema.IssueIdentity{Key: schema.IssueKey(k), Type: "story", Project: schema.TypedRef{Type: schema.RefProject, Value: "TEST"}},
+			MachineOwned: schema.MachineOwned{SchemaVersion: "1"},
+			Summary:      "Summary " + k,
+		})
+		if exit := RunPull([]string{"--project", "test", k}); exit != 0 {
+			t.Fatalf("pull %s exit = %d", k, exit)
+		}
+	}
+
+	e.fake.SetIssue("TEST-1", nil)
+	moved := &schema.Issue{
+		Identity:     schema.IssueIdentity{Key: "TEST-12", Type: "story", Project: schema.TypedRef{Type: schema.RefProject, Value: "TEST"}},
+		MachineOwned: schema.MachineOwned{SchemaVersion: "1"},
+		Summary:      "Summary TEST-2",
+	}
+	e.fake.SetIssue("TEST-2", moved)
+
+	if exit := RunPull([]string{"--project", "test", "TEST-1"}); exit != 0 {
+		t.Fatalf("gone pull exit = %d", exit)
+	}
+	body := gitOut(t, e.mirror, "show", "--name-status", "--format=%B", "HEAD")
+	t.Logf("gone commit:\n%s", body)
+	for _, want := range []string{"archived: TEST-1", "issues/TEST-1.md\tissues/_archive/TEST-1.md"} {
+		if !strings.Contains(body, want) {
+			t.Fatalf("gone commit missing %q:\n%s", want, body)
+		}
+	}
+
+	if exit := RunPull([]string{"--project", "test", "TEST-2"}); exit != 0 {
+		t.Fatalf("moved pull exit = %d", exit)
+	}
+	body = gitOut(t, e.mirror, "show", "--name-status", "--format=%B", "HEAD")
+	t.Logf("moved commit:\n%s", body)
+	for _, want := range []string{"moved: TEST-2", "issues/TEST-2.md\tissues/_archive/TEST-2.md", "issues/TEST-12.md"} {
+		if !strings.Contains(body, want) {
+			t.Fatalf("moved commit missing %q:\n%s", want, body)
+		}
+	}
+	if st := gitOut(t, e.mirror, "status", "--porcelain", "--", "issues"); strings.TrimSpace(st) != "" {
+		t.Fatalf("issues dir not clean:\n%s", st)
+	}
+}

@@ -34,6 +34,10 @@ type pullGitCommit struct {
 	// Archived and Moved list issue keys archived or moved by the pull.
 	Archived []schema.IssueKey
 	Moved    []schema.IssueKey
+	// Origin maps an archived file to the live path it was moved from; both
+	// are in Written, and the archive is left uncommitted when the live file
+	// had uncommitted edits before the pull.
+	Origin map[string]string
 	// Scope is true when Label names a scope rather than an issue key.
 	Scope bool
 }
@@ -151,16 +155,19 @@ func (g *pullGit) commit(c pullGitCommit, now time.Time, stdout, stderr io.Write
 		if !within(g.mirrorDir, abs) {
 			continue
 		}
-		if g.dirty[abs] {
+		if g.dirty[abs] || (c.Origin[path] != "" && g.dirty[realPath(c.Origin[path])]) {
 			left = append(left, string(key))
 			continue
 		}
 		paths = append(paths, abs)
-		changed = append(changed, string(key))
+		if !containsStr(changed, string(key)) {
+			changed = append(changed, string(key))
+		}
 	}
 	sort.Strings(paths)
 	sort.Strings(changed)
 	sort.Strings(left)
+	left = dedupeSorted(left)
 	for _, key := range left {
 		fmt.Fprintf(stderr, "left uncommitted: %s (local edits)\n", key)
 	}
@@ -227,4 +234,23 @@ func hostOf(baseURL string) string {
 		return u.Host
 	}
 	return baseURL
+}
+
+func containsStr(list []string, s string) bool {
+	for _, v := range list {
+		if v == s {
+			return true
+		}
+	}
+	return false
+}
+
+func dedupeSorted(in []string) []string {
+	out := in[:0]
+	for i, v := range in {
+		if i == 0 || v != in[i-1] {
+			out = append(out, v)
+		}
+	}
+	return out
 }

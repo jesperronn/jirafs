@@ -92,3 +92,28 @@ func TestSaveBaseErrors(t *testing.T) {
 		t.Fatalf("temp file leaked: %v", entries)
 	}
 }
+
+func TestArchiveBase(t *testing.T) {
+	dir := t.TempDir()
+	if err := ArchiveBase(dir, "A-1"); err != nil {
+		t.Fatal(err)
+	}
+	if err := ArchiveBase("", "A-1"); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(BaseDir(dir), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(BasePath(dir, "A-1"), []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := ArchiveBase(dir, "A-1"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(BasePath(dir, "A-1")); err == nil {
+		t.Fatal("base still live")
+	}
+	if _, err := os.Stat(filepath.Join(BaseDir(dir), "_archive", "A-1.md")); err != nil {
+		t.Fatal(err)
+	}
+}

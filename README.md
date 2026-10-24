@@ -104,6 +104,17 @@ merge base for per-field and three-way comparison. The `.jirafs/` directory is
 jirafs-internal state and is not to be edited by hand; a missing or unreadable
 base is treated as "no base" and never blocks a pull.
 
+## Deleted and moved issues
+
+`jirafs pull KEY` and `jirafs pull --full SCOPE` never delete a file. An issue Jira no longer has is marked `remote_state: gone` and moved into `_archive`; a moved issue is written under its new key and the old file is archived with `remote_state: moved` and `moved_to`. Local edits stay in the archived file, and `push` refuses archived files. Each case prints one line, for example:
+
+```
+gone PLAT-9: moved to _archive/PLAT-9.md (restore: mv _archive/PLAT-9.md .)
+moved PLAT-9 -> PLAT-12: jirafs pull PLAT-12
+```
+
+`--dry-run` prints the same lines prefixed `would`.
+
 ## Current Status
 
 What works today:

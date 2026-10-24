@@ -44,6 +44,12 @@ func RenderIssue(i Issue) string {
 	if i.RemoteMetadata.StateFile != "" {
 		sb.WriteString("state: " + quoteScalar(i.RemoteMetadata.StateFile) + "\n")
 	}
+	if i.RemoteMetadata.RemoteState != "" {
+		sb.WriteString("remote_state: " + quoteScalar(i.RemoteMetadata.RemoteState) + "\n")
+	}
+	if i.RemoteMetadata.MovedTo != "" {
+		sb.WriteString("moved_to: " + quoteScalar(i.RemoteMetadata.MovedTo) + "\n")
+	}
 	if i.RemoteMetadata.RemoteVersion != "" {
 		sb.WriteString("remote_version: " + quoteScalar(i.RemoteMetadata.RemoteVersion) + "\n")
 	}

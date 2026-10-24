@@ -475,3 +475,49 @@ func (m *Mirror) AddScopeMember(mem ScopeMember) bool {
 	m.ScopeMembers = append(m.ScopeMembers, mem)
 	return true
 }
+
+// RenameIssue rekeys every membership record of oldKey (imported issue, scope
+// member, remote timestamp) to newKey. It reports whether anything changed.
+func (m *Mirror) RenameIssue(oldKey, newKey schema.IssueKey) bool {
+	changed := false
+	for i := range m.Issues {
+		if m.Issues[i].Key == oldKey {
+			m.Issues[i].Key = newKey
+			changed = true
+		}
+	}
+	for i := range m.ScopeMembers {
+		if m.ScopeMembers[i].Key == oldKey {
+			m.ScopeMembers[i].Key = newKey
+			changed = true
+		}
+	}
+	if u, ok := m.RemoteUpdated[oldKey]; ok {
+		delete(m.RemoteUpdated, oldKey)
+		if _, has := m.RemoteUpdated[newKey]; !has {
+			m.RemoteUpdated[newKey] = u
+		}
+		changed = true
+	}
+	return changed
+}
+
+// ForgetIssue drops every membership record of key. It reports whether
+// anything changed.
+func (m *Mirror) ForgetIssue(key schema.IssueKey) bool {
+	changed := m.RemoveScopeMember(key)
+	kept := m.Issues[:0]
+	for _, i := range m.Issues {
+		if i.Key == key {
+			changed = true
+			continue
+		}
+		kept = append(kept, i)
+	}
+	m.Issues = kept
+	if _, ok := m.RemoteUpdated[key]; ok {
+		delete(m.RemoteUpdated, key)
+		changed = true
+	}
+	return changed
+}

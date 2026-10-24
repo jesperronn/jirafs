@@ -73,3 +73,21 @@ func LoadBase(mirrorDir string, key schema.IssueKey) (*schema.Issue, bool) {
 	}
 	return &issue, true
 }
+
+// ArchiveBase moves the base snapshot of key into the _archive subdirectory of
+// the base store, so it is kept but no longer used as a merge base. A missing
+// base is not an error.
+func ArchiveBase(mirrorDir string, key schema.IssueKey) error {
+	if mirrorDir == "" {
+		return nil
+	}
+	src := BasePath(mirrorDir, key)
+	if _, err := os.Stat(src); err != nil {
+		return nil
+	}
+	dir := filepath.Join(BaseDir(mirrorDir), "_archive")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return err
+	}
+	return os.Rename(src, filepath.Join(dir, string(key)+".md"))
+}

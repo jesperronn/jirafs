@@ -552,3 +552,23 @@ func TestUnmarshalMirror_GitSetting(t *testing.T) {
 		t.Fatalf("default git should be false, err = %v", err)
 	}
 }
+
+func TestMirror_RenameAndForgetIssue(t *testing.T) {
+	m := &Mirror{
+		Issues:        []ImportedIssue{{Key: "A-1", Reason: "x"}},
+		ScopeMembers:  []ScopeMember{{Key: "A-1", Scope: "s"}, {Key: "A-2", Scope: "s"}},
+		RemoteUpdated: map[schema.IssueKey]string{"A-1": "t"},
+	}
+	if !m.RenameIssue("A-1", "A-9") || m.Issues[0].Key != "A-9" || m.ScopeMembers[0].Key != "A-9" || m.RemoteUpdated["A-9"] != "t" {
+		t.Fatalf("rename wrong: %+v", m)
+	}
+	if m.RenameIssue("A-1", "A-8") {
+		t.Fatal("rename of unknown key must report no change")
+	}
+	if !m.ForgetIssue("A-9") || len(m.Issues) != 0 || len(m.ScopeMembers) != 1 || len(m.RemoteUpdated) != 0 {
+		t.Fatalf("forget wrong: %+v", m)
+	}
+	if m.ForgetIssue("A-9") {
+		t.Fatal("forget of unknown key must report no change")
+	}
+}

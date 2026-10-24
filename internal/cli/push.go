@@ -287,7 +287,7 @@ func (r *pushRun) pushTarget(arg, label string) pushResult {
 	case issue.RemoteMetadata.StateFile == "draft":
 		return r.createDraft(path, doc)
 	case issue.RemoteMetadata.State() == schema.StateArchived:
-		return pushFail(name, fmt.Sprintf("%s is archived; there is nothing to push", path))
+		return pushFail(name, fmt.Sprintf("%s is archived; there is nothing to push%s", path, archivedPushHint(issue.RemoteMetadata)))
 	case issue.Identity.Key == "":
 		return pushFail(name, fmt.Sprintf("%s has no issue key and is not a draft, so there is nothing to push", path))
 	}
@@ -680,4 +680,16 @@ func (r *pushRun) removeIntentLabel(client jira.Client, key, label string) {
 	updated := *remote
 	updated.Labels = kept
 	_, _ = client.UpdateIssue(r.cmdCtx, key, &updated)
+}
+
+// archivedPushHint explains why an archived file cannot be pushed when it was
+// archived because Jira dropped or moved the issue.
+func archivedPushHint(rm schema.RemoteMetadata) string {
+	switch rm.RemoteState {
+	case "gone":
+		return " (Jira no longer has this issue; it was archived by pull)"
+	case "moved":
+		return " (this issue moved in Jira; fetch it with: jirafs pull " + rm.MovedTo + ")"
+	}
+	return ""
 }

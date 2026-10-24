@@ -25,6 +25,11 @@ type RemoteMetadata struct {
 	StateFile      string    `yaml:"state,omitempty"`
 	ResolvedStatus string    `yaml:"resolved_status,omitempty"`
 	Pinned         bool      `yaml:"pinned,omitempty"`
+	// RemoteState is "gone" when Jira no longer has the issue and "moved"
+	// when it now lives under MovedTo. It is set on archived files only.
+	RemoteState string `yaml:"remote_state,omitempty"`
+	// MovedTo is the new issue key when RemoteState is "moved".
+	MovedTo string `yaml:"moved_to,omitempty"`
 }
 
 // IsZero reports whether r has no remote metadata set.

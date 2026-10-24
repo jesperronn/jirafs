@@ -122,6 +122,8 @@ func ParseIssue(content string) (Issue, *ParseError) {
 	// Parse state and remote metadata.
 	var rawState struct {
 		State          string      `yaml:"state"`
+		RemoteState    string      `yaml:"remote_state"`
+		MovedTo        string      `yaml:"moved_to"`
 		RemoteVersion  string      `yaml:"remote_version"`
 		ContentHash    string      `yaml:"content_hash"`
 		SyncTime       string      `yaml:"sync_time"`
@@ -169,6 +171,8 @@ func ParseIssue(content string) (Issue, *ParseError) {
 	}
 
 	issue.RemoteMetadata.StateFile = rawState.State
+	issue.RemoteMetadata.RemoteState = rawState.RemoteState
+	issue.RemoteMetadata.MovedTo = rawState.MovedTo
 	if remoteVersion != "" || contentHash != "" || syncTimeStr != "" || resolvedStatus != "" || pinned {
 		var syncTime time.Time
 		var parseErr error
