@@ -2,12 +2,14 @@
 package cli
 
 import (
+	"flag"
 	"fmt"
 	"io"
 	"os"
 	"path/filepath"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/jirafs/jirafs/internal/color"
 	"github.com/jirafs/jirafs/internal/config"
@@ -57,6 +59,33 @@ type StatusSnapshot struct {
 
 	// MissingSteps lists the setup steps that are still needed.
 	MissingSteps []string
+
+	// Changes lists local issue files with unsynced edits, sorted by group
+	// (conflicted, modified, draft) and then key.
+	Changes []LocalChange
+}
+
+// ChangeState is the group a locally changed file belongs to.
+type ChangeState string
+
+const (
+	// ChangeConflicted marks a modified file whose remote copy moved on.
+	ChangeConflicted ChangeState = "conflicted"
+	// ChangeModified marks a file edited since the last export/refresh/sync.
+	ChangeModified ChangeState = "modified"
+	// ChangeDraft marks a locally created issue not yet pushed to Jira.
+	ChangeDraft ChangeState = "draft"
+)
+
+// changeOrder is the stable display order of the groups.
+var changeOrder = []ChangeState{ChangeConflicted, ChangeModified, ChangeDraft}
+
+// LocalChange describes one local issue file with unsynced changes.
+type LocalChange struct {
+	State   ChangeState
+	Key     string
+	Path    string
+	Command string
 }
 
 // IsZero reports whether s is the zero value.
@@ -101,11 +130,108 @@ func BuildStatusSnapshot(settings *config.Settings, cwd string) StatusSnapshot {
 		}
 	}
 
+	// Collect local changes (offline: local files and mirror.yml only).
+	if proj, ok := settings.Projects[snap.ProjectName]; ok && snap.Resolved {
+		var m mirror.Mirror
+		if data, merr := readMirrorFile(filepath.Join(snap.MirrorDir, "mirror.yml")); merr == nil {
+			m = *data
+		}
+		snap.Changes = collectLocalChanges(proj.LocalDirs, m)
+	}
+
 	// Determine missing onboarding steps.
 	snap.MissingSteps = missingOnboardingSteps(settings, snap)
 	snap.OnboardingComplete = len(snap.MissingSteps) == 0
 
 	return snap
+}
+
+// collectLocalChanges scans the *.md issue files directly inside dirs and
+// classifies those with unsynced edits. Files that do not parse as issues, and
+// synced files with no recorded synced_hash, are skipped.
+func collectLocalChanges(dirs []string, m mirror.Mirror) []LocalChange {
+	var changes []LocalChange
+	for _, dir := range dirs {
+		entries, err := os.ReadDir(dir)
+		if err != nil {
+			continue
+		}
+		for _, e := range entries {
+			if e.IsDir() || !strings.HasSuffix(e.Name(), ".md") {
+				continue
+			}
+			path := filepath.Join(dir, e.Name())
+			data, err := os.ReadFile(path)
+			if err != nil {
+				continue
+			}
+			doc := string(data)
+			issue, pe := schema.ParseIssue(doc)
+			if pe != nil {
+				continue
+			}
+			key := string(issue.Identity.Key)
+			if key == "" {
+				key = strings.TrimSuffix(e.Name(), ".md")
+			}
+			switch {
+			case issue.RemoteMetadata.State() == schema.StateDraft:
+				changes = append(changes, LocalChange{ChangeDraft, key, path, "jirafs push " + path})
+			case issue.RemoteMetadata.State() == schema.StateArchived:
+			default:
+				synced := schema.SyncedHash(doc)
+				if synced == "" || synced == schema.ContentHash(doc) {
+					continue
+				}
+				state := ChangeModified
+				if remoteAhead(m.RemoteUpdatedFor(issue.Identity.Key), issue.Context.Updated) {
+					state = ChangeConflicted
+				}
+				changes = append(changes, LocalChange{state, key, path, "jirafs plan " + key})
+			}
+		}
+	}
+	rank := map[ChangeState]int{}
+	for i, st := range changeOrder {
+		rank[st] = i
+	}
+	sort.Slice(changes, func(i, j int) bool {
+		a, b := changes[i], changes[j]
+		if rank[a.State] != rank[b.State] {
+			return rank[a.State] < rank[b.State]
+		}
+		if a.Key != b.Key {
+			return a.Key < b.Key
+		}
+		return a.Path < b.Path
+	})
+	return changes
+}
+
+// jiraTimeLayouts are the timestamp formats Jira and jirafs write.
+var jiraTimeLayouts = []string{time.RFC3339Nano, "2006-01-02T15:04:05.000-0700", "2006-01-02T15:04:05-0700"}
+
+func parseJiraTime(s string) (time.Time, bool) {
+	for _, l := range jiraTimeLayouts {
+		if t, err := time.Parse(l, s); err == nil {
+			return t, true
+		}
+	}
+	return time.Time{}, false
+}
+
+// remoteAhead reports whether the stored remote updated timestamp is newer
+// than the local file's updated timestamp. Either being empty means unknown.
+func remoteAhead(remote, local string) bool {
+	if remote == "" || local == "" {
+		return false
+	}
+	rt, rok := parseJiraTime(remote)
+	lt, lok := parseJiraTime(local)
+	if rok && lok {
+		return rt.After(lt)
+	}
+	return remote > local
 }
 
 // readMirrorFile reads and parses a mirror.yml file from the given path.
@@ -212,6 +338,14 @@ func RunStatus(args []string) int {
 		}
 	}
 
+	fs := flag.NewFlagSet("status", flag.ContinueOnError)
+	fs.SetOutput(statusStderr)
+	porcelain := fs.Bool("porcelain", false, "print STATE<TAB>KEY<TAB>PATH lines only")
+	if err := parseFlags(fs, args); err != nil {
+		fmt.Fprintf(statusStderr, "jirafs status: invalid flags: %v\n", err)
+		return 2
+	}
+
 	// Load settings.
 	settings, ok := loadSettingsOrHint(statusStderr, "status")
 	if !ok {
@@ -225,6 +359,13 @@ func RunStatus(args []string) int {
 		return 1
 	}
 	snap := BuildStatusSnapshot(settings, cwd)
+
+	if *porcelain {
+		for _, c := range snap.Changes {
+			fmt.Fprintf(statusStdout, "%s\t%s\t%s\n", c.State, c.Key, c.Path)
+		}
+		return 0
+	}
 
 	// Report config.
 	fmt.Fprintln(statusStdout, "jirafs status:")
@@ -258,6 +399,28 @@ func RunStatus(args []string) int {
 	}
 	fmt.Fprintln(statusStdout)
 
+	// Local changes.
+	fmt.Fprintln(statusStdout, "Local changes:")
+	if len(snap.Changes) == 0 {
+		fmt.Fprintln(statusStdout, "  no local changes")
+	}
+	for _, st := range changeOrder {
+		var group []LocalChange
+		for _, c := range snap.Changes {
+			if c.State == st {
+				group = append(group, c)
+			}
+		}
+		if len(group) == 0 {
+			continue
+		}
+		fmt.Fprintf(statusStdout, "  %s:\n", st)
+		for _, c := range group {
+			fmt.Fprintf(statusStdout, "    %s  %s\n      run: %s\n", c.Key, c.Path, c.Command)
+		}
+	}
+	fmt.Fprintln(statusStdout)
+
 	// Onboarding / next-step hint.
 	fmt.Fprintln(statusStdout, "Onboarding:")
 	fmt.Fprintf(statusStdout, "  complete: %v\n", snap.OnboardingComplete)
@@ -280,8 +443,10 @@ func printStatusHelp() {
 	fmt.Fprintf(statusStderr, "  jirafs %s [flags]\n\n", color.Blue(statusStderr, "status"))
 
 	fmt.Fprintf(statusStderr, "%s\n", color.Dim(statusStderr, "Reports the current state of a jirafs workspace: config, mirror files,"))
-	fmt.Fprintf(statusStderr, "%s\n\n", color.Dim(statusStderr, "scopes, and a next-step hint for onboarding."))
+	fmt.Fprintf(statusStderr, "%s\n", color.Dim(statusStderr, "scopes, local changes (modified, draft, conflicted; offline), and a"))
+	fmt.Fprintf(statusStderr, "%s\n\n", color.Dim(statusStderr, "next-step hint for onboarding."))
 
 	fmt.Fprintf(statusStderr, "%s:\n", color.BoldGreen(statusStderr, "Flags"))
 	fmt.Fprintf(statusStderr, "  %s   %s\n", color.Yellow(statusStderr, "--help, -h"), color.Dim(statusStderr, "show this help message"))
+	fmt.Fprintf(statusStderr, "  %s   %s\n", color.Yellow(statusStderr, "--porcelain"), color.Dim(statusStderr, "print STATE<TAB>KEY<TAB>PATH lines only, for scripts"))
 }

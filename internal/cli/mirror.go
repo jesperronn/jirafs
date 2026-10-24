@@ -15,7 +15,6 @@ import (
 	"github.com/jirafs/jirafs/internal/color"
 	"github.com/jirafs/jirafs/internal/config"
 	"github.com/jirafs/jirafs/internal/context"
-	"github.com/jirafs/jirafs/internal/export"
 	"github.com/jirafs/jirafs/internal/jira"
 	"github.com/jirafs/jirafs/internal/mirror"
 	"github.com/jirafs/jirafs/internal/schema"
@@ -243,9 +242,8 @@ func materializeScopeIssues(ctx stdcontext.Context, client jira.Client, settings
 			renderIssue = fullIssue
 		}
 		jira.AttachComments(ctx, client, renderIssue, mirrorStderr)
-		output := export.ExportIssue(renderIssue)
 		dest := filepath.Join(proj.LocalDirs[0], string(renderIssue.Identity.Key)+".md")
-		if err := os.WriteFile(dest, []byte(output), 0o644); err != nil {
+		if err := writeSyncedIssue(dest, projectCtx.MirrorDir, renderIssue); err != nil {
 			return fmt.Errorf("write issue file %s: %w", dest, err)
 		}
 		completed++

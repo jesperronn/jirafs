@@ -227,7 +227,7 @@ func runSyncIssue(cmdCtx stdcontext.Context, args []string, settings *config.Set
 
 	if apply {
 		// Write the updated remote back to the local issue file.
-		if err := writeUpdatedLocalIssue(localPath, result.Remote); err != nil {
+		if err := writeUpdatedLocalIssue(localPath, ctx.MirrorDir, result.Remote); err != nil {
 			fmt.Fprintf(syncStderr, "jirafs sync: cannot write updated local issue: %v\n", err)
 			return 1
 		}
@@ -280,9 +280,8 @@ func gatedTransitionMessage(key string, tr *jira.Transition, missing []jira.Requ
 
 // writeUpdatedLocalIssue writes the updated remote issue back to the local
 // file system using the canonical codec (schema.RenderIssue).
-func writeUpdatedLocalIssue(localPath string, issue *schema.Issue) error {
-	content := schema.RenderIssue(*issue)
-	return os.WriteFile(localPath, []byte(content), 0o644)
+func writeUpdatedLocalIssue(localPath, mirrorDir string, issue *schema.Issue) error {
+	return writeSyncedIssue(localPath, mirrorDir, issue)
 }
 
 // resolveSyncContext resolves the project context using the given resolver.

@@ -69,6 +69,15 @@ What works today:
 - project selection and remembered current-project state
 - mirror refresh wiring for named scopes such as `my-issues`
 - export, plan, and sync command paths for the current safe field set
+- `jirafs status` lists local changes offline, grouped as `conflicted`,
+  `modified` and `draft`, each with a copy-pasteable command;
+  `jirafs status --porcelain` prints `STATE<TAB>KEY<TAB>PATH` lines. Export,
+  refresh, sync and push stamp each issue file with a `synced_hash`
+  frontmatter field (a SHA-256 of the file minus `sync_time` and
+  `synced_hash`) and record Jira's `updated` timestamp under `remote_updated`
+  in `mirror.yml`. A file is `modified` when its hash differs from
+  `synced_hash`, and `conflicted` when it is also older than `remote_updated`.
+  Files without a `synced_hash` are not reported.
 - credential refs from `env://`, `file://`, and `op://`
 - auth support for `basic`, `atlassian_api_token`, and `bearer_token`
 
@@ -76,7 +85,6 @@ What is still rough:
 
 - the README has historically assumed the deeper docs carry most of the
   operator story
-- the CLI does not yet present one obvious “show me status” command
 - troubleshooting output should keep "useful next step" hints as concrete
   copy-pasteable commands, not just descriptive text
 - live Jira behavior still needs real-instance shakeout and better diagnostics

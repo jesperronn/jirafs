@@ -3,6 +3,8 @@ package mirror
 import (
 	"testing"
 
+	"gopkg.in/yaml.v3"
+
 	"github.com/jirafs/jirafs/internal/schema"
 )
 
@@ -517,5 +519,25 @@ func TestUnmarshalMirror_InvalidYAML(t *testing.T) {
 	_, err := UnmarshalMirror(data)
 	if err == nil {
 		t.Error("UnmarshalMirror(invalid) = nil, want error")
+	}
+}
+
+func TestMirror_RemoteUpdatedRoundTrip(t *testing.T) {
+	var m Mirror
+	m.SetRemoteUpdated("P-1", "")
+	if len(m.RemoteUpdated) != 0 {
+		t.Fatal("empty timestamp must be ignored")
+	}
+	m.SetRemoteUpdated("P-1", "2026-01-02T03:04:05Z")
+	data, err := yaml.Marshal(&m)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, err := UnmarshalMirror(data)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.RemoteUpdatedFor("P-1") != "2026-01-02T03:04:05Z" || got.RemoteUpdatedFor("P-2") != "" {
+		t.Fatalf("round trip lost data: %+v", got.RemoteUpdated)
 	}
 }

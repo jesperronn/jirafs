@@ -153,7 +153,7 @@ func runExportIssue(cmdCtx stdcontext.Context, args []string, settings *config.S
 		fmt.Fprintf(exportStderr, "jirafs export issue: %v\n", err)
 		return 1
 	}
-	if err := os.WriteFile(dest, []byte(output), 0o644); err != nil {
+	if err := writeSyncedIssue(dest, ctx.MirrorDir, issue); err != nil {
 		fmt.Fprintf(exportStderr, "jirafs export issue: write %s: %v\n", dest, err)
 		return 1
 	}

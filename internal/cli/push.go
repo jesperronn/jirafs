@@ -167,7 +167,7 @@ func RunPush(args []string) int {
 	issue.RemoteMetadata.StateFile = "synced"
 	issue.RemoteMetadata.SyncTime = pushNow().UTC()
 	newPath := filepath.Join(filepath.Dir(path), key+".md")
-	if err := os.WriteFile(newPath, []byte(schema.RenderIssue(*issue)), 0o644); err != nil {
+	if err := writeSyncedIssue(newPath, ctx.MirrorDir, issue); err != nil {
 		fmt.Fprintf(pushStderr, "jirafs push: created %s in Jira (%s/browse/%s) but cannot write %s: %v\n", key, baseURL, key, newPath, err)
 		return 1
 	}

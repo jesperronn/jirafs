@@ -196,6 +196,27 @@ type Mirror struct {
 	Scopes []Scope `yaml:"scopes,omitempty"`
 	// ScopeMembers are the issues that are members of named scopes.
 	ScopeMembers []ScopeMember `yaml:"scope_members,omitempty"`
+	// RemoteUpdated records, per issue key, the Jira "updated" timestamp seen
+	// at the last export, refresh or sync. status compares it with the local
+	// file to detect that Jira moved on, without any network access.
+	RemoteUpdated map[schema.IssueKey]string `yaml:"remote_updated,omitempty"`
+}
+
+// RemoteUpdatedFor returns the stored remote updated timestamp for key, or "".
+func (m Mirror) RemoteUpdatedFor(key schema.IssueKey) string {
+	return m.RemoteUpdated[key]
+}
+
+// SetRemoteUpdated records the remote updated timestamp for key. An empty
+// timestamp is ignored.
+func (m *Mirror) SetRemoteUpdated(key schema.IssueKey, updated string) {
+	if key == "" || updated == "" {
+		return
+	}
+	if m.RemoteUpdated == nil {
+		m.RemoteUpdated = map[schema.IssueKey]string{}
+	}
+	m.RemoteUpdated[key] = updated
 }
 
 // IsZero reports whether m has no identity set.
