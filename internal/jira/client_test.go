@@ -1814,3 +1814,19 @@ func TestFetchIssue_PopulatesRemoteStatus(t *testing.T) {
 		t.Errorf("Status = %q, want Open", got.Status)
 	}
 }
+
+func TestProductionTransportRejectsUntrustedCert(t *testing.T) {
+	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer srv.Close()
+
+	c := NewJiraClient(srv.URL, WithTransport(productionTransport()))
+	_, err := c.FetchIssue(context.Background(), "ABC-1")
+	if err == nil {
+		t.Fatal("expected certificate verification error, got nil")
+	}
+	if !strings.Contains(err.Error(), "x509") {
+		t.Fatalf("expected x509 error, got %v", err)
+	}
+}

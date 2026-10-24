@@ -94,6 +94,14 @@ otherwise.
 - if a live probe is genuinely required, state that in the task and the test
   name
 
+## TLS Certificates
+
+`jirafs` always verifies Jira server certificates against the system trust
+store; there is no option to skip verification. For a Jira instance signed by a
+private CA, add that CA certificate to the operating system trust store (for
+example `update-ca-certificates` on Debian/Ubuntu, or Keychain Access on
+macOS) and `jirafs` will trust it.
+
 ## Command Surface
 
 The most important commands right now are:

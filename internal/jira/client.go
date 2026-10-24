@@ -5,7 +5,6 @@ package jira
 import (
 	"bytes"
 	"context"
-	"crypto/tls"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -284,17 +283,20 @@ func WithCustomFields(ids []string) Option {
 }
 
 // defaultTransport returns the transport used when WithTransport is absent.
-// Production gets a plain transport that accepts any certificate (useful for
-// self-signed certs in dev environments). If http.DefaultTransport has been
-// replaced by something other than *http.Transport (the test harness wraps it
-// with a loopback-only guard), that replacement is used so the guard applies.
+// Production gets a plain transport that verifies server certificates against
+// the system roots. If http.DefaultTransport has been replaced by something
+// other than *http.Transport (the test harness wraps it with a loopback-only
+// guard), that replacement is used so the guard applies.
 func defaultTransport() http.RoundTripper {
 	if _, ok := http.DefaultTransport.(*http.Transport); !ok {
 		return http.DefaultTransport
 	}
-	return &http.Transport{
-		TLSClientConfig: &tls.Config{InsecureSkipVerify: true}, //nolint:gosec
-	}
+	return productionTransport()
+}
+
+// productionTransport returns a transport with default TLS verification.
+func productionTransport() *http.Transport {
+	return &http.Transport{Proxy: http.ProxyFromEnvironment}
 }
 
 // NewJiraClient creates a new JiraClient for the given base URL.
