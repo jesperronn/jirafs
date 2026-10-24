@@ -5,6 +5,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"errors"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -1870,5 +1871,175 @@ func TestClientDefaultTimeout(t *testing.T) {
 	c := NewJiraClient("http://x", WithTimeout(time.Second), WithTransport(http.DefaultTransport))
 	if c.httpClient.Timeout != time.Second {
 		t.Fatalf("timeout after WithTransport = %v, want 1s", c.httpClient.Timeout)
+	}
+}
+
+// stubRT answers each round trip from a scripted list of statuses and records
+// the request bodies it saw.
+type stubRT struct {
+	statuses []int
+	headers  map[string]string
+	bodies   []string
+	err      error
+	calls    int
+}
+
+func (s *stubRT) RoundTrip(r *http.Request) (*http.Response, error) {
+	s.calls++
+	if r.Body != nil {
+		b, _ := io.ReadAll(r.Body)
+		s.bodies = append(s.bodies, string(b))
+	}
+	if s.err != nil && s.calls <= len(s.statuses) && s.statuses[s.calls-1] == 0 {
+		return nil, s.err
+	}
+	i := s.calls - 1
+	if i >= len(s.statuses) {
+		i = len(s.statuses) - 1
+	}
+	h := http.Header{}
+	if s.statuses[i] != 200 {
+		for k, v := range s.headers {
+			h.Set(k, v)
+		}
+	}
+	body := `{"key":"A-1","fields":{}}`
+	if r.URL.Path == "/rest/api/2/search" {
+		body = `{"total":1,"issues":[{"key":"A-1","fields":{}}]}`
+	}
+	return &http.Response{StatusCode: s.statuses[i], Header: h, Body: io.NopCloser(strings.NewReader(body)), Request: r}, nil
+}
+
+func retryClient(rt http.RoundTripper, slept *[]time.Duration) *JiraClient {
+	return NewJiraClient("http://jira.test", WithTransport(rt), WithSleep(func(ctx context.Context, d time.Duration) error {
+		*slept = append(*slept, d)
+		return ctx.Err()
+	}))
+}
+
+func TestRetryAfterThen200(t *testing.T) {
+	rt := &stubRT{statuses: []int{429, 200}, headers: map[string]string{"Retry-After": "2"}}
+	var slept []time.Duration
+	if _, err := retryClient(rt, &slept).FetchIssue(context.Background(), "A-1"); err != nil {
+		t.Fatal(err)
+	}
+	if len(slept) != 1 || slept[0] != 2*time.Second {
+		t.Fatalf("slept = %v, want [2s]", slept)
+	}
+}
+
+func TestRetryAfterCappedAndHTTPDate(t *testing.T) {
+	var slept []time.Duration
+	rt := &stubRT{statuses: []int{429, 200}, headers: map[string]string{"Retry-After": "3600"}}
+	if _, err := retryClient(rt, &slept).FetchIssue(context.Background(), "A-1"); err != nil {
+		t.Fatal(err)
+	}
+	if slept[0] != 60*time.Second {
+		t.Fatalf("slept = %v, want 60s cap", slept)
+	}
+	slept = nil
+	date := time.Now().Add(10 * time.Second).UTC().Format(http.TimeFormat)
+	rt = &stubRT{statuses: []int{429, 200}, headers: map[string]string{"Retry-After": date}}
+	if _, err := retryClient(rt, &slept).FetchIssue(context.Background(), "A-1"); err != nil {
+		t.Fatal(err)
+	}
+	if slept[0] < 8*time.Second || slept[0] > 10*time.Second {
+		t.Fatalf("slept = %v, want about 10s", slept)
+	}
+}
+
+func TestRetryThree503ThenSuccess(t *testing.T) {
+	rt := &stubRT{statuses: []int{503, 503, 503, 200}}
+	var slept []time.Duration
+	if _, err := retryClient(rt, &slept).FetchIssue(context.Background(), "A-1"); err != nil {
+		t.Fatal(err)
+	}
+	if len(slept) != 3 {
+		t.Fatalf("slept = %v, want 3 waits", slept)
+	}
+	for i, base := range []time.Duration{time.Second, 2 * time.Second, 4 * time.Second} {
+		if slept[i] < base || slept[i] > base+base/4 {
+			t.Errorf("wait %d = %v, want %v plus up to 25%% jitter", i, slept[i], base)
+		}
+	}
+}
+
+func TestRetryFour503Fails(t *testing.T) {
+	rt := &stubRT{statuses: []int{503}}
+	var slept []time.Duration
+	_, err := retryClient(rt, &slept).FetchIssue(context.Background(), "A-1")
+	if err == nil || !strings.Contains(err.Error(), "after 4 attempts") {
+		t.Fatalf("err = %v, want 'after 4 attempts'", err)
+	}
+	if !IsClientError(err, ErrHTTP) || rt.calls != 4 {
+		t.Fatalf("err = %v calls = %d, want http error after 4 calls", err, rt.calls)
+	}
+}
+
+func TestRetryPostSearchReplaysBody(t *testing.T) {
+	rt := &stubRT{statuses: []int{503, 200}}
+	var slept []time.Duration
+	if _, _, err := retryClient(rt, &slept).SearchIssues(context.Background(), "project = A"); err != nil {
+		t.Fatal(err)
+	}
+	if len(rt.bodies) != 2 || rt.bodies[0] == "" || rt.bodies[0] != rt.bodies[1] {
+		t.Fatalf("bodies = %q, want identical non-empty bodies", rt.bodies)
+	}
+}
+
+func TestRetryNeverCreateOrTransition(t *testing.T) {
+	issue := &schema.Issue{Identity: schema.IssueIdentity{Key: "A-1", Project: schema.TypedRef{Type: "project", Value: "A"}}}
+	for name, call := range map[string]func(c *JiraClient) error{
+		"CreateIssue": func(c *JiraClient) error { _, err := c.CreateIssue(context.Background(), issue); return err },
+		"DoTransition": func(c *JiraClient) error {
+			return c.DoTransition(context.Background(), "A-1", "11", nil)
+		},
+	} {
+		rt := &stubRT{statuses: []int{429}}
+		var slept []time.Duration
+		err := call(retryClient(rt, &slept))
+		if err == nil || rt.calls != 1 || len(slept) != 0 {
+			t.Errorf("%s: err=%v calls=%d slept=%v, want one call and no retry", name, err, rt.calls, slept)
+		}
+	}
+}
+
+func TestRetryConnectionResetGetOnly(t *testing.T) {
+	reset := errors.New("read tcp: connection reset by peer")
+	rt := &stubRT{statuses: []int{0, 200}, err: reset}
+	var slept []time.Duration
+	if _, err := retryClient(rt, &slept).FetchIssue(context.Background(), "A-1"); err != nil || rt.calls != 2 {
+		t.Fatalf("GET: err=%v calls=%d, want success on retry", err, rt.calls)
+	}
+	rt = &stubRT{statuses: []int{0, 200}, err: reset}
+	if _, _, err := retryClient(rt, &slept).SearchIssues(context.Background(), "project = A"); err == nil || rt.calls != 1 {
+		t.Fatalf("POST search: err=%v calls=%d, want no retry on reset", err, rt.calls)
+	}
+}
+
+func TestRetrySleepHonoursContext(t *testing.T) {
+	rt := &stubRT{statuses: []int{503}}
+	ctx, cancel := context.WithCancel(context.Background())
+	c := NewJiraClient("http://jira.test", WithTransport(rt), WithSleep(func(ctx context.Context, d time.Duration) error {
+		cancel()
+		<-ctx.Done()
+		return ctx.Err()
+	}))
+	start := time.Now()
+	_, err := c.FetchIssue(ctx, "A-1")
+	if err == nil || !strings.Contains(err.Error(), "context canceled") {
+		t.Fatalf("err = %v, want context canceled", err)
+	}
+	if rt.calls != 1 || time.Since(start) > time.Second {
+		t.Fatalf("calls=%d elapsed=%v, want prompt return", rt.calls, time.Since(start))
+	}
+}
+
+func TestRealSleepReturnsOnCancel(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Millisecond)
+	defer cancel()
+	start := time.Now()
+	if err := realSleep(ctx, time.Minute); err == nil || time.Since(start) > time.Second {
+		t.Fatalf("realSleep err=%v elapsed=%v, want prompt cancellation", err, time.Since(start))
 	}
 }

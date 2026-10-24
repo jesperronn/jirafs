@@ -9,12 +9,15 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math/rand"
 	"net"
 	"net/http"
 	neturl "net/url"
 	"os"
 	"sort"
+	"strconv"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/jirafs/jirafs/internal/config"
@@ -178,6 +181,14 @@ func decodeJSONResponse(resp *http.Response, target interface{}, contextLabel st
 // mapHTTPErr reads the response body and maps the HTTP status to a
 // structured ClientError, preferring Jira error details when available.
 func mapHTTPErr(resp *http.Response) *ClientError {
+	err := mapHTTPErrBody(resp)
+	if n := resp.Header.Get(attemptsHeader); n != "" {
+		err.Message += " (after " + n + " attempts)"
+	}
+	return err
+}
+
+func mapHTTPErrBody(resp *http.Response) *ClientError {
 	raw, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
 	status := fmt.Sprintf("HTTP %d", resp.StatusCode)
 	if text := http.StatusText(resp.StatusCode); text != "" {
@@ -225,6 +236,8 @@ type JiraClient struct {
 	epicLinkField string
 	// customFields lists extra custom field ids to fetch and export.
 	customFields []string
+	// sleep waits between retries; nil means real time.
+	sleep SleepFunc
 }
 
 // EpicLinkFieldEnv names the environment variable that configures the
@@ -270,18 +283,130 @@ func (c *JiraClient) SetCredentials(creds config.ResolvedInstanceCredentials) {
 // overridden with WithTimeout.
 const DefaultTimeout = 30 * time.Second
 
-// do sends req. A timeout is reported as an error naming the timeout and the
-// request host, so a stalled connection is recognisable.
+// MaxAttempts is the total number of times a retryable request is sent.
+const MaxAttempts = 4
+
+// maxRetryWait caps any single wait, including a server supplied Retry-After.
+const maxRetryWait = 60 * time.Second
+
+// attemptsHeader is set on a final retryable response that was returned after
+// more than one attempt, so mapHTTPErr can say how many attempts were made.
+const attemptsHeader = "X-Jirafs-Attempts"
+
+// SleepFunc waits for d or until ctx is done, returning ctx.Err() in the latter case.
+type SleepFunc func(ctx context.Context, d time.Duration) error
+
+func realSleep(ctx context.Context, d time.Duration) error {
+	t := time.NewTimer(d)
+	defer t.Stop()
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-t.C:
+		return nil
+	}
+}
+
+// neverRetried reports whether req must be sent at most once: issue creation
+// and workflow transitions are not idempotent.
+func neverRetried(req *http.Request) bool {
+	if req.Method != http.MethodPost {
+		return false
+	}
+	p := strings.TrimRight(req.URL.Path, "/")
+	return strings.HasSuffix(p, "/rest/api/2/issue") || strings.HasSuffix(p, "/transitions")
+}
+
+// retryWait returns how long to wait before retry number n (1-based) after
+// resp. A valid Retry-After (seconds or HTTP-date) wins, capped at 60s;
+// otherwise 1s, 2s, 4s plus up to 25% jitter.
+func (c *JiraClient) retryWait(resp *http.Response, n int) time.Duration {
+	if resp != nil {
+		if v := strings.TrimSpace(resp.Header.Get("Retry-After")); v != "" {
+			var d time.Duration
+			ok := false
+			if secs, err := strconv.Atoi(v); err == nil && secs >= 0 {
+				d, ok = time.Duration(secs)*time.Second, true
+			} else if t, err := http.ParseTime(v); err == nil {
+				d, ok = time.Until(t), true
+				if d < 0 {
+					d = 0
+				}
+			}
+			if ok {
+				if d > maxRetryWait {
+					d = maxRetryWait
+				}
+				return d
+			}
+		}
+	}
+	base := time.Second << (n - 1)
+	return base + time.Duration(rand.Int63n(int64(base)/4+1))
+}
+
+func isConnReset(err error) bool {
+	return errors.Is(err, syscall.ECONNRESET) || strings.Contains(err.Error(), "connection reset")
+}
+
+// do sends req, retrying 429 and 503 responses (and connection resets for GET
+// and PUT) up to MaxAttempts times with backoff. Requests with a body are only
+// retried when the body can be replayed. A timeout is reported as an error
+// naming the timeout and the request host, so a stalled connection is
+// recognisable.
 func (c *JiraClient) do(req *http.Request) (*http.Response, error) {
-	resp, err := c.httpClient.Do(req)
-	if err == nil {
-		return resp, nil
+	ctx := req.Context()
+	replayable := !neverRetried(req) && (req.Body == nil || req.Body == http.NoBody || req.GetBody != nil)
+	idempotent := req.Method == http.MethodGet || req.Method == http.MethodPut
+	sleep := c.sleep
+	if sleep == nil {
+		sleep = realSleep
 	}
-	var ne net.Error
-	if req.Context().Err() == nil && errors.As(err, &ne) && ne.Timeout() {
-		return nil, fmt.Errorf("timed out after %s waiting for %s", c.httpClient.Timeout, req.URL.Host)
+
+	for attempt := 1; ; attempt++ {
+		cur := req
+		if attempt > 1 && req.GetBody != nil {
+			body, err := req.GetBody()
+			if err != nil {
+				return nil, err
+			}
+			cur = req.Clone(ctx)
+			cur.Body = body
+		}
+		resp, err := c.httpClient.Do(cur)
+		last := attempt >= MaxAttempts || !replayable
+		if err != nil {
+			var ne net.Error
+			if ctx.Err() == nil && errors.As(err, &ne) && ne.Timeout() {
+				return nil, fmt.Errorf("timed out after %s waiting for %s", c.httpClient.Timeout, req.URL.Host)
+			}
+			if ctx.Err() != nil || !idempotent || !isConnReset(err) || !replayable {
+				return nil, err
+			}
+			if last {
+				return nil, fmt.Errorf("%w (after %d attempts)", err, attempt)
+			}
+			if serr := sleep(ctx, c.retryWait(nil, attempt)); serr != nil {
+				return nil, serr
+			}
+			continue
+		}
+		if (resp.StatusCode != http.StatusTooManyRequests && resp.StatusCode != http.StatusServiceUnavailable) || !replayable {
+			return resp, nil
+		}
+		if last {
+			if attempt > 1 {
+				resp.Header.Set(attemptsHeader, strconv.Itoa(attempt))
+			}
+			return resp, nil
+		}
+		wait := c.retryWait(resp, attempt)
+		io.Copy(io.Discard, io.LimitReader(resp.Body, 1<<20))
+		resp.Body.Close()
+		if serr := sleep(ctx, wait); serr != nil {
+			return nil, serr
+		}
 	}
-	return nil, err
 }
 
 // Option configures a JiraClient at construction time.
@@ -295,6 +420,12 @@ func WithTransport(rt http.RoundTripper) Option {
 // WithTimeout sets the overall per-request timeout of the HTTP client.
 func WithTimeout(d time.Duration) Option {
 	return func(c *JiraClient) { c.httpClient.Timeout = d }
+}
+
+// WithSleep replaces the function used to wait between retries; tests use it
+// to avoid real delays.
+func WithSleep(f SleepFunc) Option {
+	return func(c *JiraClient) { c.sleep = f }
 }
 
 // WithEpicLinkField sets the custom field id used for the epic link.
