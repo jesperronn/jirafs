@@ -456,3 +456,24 @@ The pull itself always succeeds. The commit is skipped with a message on a
 detached HEAD (`git switch main`), while a rebase or merge is in progress, or
 when the index is locked. If the commit fails, jirafs prints
 `pull ok, git commit failed: ...` followed by `git -C <dir> status`.
+
+`mirror.yml` (cursors and `remote_updated`) is committed together with the
+issue files whenever jirafs changed it, unless you had uncommitted edits to it
+beforehand; then it stays yours to commit.
+
+### Auto-commit after `push --apply`
+
+With `git: true`, a `jirafs push --apply` that wrote at least one issue to Jira
+commits the result with the subject `push to <host> at <RFC3339 UTC>`. The body
+has one line per issue, such as `KEY: fields summary, labels; transition To Do
+-> Done` or `NEW-1: created NEW-1 (from draft.md)`. The commit happens only
+after Jira accepted the write and the local file was written; a created draft
+stages the new `KEY.md` and the removal of the draft in the same commit.
+
+When some issues fail, only the succeeded ones are committed, the body ends
+with `not pushed: KEY (reason)` lines, and jirafs prints
+`committed N of M; failed: KEY, KEY`. Pushed files are committed in full (your
+edits were just pushed); files you did not push stay untouched. Dry runs, no
+remote success, a detached HEAD, a rebase or merge in progress, or a locked
+index make no commit. A failing commit never fails the push: jirafs prints
+`push ok, git commit failed: ...` followed by `git -C <dir> status`.

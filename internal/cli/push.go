@@ -53,6 +53,10 @@ type pushResult struct {
 	name   string
 	status string
 	reason string
+	// summary is the commit-body text of a successful remote write ("" when
+	// nothing was written to Jira) and files the paths that write changed.
+	summary string
+	files   []string
 }
 
 // pushRun carries the state shared by all targets of one invocation.
@@ -84,7 +88,7 @@ func pushFail(name, msg string) pushResult {
 	}
 	fmt.Fprint(pushStderr, "jirafs push: "+msg)
 	first, _, _ := strings.Cut(msg, "\n")
-	return pushResult{name, pushFailed, first}
+	return pushResult{name: name, status: pushFailed, reason: first}
 }
 
 // RunPush implements `jirafs push [KEY|file...] [--apply]`.
@@ -136,6 +140,7 @@ func RunPush(args []string) int {
 		run.mirror = *m
 	}
 
+	gitState := beginGit("push", ctx.MirrorDir, !run.opts.apply)
 	targets := fs.Args()
 	var results []pushResult
 	if len(targets) == 0 {
@@ -162,6 +167,7 @@ func RunPush(args []string) int {
 	}
 
 	failed := printPushSummary(results)
+	gitState.commitPush(results, hostOf(settings.Instances[ctx.Instance].BaseURL), pushNow(), pushStdout, pushStderr)
 	if !run.opts.apply {
 		dryRunDone(pushStdout, run.realCommand(targets, *cwdFlag))
 	}
@@ -173,7 +179,7 @@ func RunPush(args []string) int {
 
 // conflictResult is the result of a file whose remote copy moved on.
 func conflictResult(key string) pushResult {
-	return pushResult{key, pushSkipped, "remote changed since the last pull; review it: jirafs diff " + key}
+	return pushResult{name: key, status: pushSkipped, reason: "remote changed since the last pull; review it: jirafs diff " + key}
 }
 
 // printPushSummary prints one line per target and a closing count, and
@@ -354,7 +360,7 @@ func (r *pushRun) createDraft(path, doc string) pushResult {
 	if !opts.apply {
 		fmt.Fprintf(pushStdout, "jirafs push: would create %s in project %s: %s\n", jira.IssueTypeName(string(issue.Identity.Type)), issue.Identity.Project.Value, issue.Summary)
 		fmt.Fprintf(pushStdout, "  POST %s/rest/api/2/issue\n  %s\n", baseURL, payload)
-		return pushResult{name, pushOK, "would create " + jira.IssueTypeName(string(issue.Identity.Type))}
+		return pushResult{name: name, status: pushOK, reason: "would create " + jira.IssueTypeName(string(issue.Identity.Type))}
 	}
 
 	// Write the intent record before the create call so a lost response
@@ -411,7 +417,10 @@ func (r *pushRun) createDraft(path, doc string) pushResult {
 		fmt.Fprintf(pushStdout, "found %s created by an earlier attempt; not creating a duplicate\n", key)
 	}
 	fmt.Fprintf(pushStdout, "jirafs: created %s\n  file: %s\n  url:  %s/browse/%s\n", key, newPath, baseURL, key)
-	return pushResult{key, pushOK, "created from " + path}
+	res := pushResult{name: key, status: pushOK, reason: "created from " + path}
+	res.summary = fmt.Sprintf("created %s (from %s)", key, filepath.Base(path))
+	res.files = []string{newPath, path}
+	return res
 }
 
 // updateIssue fetches the remote issue key, builds and validates a plan from
@@ -447,7 +456,7 @@ func (r *pushRun) updateIssue(key string, localIssue schema.Issue, localPath str
 	}
 	if len(ops) == 0 {
 		fmt.Fprintf(pushStdout, "jirafs push: issue %s in %s: no changes needed\n", key, localPath)
-		return pushResult{key, pushOK, "no changes needed"}
+		return pushResult{name: key, status: pushOK, reason: "no changes needed"}
 	}
 
 	// Validate and apply the plan through the sync service. A temp directory
@@ -468,7 +477,7 @@ func (r *pushRun) updateIssue(key string, localIssue schema.Issue, localPath str
 			fmt.Fprintf(pushStdout, "  no base snapshot; first run: jirafs pull %s\n", key)
 		}
 		fmt.Fprintf(pushStdout, "  review: jirafs diff %s\n", key)
-		return pushResult{key, pushSkipped, "local and remote changed the same fields; review it: jirafs diff " + key}
+		return pushResult{name: key, status: pushSkipped, reason: "local and remote changed the same fields; review it: jirafs diff " + key}
 	}
 
 	sort.Slice(ops, func(i, j int) bool {
@@ -518,7 +527,7 @@ func (r *pushRun) updateIssue(key string, localIssue schema.Issue, localPath str
 	}
 
 	if !r.opts.apply {
-		return pushResult{key, pushOK, fmt.Sprintf("would apply %d operation(s)", len(ops))}
+		return pushResult{name: key, status: pushOK, reason: fmt.Sprintf("would apply %d operation(s)", len(ops))}
 	}
 
 	updatedRemote, err := client.UpdateIssue(r.cmdCtx, key, result.Remote)
@@ -541,7 +550,32 @@ func (r *pushRun) updateIssue(key string, localIssue schema.Issue, localPath str
 	}
 
 	fmt.Fprintf(pushStdout, "jirafs push: applied %d operation(s) successfully\n", len(ops))
-	return pushResult{key, pushOK, fmt.Sprintf("applied %d operation(s)", len(ops))}
+	return pushResult{
+		name: key, status: pushOK, reason: fmt.Sprintf("applied %d operation(s)", len(ops)),
+		summary: opsSummary(ops, remote.Status, statusTr), files: []string{localPath},
+	}
+}
+
+// opsSummary describes applied operations for a commit body:
+// "fields summary, labels; transition To Do -> Done".
+func opsSummary(ops []schema.PlanOperation, from string, tr *jira.Transition) string {
+	var fields []string
+	seen := map[schema.EditableField]bool{}
+	for _, op := range ops {
+		if op.Field == schema.EditableFieldStatus || seen[op.Field] {
+			continue
+		}
+		seen[op.Field] = true
+		fields = append(fields, string(op.Field))
+	}
+	var parts []string
+	if len(fields) > 0 {
+		parts = append(parts, "fields "+strings.Join(fields, ", "))
+	}
+	if tr != nil {
+		parts = append(parts, fmt.Sprintf("transition %s -> %s", from, tr.To.Name))
+	}
+	return strings.Join(parts, "; ")
 }
 
 // findTransition returns the transition whose target status name matches

@@ -15,11 +15,13 @@ import (
 	"github.com/jirafs/jirafs/internal/schema"
 )
 
-// pullGit tracks one pull in a git-backed mirror so the files the pull wrote
-// can be committed afterwards. A nil *pullGit means git mode is off and every
-// method is a no-op.
-type pullGit struct {
+// gitTracker tracks one pull or push in a git-backed mirror so the files the
+// command wrote can be committed afterwards. A nil *gitTracker means git mode
+// is off and every method is a no-op.
+type gitTracker struct {
+	cmd       string // "pull" or "push", used in messages
 	mirrorDir string
+	top       string          // repository top level, empty when unknown
 	dirty     map[string]bool // absolute paths with uncommitted changes before the pull
 }
 
@@ -45,7 +47,12 @@ type pullGitCommit struct {
 // beginPullGit returns a tracker when mirrorDir is git-backed (`git: true`),
 // the pull is not a dry run, and git is usable; it snapshots which files have
 // uncommitted changes before the pull overwrites anything.
-func beginPullGit(mirrorDir string, dryRun bool, stderr io.Writer) *pullGit {
+func beginPullGit(mirrorDir string, dryRun bool, stderr io.Writer) *gitTracker {
+	return beginGit("pull", mirrorDir, dryRun)
+}
+
+// beginGit is beginPullGit for any command (cmd names it in messages).
+func beginGit(cmd, mirrorDir string, dryRun bool) *gitTracker {
 	if dryRun || mirrorDir == "" {
 		return nil
 	}
@@ -53,7 +60,7 @@ func beginPullGit(mirrorDir string, dryRun bool, stderr io.Writer) *pullGit {
 	if err != nil || !m.Git {
 		return nil
 	}
-	g := &pullGit{mirrorDir: realPath(mirrorDir), dirty: map[string]bool{}}
+	g := &gitTracker{cmd: cmd, mirrorDir: realPath(mirrorDir), dirty: map[string]bool{}}
 	if !gitx.Available() || !gitx.IsRepo(g.mirrorDir) {
 		return g
 	}
@@ -66,6 +73,7 @@ func beginPullGit(mirrorDir string, dryRun bool, stderr io.Writer) *pullGit {
 		return g
 	}
 	top = realPath(top)
+	g.top = top
 	for _, e := range entries {
 		g.dirty[filepath.Join(top, filepath.FromSlash(e.Path))] = true
 	}
@@ -127,29 +135,91 @@ func exists(p string) bool {
 	return err == nil
 }
 
-// commit stages exactly the written files that had no uncommitted edits
-// before the pull and commits them. It never fails the pull: problems are
-// reported on stderr.
-func (g *pullGit) commit(c pullGitCommit, now time.Time, stdout, stderr io.Writer) {
-	if g == nil || len(c.Written) == 0 {
-		return
-	}
+// preflight reports whether committing is possible, printing why not.
+func (g *gitTracker) preflight(stderr io.Writer) bool {
 	if !gitx.Available() {
-		fmt.Fprintf(stderr, "jirafs pull: git mode is on but git is missing; not committing (%s)\n", gitx.NotInstalledHint)
-		return
+		fmt.Fprintf(stderr, "jirafs %s: git mode is on but git is missing; not committing (%s)\n", g.cmd, gitx.NotInstalledHint)
+		return false
 	}
 	if !gitx.IsRepo(g.mirrorDir) {
-		fmt.Fprintf(stderr, "jirafs pull: mirror has git: true but %s is not a git repository; not committing (run: git -C %s init)\n", g.mirrorDir, g.mirrorDir)
-		return
+		fmt.Fprintf(stderr, "jirafs %s: mirror has git: true but %s is not a git repository; not committing (run: git -C %s init)\n", g.cmd, g.mirrorDir, g.mirrorDir)
+		return false
 	}
 	if msg := gitBlocker(g.mirrorDir); msg != "" {
-		fmt.Fprintf(stderr, "jirafs pull: %s\n", msg)
+		fmt.Fprintf(stderr, "jirafs %s: %s\n", g.cmd, msg)
+		return false
+	}
+	return true
+}
+
+// mirrorFiles returns the mirror config files jirafs may have rewritten
+// (cursors, remote_updated), minus any the user had edited beforehand.
+func (g *gitTracker) mirrorFiles() []string {
+	var out []string
+	for _, name := range []string{"mirror.yml", "mirror.yaml"} {
+		p := realPath(filepath.Join(g.mirrorDir, name))
+		if !g.dirty[p] {
+			out = append(out, p)
+		}
+	}
+	return out
+}
+
+// commitPaths commits those of paths that have changes (a tracked file that
+// was removed counts) using explicit pathspecs. It returns how many paths were
+// committed; problems are reported on stderr and never fail the command.
+func (g *gitTracker) commitPaths(paths []string, msg string, stderr io.Writer) int {
+	seen := map[string]bool{}
+	var specs []string
+	for _, p := range paths {
+		abs := realPath(p)
+		if within(g.mirrorDir, abs) && !seen[abs] {
+			seen[abs] = true
+			specs = append(specs, abs)
+		}
+	}
+	sort.Strings(specs)
+	if len(specs) == 0 {
+		return 0
+	}
+	entries, err := gitx.Status(g.mirrorDir, specs...)
+	if err != nil {
+		g.fail(err, stderr)
+		return 0
+	}
+	changed := map[string]bool{}
+	for _, e := range entries {
+		changed[filepath.Join(g.top, filepath.FromSlash(e.Path))] = true
+	}
+	var use []string
+	for _, p := range specs {
+		if changed[p] {
+			use = append(use, p)
+		}
+	}
+	if len(use) == 0 {
+		return 0
+	}
+	if err := gitx.Commit(g.mirrorDir, use, msg); err != nil {
+		if errors.Is(err, gitx.ErrNoIdentity) {
+			fmt.Fprintf(stderr, "%s ok, git commit failed: %v\n", g.cmd, err)
+			fmt.Fprintf(stderr, "then commit: git -C %s status\n", g.mirrorDir)
+			return 0
+		}
+		g.fail(err, stderr)
+		return 0
+	}
+	return len(use)
+}
+
+// commit stages exactly the written files that had no uncommitted edits
+// before the pull, plus mirror.yml when jirafs changed it, and commits them.
+// It never fails the pull: problems are reported on stderr.
+func (g *gitTracker) commit(c pullGitCommit, now time.Time, stdout, stderr io.Writer) {
+	if g == nil || len(c.Written) == 0 || !g.preflight(stderr) {
 		return
 	}
-
-	var paths []string
-	var changed []string
-	var left []string
+	var paths, changed, left []string
 	for path, key := range c.Written {
 		abs := realPath(path)
 		if !within(g.mirrorDir, abs) {
@@ -164,7 +234,6 @@ func (g *pullGit) commit(c pullGitCommit, now time.Time, stdout, stderr io.Write
 			changed = append(changed, string(key))
 		}
 	}
-	sort.Strings(paths)
 	sort.Strings(changed)
 	sort.Strings(left)
 	left = dedupeSorted(left)
@@ -174,29 +243,14 @@ func (g *pullGit) commit(c pullGitCommit, now time.Time, stdout, stderr io.Write
 	if len(paths) == 0 {
 		return
 	}
-	entries, err := gitx.Status(g.mirrorDir, paths...)
-	if err != nil {
-		g.fail(err, stderr)
-		return
+	paths = append(paths, g.mirrorFiles()...)
+	if n := g.commitPaths(paths, pullCommitMessage(c, changed, now), stderr); n > 0 {
+		fmt.Fprintf(stdout, "jirafs pull: committed %d file(s) to git\n", n)
 	}
-	if len(entries) == 0 {
-		return
-	}
-
-	if err := gitx.Commit(g.mirrorDir, paths, pullCommitMessage(c, changed, now)); err != nil {
-		if errors.Is(err, gitx.ErrNoIdentity) {
-			fmt.Fprintf(stderr, "pull ok, git commit failed: %v\n", err)
-			fmt.Fprintf(stderr, "then commit: git -C %s status\n", g.mirrorDir)
-			return
-		}
-		g.fail(err, stderr)
-		return
-	}
-	fmt.Fprintf(stdout, "jirafs pull: committed %d file(s) to git\n", len(paths))
 }
 
-func (g *pullGit) fail(err error, stderr io.Writer) {
-	fmt.Fprintf(stderr, "pull ok, git commit failed: %v\n", err)
+func (g *gitTracker) fail(err error, stderr io.Writer) {
+	fmt.Fprintf(stderr, "%s ok, git commit failed: %v\n", g.cmd, err)
 	fmt.Fprintf(stderr, "inspect: git -C %s status\n", g.mirrorDir)
 }
 

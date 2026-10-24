@@ -113,7 +113,7 @@ func TestPullGit_CommitsWrittenFiles(t *testing.T) {
 		}
 	}
 	files := gitOut(t, e.mirror, "show", "--name-only", "--format=", "HEAD")
-	if !strings.Contains(files, "issues/TEST-1.md") || !strings.Contains(files, "issues/TEST-2.md") || strings.Contains(files, "mirror.yml") {
+	if !strings.Contains(files, "issues/TEST-1.md") || !strings.Contains(files, "issues/TEST-2.md") || !strings.Contains(files, "mirror.yml") {
 		t.Fatalf("files = %q", files)
 	}
 	t.Log(gitOut(t, e.mirror, "log", "-2", "--stat"))
@@ -314,7 +314,7 @@ func TestPullGitHelpers(t *testing.T) {
 	if hostOf("not a url") != "not a url" || hostOf("https://x.example/y") != "x.example" {
 		t.Fatal("hostOf")
 	}
-	var g *pullGit
+	var g *gitTracker
 	g.commit(pullGitCommit{}, time.Now(), nil, nil) // nil receiver is a no-op
 	if beginPullGit("", false, nil) != nil || beginPullGit(t.TempDir(), true, nil) != nil {
 		t.Fatal("beginPullGit should be nil")

@@ -188,6 +188,8 @@ var commandDocs = []CommandDoc{
 				"Without --apply (or with --dry-run) it only prints what would be written.",
 				"Every issue is reported as ok, skipped or failed; one failure never stops",
 				"the others, and the exit code is 1 when any issue failed.",
+				"With git: true in mirror.yml, --apply commits what Jira accepted as",
+				"\"push to <host> at <time>\".",
 			},
 			Sections: []UsageSection{flags(
 				[2]string{"--apply", "perform the Jira writes (without it, push is a dry run)"},
