@@ -72,6 +72,8 @@ If you are trying `jirafs` for the first time:
 
 If something fails:
 
+- no settings yet (first run): run
+  `jirafs setup --project <name> --key <KEY> --instance <name> --base-url https://<site>.atlassian.net --credential-ref env://JIRAFS_API_TOKEN --set-current`
 - config or auth issue: inspect `~/.jirafs/settings.toml`
 - scope issue: inspect `<mirror_dir>/mirror.yml`
 - project resolution issue: run `jirafs use --project <name>`

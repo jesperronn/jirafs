@@ -88,9 +88,8 @@ func RunUse(args []string) int {
 			fmt.Fprintf(useStderr, "jirafs use: --project and --clear are mutually exclusive\n")
 			return 1
 		}
-		s, err := config.Load()
-		if err != nil {
-			fmt.Fprintf(useStderr, "jirafs use: cannot load settings: %v\n", err)
+		s, ok := loadSettingsOrHint(useStderr, "use")
+		if !ok {
 			return 1
 		}
 		s.State.CurrentProject = ""
@@ -116,9 +115,8 @@ func RunUse(args []string) int {
 	// No project given → show current state via snapshot and list
 	// other available projects as next-step choices.
 	if key == "" {
-		s, err := config.Load()
-		if err != nil {
-			fmt.Fprintf(useStderr, "jirafs use: cannot load settings: %v\n", err)
+		s, ok := loadSettingsOrHint(useStderr, "use")
+		if !ok {
 			return 1
 		}
 		cwd, err := os.Getwd()
@@ -151,9 +149,8 @@ func RunUse(args []string) int {
 		return 0
 	}
 
-	s, err := config.Load()
-	if err != nil {
-		fmt.Fprintf(useStderr, "jirafs use: cannot load settings: %v\n", err)
+	s, ok := loadSettingsOrHint(useStderr, "use")
+	if !ok {
 		return 1
 	}
 

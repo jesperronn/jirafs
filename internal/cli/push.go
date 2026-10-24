@@ -12,7 +12,6 @@ import (
 	"time"
 
 	"github.com/jirafs/jirafs/internal/codec"
-	"github.com/jirafs/jirafs/internal/config"
 	"github.com/jirafs/jirafs/internal/jira"
 	"github.com/jirafs/jirafs/internal/schema"
 )
@@ -90,13 +89,13 @@ func RunPush(args []string) int {
 		return 1
 	}
 
-	settings, err := config.Load()
-	if err != nil {
-		fmt.Fprintf(pushStderr, "jirafs push: %v\n", err)
+	settings, ok := loadSettingsOrHint(pushStderr, "push")
+	if !ok {
 		return 1
 	}
 	cwd := *cwdFlag
 	if cwd == "" {
+		var err error
 		if cwd, err = os.Getwd(); err != nil {
 			fmt.Fprintf(pushStderr, "jirafs push: %v\n", err)
 			return 1

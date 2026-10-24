@@ -184,9 +184,8 @@ func RunDoctor(args []string) int {
 	doctorVerbose = *verbose
 
 	// Load settings.
-	settings, err := config.Load()
-	if err != nil {
-		fmt.Fprintf(doctorStderr, "jirafs doctor: cannot load settings: %v\n", err)
+	settings, ok := loadSettingsOrHint(doctorStderr, "doctor")
+	if !ok {
 		return 1
 	}
 

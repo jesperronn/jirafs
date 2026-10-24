@@ -58,9 +58,8 @@ func RunSync(args []string) int {
 	}
 
 	// Load settings.
-	settings, err := config.Load()
-	if err != nil {
-		fmt.Fprintf(syncStderr, "jirafs sync: cannot load settings: %v\n", err)
+	settings, ok := loadSettingsOrHint(syncStderr, "sync")
+	if !ok {
 		return 1
 	}
 

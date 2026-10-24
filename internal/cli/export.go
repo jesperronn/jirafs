@@ -39,9 +39,8 @@ func RunExport(args []string) int {
 	}
 
 	// Load settings and create resolver.
-	settings, err := config.Load()
-	if err != nil {
-		fmt.Fprintf(exportStderr, "jirafs export: cannot load settings: %v\n", err)
+	settings, ok := loadSettingsOrHint(exportStderr, "export")
+	if !ok {
 		return 1
 	}
 	resolver := context.NewResolver(settings, "")

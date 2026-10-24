@@ -334,8 +334,8 @@ func TestRunRegistry_Show_NoSettings(t *testing.T) {
 	if exit != 1 {
 		t.Fatalf("RunRegistry([show users]) no settings = %d, want 1, stderr = %q", exit, stderr.String())
 	}
-	if !strings.Contains(stderr.String(), "cannot load settings") {
-		t.Fatalf("stderr = %q, want 'cannot load settings'", stderr.String())
+	if !strings.Contains(stderr.String(), "no settings found") {
+		t.Fatalf("stderr = %q, want 'no settings found'", stderr.String())
 	}
 }
 

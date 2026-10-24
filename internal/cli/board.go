@@ -12,7 +12,6 @@ import (
 
 	"github.com/jirafs/jirafs/internal/board"
 	"github.com/jirafs/jirafs/internal/color"
-	"github.com/jirafs/jirafs/internal/config"
 	"github.com/jirafs/jirafs/internal/registry"
 	"github.com/jirafs/jirafs/internal/schema"
 )
@@ -36,9 +35,8 @@ func RunBoard(args []string) int {
 	}
 
 	// Load settings and create resolver.
-	settings, err := config.Load()
-	if err != nil {
-		fmt.Fprintf(boardStderr, "jirafs board: cannot load settings: %v\n", err)
+	settings, ok := loadSettingsOrHint(boardStderr, "board")
+	if !ok {
 		return 1
 	}
 

@@ -304,8 +304,8 @@ func TestRunArchive_SettingsLoadError(t *testing.T) {
 	if code != 1 {
 		t.Fatalf("RunArchive list (no settings) = %d, want 1", code)
 	}
-	if !strings.Contains(stderr.String(), "cannot load settings") {
-		t.Errorf("stderr = %q, want it to mention cannot load settings", stderr.String())
+	if !strings.Contains(stderr.String(), "no settings found") {
+		t.Errorf("stderr = %q, want it to mention no settings found", stderr.String())
 	}
 }
 

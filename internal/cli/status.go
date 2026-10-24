@@ -213,9 +213,8 @@ func RunStatus(args []string) int {
 	}
 
 	// Load settings.
-	settings, err := config.Load()
-	if err != nil {
-		fmt.Fprintf(statusStderr, "jirafs status: cannot load settings: %v\n", err)
+	settings, ok := loadSettingsOrHint(statusStderr, "status")
+	if !ok {
 		return 1
 	}
 

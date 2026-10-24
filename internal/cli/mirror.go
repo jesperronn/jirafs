@@ -54,9 +54,8 @@ func RunMirror(args []string) int {
 	}
 
 	// Load settings and create resolver.
-	settings, err := config.Load()
-	if err != nil {
-		fmt.Fprintf(mirrorStderr, "jirafs mirror: cannot load settings: %v\n", err)
+	settings, ok := loadSettingsOrHint(mirrorStderr, "mirror")
+	if !ok {
 		return 1
 	}
 	resolver := context.NewResolver(settings, "")

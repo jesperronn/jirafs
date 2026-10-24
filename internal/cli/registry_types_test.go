@@ -94,7 +94,7 @@ func TestRunRegistry_ShowInit_ArgErrors(t *testing.T) {
 func TestRunRegistry_InitNoSettings(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
 	_, stderr := withRegistryTestIO(t)
-	if exit := RunRegistry([]string{"init", "users"}); exit != 1 || !strings.Contains(stderr.String(), "cannot load settings") {
+	if exit := RunRegistry([]string{"init", "users"}); exit != 1 || !strings.Contains(stderr.String(), "no settings found") {
 		t.Fatalf("exit/stderr = %d %q", exit, stderr.String())
 	}
 }

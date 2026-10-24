@@ -223,16 +223,14 @@ func RunArchive(args []string) int {
 		printArchiveHelp()
 		return 0
 	case "issue":
-		settings, err := config.Load()
-		if err != nil {
-			fmt.Fprintf(archiveStderr, "jirafs archive issue: cannot load settings: %v\n", err)
+		settings, ok := loadSettingsOrHint(archiveStderr, "archive issue")
+		if !ok {
 			return 1
 		}
 		return runArchiveIssue(args[1:], settings)
 	case "list":
-		settings, err := config.Load()
-		if err != nil {
-			fmt.Fprintf(archiveStderr, "jirafs archive list: cannot load settings: %v\n", err)
+		settings, ok := loadSettingsOrHint(archiveStderr, "archive list")
+		if !ok {
 			return 1
 		}
 		return runArchiveList(args[1:], settings)

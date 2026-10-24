@@ -38,9 +38,8 @@ func RunPlan(args []string) int {
 	}
 
 	// Load settings and create resolver.
-	settings, err := config.Load()
-	if err != nil {
-		fmt.Fprintf(planStderr, "jirafs plan: cannot load settings: %v\n", err)
+	settings, ok := loadSettingsOrHint(planStderr, "plan")
+	if !ok {
 		return 1
 	}
 

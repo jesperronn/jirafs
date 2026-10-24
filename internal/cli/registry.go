@@ -74,10 +74,8 @@ func runRegistryShow(args []string) int {
 		return 1
 	}
 
-	settings, err := config.Load()
-	if err != nil {
-		fmt.Fprintf(registryStderr, "jirafs registry show: cannot load settings: %v\n", err)
-		fmt.Fprintln(registryStderr, `run "jirafs use --project NAME" or "jirafs setup"`)
+	settings, ok := loadSettingsOrHint(registryStderr, "registry show")
+	if !ok {
 		return 1
 	}
 
@@ -157,10 +155,8 @@ func runRegistryInit(args []string) int {
 		return 1
 	}
 
-	settings, err := config.Load()
-	if err != nil {
-		fmt.Fprintf(registryStderr, "jirafs registry init: cannot load settings: %v\n", err)
-		fmt.Fprintln(registryStderr, `run "jirafs use --project NAME" or "jirafs setup"`)
+	settings, ok := loadSettingsOrHint(registryStderr, "registry init")
+	if !ok {
 		return 1
 	}
 

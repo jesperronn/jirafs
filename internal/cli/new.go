@@ -10,7 +10,6 @@ import (
 	"strings"
 
 	"github.com/jirafs/jirafs/internal/codec"
-	"github.com/jirafs/jirafs/internal/config"
 	"github.com/jirafs/jirafs/internal/schema"
 )
 
@@ -197,14 +196,14 @@ func RunNew(args []string) int {
 		return runNewPrompt(templateName, *templateFlag, *ideaFlag)
 	}
 
-	settings, err := config.Load()
-	if err != nil {
-		fmt.Fprintf(newStderr, "jirafs new: %v\n", err)
+	settings, ok := loadSettingsOrHint(newStderr, "new")
+	if !ok {
 		return 1
 	}
 
 	cwd := *cwdFlag
 	if cwd == "" {
+		var err error
 		cwd, err = os.Getwd()
 		if err != nil {
 			fmt.Fprintf(newStderr, "jirafs new: %v\n", err)
