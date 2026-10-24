@@ -25,7 +25,7 @@ The pre-live tranche is complete only when all of the following are true:
 - `jirafs export issue ABC-123` writes a canonical Markdown issue file
 - `jirafs mirror refresh my-issues` or `current-sprint` refreshes a live set
 - `jirafs diff` emits typed operations and typed conflicts
-- `jirafs sync` applies one validated update path safely
+- `jirafs push` applies one validated update path safely
 - one real-data smoke test has been run against a disposable Jira issue
 - `bin/test` and `bin/lint` pass at the integration point
 
@@ -90,7 +90,7 @@ These streams can overlap, but the dependency edges matter.
 
 ### Wave 4
 
-- WS5 wires `jirafs diff` and `jirafs sync`.
+- WS5 wires `jirafs diff` and `jirafs push`.
 - WS5 adds a disposable real-data smoke path.
 - Integration verifies one end-to-end round trip.
 
@@ -193,7 +193,7 @@ Ready queue:
 - B082b `jirafs mirror archive-sweep --apply` calls archive service
 - B083a wire `jirafs export issue`
 - B083b wire `jirafs diff`
-- B083c wire `jirafs sync`
+- B083c wire `jirafs push`
 - B083d add disposable real-data smoke script for export-edit-plan-sync-reexport
 
 Exit condition:

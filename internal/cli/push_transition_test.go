@@ -12,7 +12,7 @@ import (
 	"github.com/jirafs/jirafs/internal/schema"
 )
 
-func setupTransitionSync(t *testing.T) *jira.FakeTransport {
+func setupTransitionPush(t *testing.T) *jira.FakeTransport {
 	t.Helper()
 	tmpDir := t.TempDir()
 	homeDir := t.TempDir()
@@ -41,7 +41,7 @@ func setupTransitionSync(t *testing.T) *jira.FakeTransport {
 		Summary: "Same summary",
 		Status:  "Open",
 	})
-	withSyncClientFactory(t, func(*config.Settings, *context.Context, string) (jira.Client, error) {
+	withPushClientFactory(t, func(*config.Settings, *context.Context, string) (jira.Client, error) {
 		return fake, nil
 	})
 	return fake
@@ -54,12 +54,12 @@ func startTransition() []jira.Transition {
 	return ts
 }
 
-func TestRunSync_StatusTransitionApplied(t *testing.T) {
-	fake := setupTransitionSync(t)
+func TestPushUpdate_StatusTransitionApplied(t *testing.T) {
+	fake := setupTransitionPush(t)
 	fake.SetTransitions("PROJ-42", startTransition())
-	stdout, stderr := withSyncTestIO(t)
+	stdout, stderr := withPushIO(t)
 
-	if exit := RunSync([]string{"--project", "test", "--apply", "PROJ-42"}); exit != 0 {
+	if exit := RunPush([]string{"--project", "test", "--apply", "PROJ-42"}); exit != 0 {
 		t.Fatalf("exit = %d, stderr = %q", exit, stderr.String())
 	}
 	if !strings.Contains(stdout.String(), `transition status: Open → In Progress (via "Start")`) {
@@ -70,12 +70,12 @@ func TestRunSync_StatusTransitionApplied(t *testing.T) {
 	}
 }
 
-func TestRunSync_StatusTransitionDryRun(t *testing.T) {
-	fake := setupTransitionSync(t)
+func TestPushUpdate_StatusTransitionDryRun(t *testing.T) {
+	fake := setupTransitionPush(t)
 	fake.SetTransitions("PROJ-42", startTransition())
-	stdout, _ := withSyncTestIO(t)
+	stdout, _ := withPushIO(t)
 
-	if exit := RunSync([]string{"--project", "test", "--dry-run", "PROJ-42"}); exit != 0 {
+	if exit := RunPush([]string{"--project", "test", "--dry-run", "PROJ-42"}); exit != 0 {
 		t.Fatalf("exit = %d", exit)
 	}
 	if !strings.Contains(stdout.String(), `(via "Start")`) {
@@ -86,17 +86,17 @@ func TestRunSync_StatusTransitionDryRun(t *testing.T) {
 	}
 }
 
-func TestRunSync_StatusNoTransition(t *testing.T) {
-	fake := setupTransitionSync(t)
+func TestPushUpdate_StatusNoTransition(t *testing.T) {
+	fake := setupTransitionPush(t)
 	ts := startTransition()
 	fake.SetTransitions("PROJ-42", ts[1:])
-	_, stderr := withSyncTestIO(t)
+	_, stderr := withPushIO(t)
 
-	if exit := RunSync([]string{"--project", "test", "PROJ-42"}); exit != 1 {
+	if exit := RunPush([]string{"--project", "test", "PROJ-42"}); exit != 1 {
 		t.Fatalf("exit = %d, want 1", exit)
 	}
 	out := stderr.String()
-	for _, want := range []string{"no available Jira transition", "Done", "jirafs sync PROJ-42 --dry-run"} {
+	for _, want := range []string{"no available Jira transition", "Done", "jirafs push PROJ-42 --dry-run"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("stderr missing %q: %q", want, out)
 		}
@@ -106,17 +106,17 @@ func TestRunSync_StatusNoTransition(t *testing.T) {
 	}
 }
 
-func TestRunSync_StatusTransitionErrors(t *testing.T) {
-	fake := setupTransitionSync(t)
+func TestPushUpdate_StatusTransitionErrors(t *testing.T) {
+	fake := setupTransitionPush(t)
 	fake.SetTransitions("PROJ-42", startTransition())
-	_, stderr := withSyncTestIO(t)
+	_, stderr := withPushIO(t)
 
 	fake.SetErr("transitions", jira.NewUnknownErr("boom"))
-	if exit := RunSync([]string{"--project", "test", "PROJ-42"}); exit != 1 || !strings.Contains(stderr.String(), "cannot fetch transitions") {
+	if exit := RunPush([]string{"--project", "test", "PROJ-42"}); exit != 1 || !strings.Contains(stderr.String(), "cannot fetch transitions") {
 		t.Errorf("fetch error: exit=%d stderr=%q", exit, stderr.String())
 	}
 	fake.SetErr("transition", jira.NewUnknownErr("boom"))
-	if exit := RunSync([]string{"--project", "test", "--apply", "PROJ-42"}); exit != 1 || !strings.Contains(stderr.String(), "status transition") {
+	if exit := RunPush([]string{"--project", "test", "--apply", "PROJ-42"}); exit != 1 || !strings.Contains(stderr.String(), "status transition") {
 		t.Errorf("do error: exit=%d stderr=%q", exit, stderr.String())
 	}
 }

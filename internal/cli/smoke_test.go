@@ -52,7 +52,7 @@ func TestSmokeExportEditPlanSyncReexport(t *testing.T) {
 	withExportClientFactory(t, func(*config.Settings, *context.Context, string) (jira.Client, error) {
 		return fake, nil
 	})
-	withSyncClientFactory(t, func(*config.Settings, *context.Context, string) (jira.Client, error) {
+	withPushClientFactory(t, func(*config.Settings, *context.Context, string) (jira.Client, error) {
 		return fake, nil
 	})
 	withDiffClientFactory(t, func(*config.Settings, *context.Context, string) (jira.Client, error) {
@@ -103,10 +103,10 @@ func TestSmokeExportEditPlanSyncReexport(t *testing.T) {
 	}
 
 	// Step 4: Sync (push changes to Jira and apply locally).
-	_, syncStderr := withSyncTestIO(t)
-	exit = RunSync([]string{"--project", "test", "--apply", "--write-local", "PROJ-42"})
+	_, pushStderr := withPushIO(t)
+	exit = RunPush([]string{"--project", "test", "--apply", "--write-local", "PROJ-42"})
 	if exit != 0 {
-		t.Fatalf("RunSync([\"--project\", \"test\", \"--apply\", \"PROJ-42\"]) = %d, stderr = %q", exit, syncStderr.String())
+		t.Fatalf("RunPush([\"--project\", \"test\", \"--apply\", \"PROJ-42\"]) = %d, stderr = %q", exit, pushStderr.String())
 	}
 
 	// Step 5: Re-export to verify the remote was updated.
@@ -163,7 +163,7 @@ func TestSmokeExportEditPlanSyncReexport_MinimalIssue(t *testing.T) {
 	withExportClientFactory(t, func(*config.Settings, *context.Context, string) (jira.Client, error) {
 		return fake, nil
 	})
-	withSyncClientFactory(t, func(*config.Settings, *context.Context, string) (jira.Client, error) {
+	withPushClientFactory(t, func(*config.Settings, *context.Context, string) (jira.Client, error) {
 		return fake, nil
 	})
 	withDiffClientFactory(t, func(*config.Settings, *context.Context, string) (jira.Client, error) {
@@ -210,10 +210,10 @@ func TestSmokeExportEditPlanSyncReexport_MinimalIssue(t *testing.T) {
 	}
 
 	// Step 4: Sync.
-	_, syncStderr := withSyncTestIO(t)
-	exit = RunSync([]string{"--project", "test", "--apply", "--write-local", "DRF-1"})
+	_, pushStderr := withPushIO(t)
+	exit = RunPush([]string{"--project", "test", "--apply", "--write-local", "DRF-1"})
 	if exit != 0 {
-		t.Fatalf("RunSync minimal = %d, stderr = %q", exit, syncStderr.String())
+		t.Fatalf("RunPush minimal = %d, stderr = %q", exit, pushStderr.String())
 	}
 
 	// Step 5: Re-export.
@@ -286,7 +286,7 @@ func TestSmokeExportEditPlanSyncReexport_Conflict(t *testing.T) {
 	withExportClientFactory(t, func(*config.Settings, *context.Context, string) (jira.Client, error) {
 		return fake, nil
 	})
-	withSyncClientFactory(t, func(*config.Settings, *context.Context, string) (jira.Client, error) {
+	withPushClientFactory(t, func(*config.Settings, *context.Context, string) (jira.Client, error) {
 		return fake, nil
 	})
 	withDiffClientFactory(t, func(*config.Settings, *context.Context, string) (jira.Client, error) {
@@ -330,10 +330,10 @@ func TestSmokeExportEditPlanSyncReexport_Conflict(t *testing.T) {
 	}
 
 	// Step 4: Sync (should report conflicts, not push).
-	_, syncStderr := withSyncTestIO(t)
-	exit = RunSync([]string{"--project", "test", "PROJ-42"})
+	_, pushStderr := withPushIO(t)
+	exit = RunPush([]string{"--project", "test", "PROJ-42"})
 	if exit != 0 {
-		t.Fatalf("RunSync with conflict = %d, stderr = %q", exit, syncStderr.String())
+		t.Fatalf("RunPush with conflict = %d, stderr = %q", exit, pushStderr.String())
 	}
 
 	// Verify UpdateIssue was NOT called (the fake should still have the original issue).
@@ -374,7 +374,7 @@ func TestSmokeExportEditPlanSyncReexport_UpdateError(t *testing.T) {
 	withExportClientFactory(t, func(*config.Settings, *context.Context, string) (jira.Client, error) {
 		return fake, nil
 	})
-	withSyncClientFactory(t, func(*config.Settings, *context.Context, string) (jira.Client, error) {
+	withPushClientFactory(t, func(*config.Settings, *context.Context, string) (jira.Client, error) {
 		return fake, nil
 	})
 	withDiffClientFactory(t, func(*config.Settings, *context.Context, string) (jira.Client, error) {
@@ -413,13 +413,13 @@ func TestSmokeExportEditPlanSyncReexport_UpdateError(t *testing.T) {
 	}
 
 	// Step 3: Sync (should fail on update).
-	_, syncStderr := withSyncTestIO(t)
-	exit = RunSync([]string{"--project", "test", "--apply", "PROJ-42"})
+	_, pushStderr := withPushIO(t)
+	exit = RunPush([]string{"--project", "test", "--apply", "PROJ-42"})
 	if exit != 1 {
-		t.Fatalf("RunSync with update error = %d, want 1", exit)
+		t.Fatalf("RunPush with update error = %d, want 1", exit)
 	}
-	if !strings.Contains(syncStderr.String(), "cannot update remote issue") {
-		t.Fatalf("stderr = %q, want cannot update remote issue", syncStderr.String())
+	if !strings.Contains(pushStderr.String(), "cannot update remote issue") {
+		t.Fatalf("stderr = %q, want cannot update remote issue", pushStderr.String())
 	}
 
 	// Step 4: Verify re-export still shows the original (unchanged) remote.

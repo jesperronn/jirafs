@@ -68,19 +68,21 @@ func TestUnknownCommand(t *testing.T) {
 	}
 }
 
-// TestSyncCommand verifies that `jirafs sync` without an issue key is
-// blocked with exit 2 and a clear message.
-func TestSyncCommand(t *testing.T) {
+// TestSyncCommandRemoved verifies that the old sync command is an unknown command:
+// push replaced it and no alias is kept.
+func TestSyncCommandRemoved(t *testing.T) {
 	homeDir := filepath.Join(t.TempDir(), "home")
 	if err := os.MkdirAll(homeDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	output := runMainHelperWithHome(t, homeDir, "sync")
-	if output.exitCode != 2 {
-		t.Fatalf("exitCode = %d, want 2, stderr = %q", output.exitCode, output.stderr)
-	}
-	if !strings.Contains(output.stderr, "syncing multiple issues is not implemented yet; sync one issue at a time: jirafs sync <KEY>") {
-		t.Fatalf("stderr = %q, want not-implemented message", output.stderr)
+	for _, args := range [][]string{{"sync"}, {"sync", "PROJ-1"}} {
+		output := runMainHelperWithHome(t, homeDir, args...)
+		if output.exitCode != 2 {
+			t.Fatalf("%v: exitCode = %d, want 2, stderr = %q", args, output.exitCode, output.stderr)
+		}
+		if !strings.Contains(output.stderr, `unknown command: "sync"`) {
+			t.Fatalf("%v: stderr = %q, want unknown command", args, output.stderr)
+		}
 	}
 }
 
@@ -1284,7 +1286,7 @@ func ownedInProcess(args []string) bool {
 		return true
 	}
 	switch args[0] {
-	case "board", "init", "use", "new", "push", "registry", "archive", "sync", "mirror", "export", "diff", "status", "doctor":
+	case "board", "init", "use", "new", "push", "registry", "archive", "mirror", "export", "diff", "status", "doctor":
 		return false
 	}
 	return true

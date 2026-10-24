@@ -16,7 +16,7 @@ The current CLI is usable as a narrow operator workflow:
 4. Export or inspect one issue locally with `jirafs export issue`.
 5. Edit the mirrored Markdown file.
 6. Review the planned write-back with `jirafs diff`.
-7. Apply the write path with `jirafs sync KEY --apply` (plain `jirafs sync KEY` is a dry run).
+7. Apply the write path with `jirafs push KEY --apply` (plain `jirafs push KEY` is a dry run).
 
 Example:
 
@@ -35,18 +35,31 @@ jirafs mirror refresh my-issues
 jirafs export issue PLAT-123            # writes <local_dir>/PLAT-123.md
 jirafs export issue PLAT-123 --stdout > /tmp/PLAT-123.md
 jirafs diff PLAT-123
-jirafs sync PLAT-123                    # dry run: prints the plan, writes nothing
-jirafs sync PLAT-123 --apply            # writes to Jira
-jirafs sync PLAT-123 --apply --write-local   # ...and refreshes the local file
+jirafs push PLAT-123                    # dry run: prints the plan, writes nothing
+jirafs push PLAT-123 --apply            # writes to Jira
+jirafs push PLAT-123 --apply --write-local   # ...and refreshes the local file
+jirafs push                             # dry run for every modified file and draft
+jirafs push --apply                     # ...and write them all
 ```
 
-Behaviour change: `jirafs sync KEY` no longer writes to Jira. Every command
-that writes to Jira (`sync`, `push`) is a dry run unless you pass `--apply`;
-scripts that relied on `jirafs sync KEY` writing must add `--apply`. The old
-meaning of `sync --apply` (write the refreshed remote to the local file) is now
-`--write-local`, which only has an effect together with `--apply`. `--apply`
-with `--dry-run` is rejected (exit 2). Each dry run ends with the exact command
-to run it for real.
+`jirafs push [KEY|file...]` is the only command that writes to Jira. A draft
+file (`state: draft`) is created as a new issue; an existing issue (a KEY or its
+file) is updated, including status transitions. It is a dry run unless you pass
+`--apply`; `--write-local` (only with `--apply`) also writes the refreshed
+remote to the local file. `--apply` with `--dry-run` is rejected (exit 2). Each
+dry run ends with the exact command to run it for real.
+
+With no arguments `push` handles every file `jirafs status` lists as modified
+or draft. It prints one line per issue and keeps going when one fails:
+
+```text
+TEST-4  skipped (conflict)  remote changed since the last pull; review it: jirafs diff TEST-4
+TEST-2  ok  applied 2 operation(s)
+TEST-1  ok  created from jira/add-dark-mode.md
+```
+
+A conflicted file (remote changed since its last pull) is skipped and
+reported, never overwritten. The exit code is 1 when any issue failed.
 
 ## Mirror scopes
 
@@ -128,9 +141,8 @@ If something fails:
 - project resolution issue: run `jirafs use <name>`
 - live Jira issue: retry with a single issue export before a whole-scope refresh
 - empty sync scope: run `jirafs mirror refresh current-sprint` or
-  `jirafs mirror refresh my-issues`, then `jirafs sync <KEY>` per issue
-  (multi-issue `jirafs sync` is not implemented yet)
-- not sure what a command will change: add `--dry-run` (sync, push, export
+  `jirafs mirror refresh my-issues`, then `jirafs push` to write your edits back
+- not sure what a command will change: add `--dry-run` (push, export
   issue, new, archive issue, mirror refresh, mirror archive-sweep); it prints
   the plan and the command for the real run, and writes nothing
 
@@ -162,7 +174,7 @@ The most important commands right now are:
 - `jirafs mirror refresh`
 - `jirafs export issue`
 - `jirafs diff`
-- `jirafs sync`
+- `jirafs push`
 
 ## Creating Issues With An AI
 
@@ -181,15 +193,15 @@ field and a retry command.
 
 Drafts are created in Jira with `jirafs push`. It is a dry run by default;
 `--apply` creates the issue, renames the file to `KEY.md`, marks it synced and
-prints the browse URL:
+prints the browse URL (`jirafs push` without a file pushes every draft):
 
 ```sh
 jirafs push jira/add-dark-mode.md            # show what would be created
 jirafs push jira/add-dark-mode.md --apply    # POST /rest/api/2/issue
 ```
 
-Only files with `state: draft` can be pushed; use `jirafs sync KEY` to update
-existing issues.
+Pushing a file that is already synced updates the existing issue instead:
+`jirafs push KEY` (or `jirafs push path/KEY.md`).
 
 ### Custom fields on create
 

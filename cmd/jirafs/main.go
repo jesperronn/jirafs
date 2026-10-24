@@ -45,8 +45,6 @@ func run(args []string, stdout, stderr io.Writer) int {
 		return cli.RunRegistry(rest)
 	case "archive":
 		return cli.RunArchive(rest)
-	case "sync":
-		return cli.RunSync(rest)
 	case "use":
 		return cli.RunUse(rest)
 	case "mirror":
@@ -73,12 +71,11 @@ func printHelp(stderr io.Writer) {
 	commands := [][2]string{
 		{"init", "configure a Jira instance and project, and create its mirror directory"},
 		{"export", "export Jira issues into local Markdown files"},
-		{"diff", "show what sync would change in Jira (read-only)"},
+		{"diff", "show what push would change in Jira (read-only)"},
 		{"status", "show workspace status and next-step hints"},
 		{"doctor", "run health checks on config, credentials, and live connectivity"},
-		{"sync", "apply a sync plan and push changes to Jira (real service path)"},
 		{"new", "create a new issue from a template"},
-		{"push", "create a local draft issue in Jira (dry run unless --apply)"},
+		{"push", "create drafts and update modified issues in Jira (dry run unless --apply)"},
 		{"registry", "manage local registry files for typed references"},
 		{"board", "show a local kanban-style board view"},
 		{"archive", "manage archived issue files"},

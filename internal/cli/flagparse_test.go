@@ -88,9 +88,9 @@ func TestSyncDryRunKeyFirst(t *testing.T) {
 	}
 	fake := jira.NewFakeTransport()
 	client := &writeCountingClient{Client: fake}
-	withSyncClientFactory(t, func(*config.Settings, *context.Context, string) (jira.Client, error) { return client, nil })
-	_, stderr := withSyncTestIO(t)
-	if exit := RunSync([]string{"PROJ-42", "--dry-run", "--project", "test"}); strings.Contains(stderr.String(), "positional") || strings.Contains(stderr.String(), "flag provided") {
+	withPushClientFactory(t, func(*config.Settings, *context.Context, string) (jira.Client, error) { return client, nil })
+	_, stderr := withPushIO(t)
+	if exit := RunPush([]string{"PROJ-42", "--dry-run", "--project", "test"}); strings.Contains(stderr.String(), "positional") || strings.Contains(stderr.String(), "flag provided") {
 		t.Fatalf("exit=%d stderr=%q", exit, stderr)
 	}
 	if client.writes != 0 {

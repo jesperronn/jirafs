@@ -105,18 +105,18 @@ func TestSyncDryRunWritesNothing(t *testing.T) {
 		Summary:  "Remote original summary",
 	})
 	client := &writeCountingClient{Client: fake}
-	withSyncClientFactory(t, func(*config.Settings, *context.Context, string) (jira.Client, error) { return client, nil })
-	stdout, stderr := withSyncTestIO(t)
+	withPushClientFactory(t, func(*config.Settings, *context.Context, string) (jira.Client, error) { return client, nil })
+	stdout, stderr := withPushIO(t)
 	before := snapshotTree(t, tmpDir)
 
-	if exit := RunSync([]string{"--project", "test", "--dry-run", "PROJ-42"}); exit != 0 {
+	if exit := RunPush([]string{"--project", "test", "--dry-run", "PROJ-42"}); exit != 0 {
 		t.Fatalf("exit = %d, stderr = %q", exit, stderr.String())
 	}
 	if client.writes != 0 {
 		t.Fatalf("remote writes = %d, want 0", client.writes)
 	}
 	assertTreeUnchanged(t, tmpDir, before)
-	for _, want := range []string{"operation(s) for issue PROJ-42", "dry run: nothing was written; to run it for real: jirafs sync PROJ-42"} {
+	for _, want := range []string{"operation(s) for issue PROJ-42", "dry run: nothing was written; to run it for real: jirafs push PROJ-42"} {
 		if !strings.Contains(stdout.String(), want) {
 			t.Errorf("stdout missing %q:\n%s", want, stdout.String())
 		}
@@ -127,8 +127,8 @@ func TestSyncDryRunWritesNothing(t *testing.T) {
 }
 
 func TestSyncDryRunWithApplyIsError(t *testing.T) {
-	_, stderr := withSyncTestIO(t)
-	if exit := RunSync([]string{"--dry-run", "--apply", "PROJ-1"}); exit != 2 {
+	_, stderr := withPushIO(t)
+	if exit := RunPush([]string{"--dry-run", "--apply", "PROJ-1"}); exit != 2 {
 		t.Fatalf("exit = %d, want 2", exit)
 	}
 	if !strings.Contains(stderr.String(), "--dry-run and --apply cannot be used together") {
@@ -415,23 +415,23 @@ func setupSyncWriteCount(t *testing.T) (*writeCountingClient, string, string) {
 		Summary:  "Remote original summary",
 	})
 	client := &writeCountingClient{Client: fake}
-	withSyncClientFactory(t, func(*config.Settings, *context.Context, string) (jira.Client, error) { return client, nil })
+	withPushClientFactory(t, func(*config.Settings, *context.Context, string) (jira.Client, error) { return client, nil })
 	return client, tmpDir, localPath
 }
 
 func TestSyncWithoutApplyIsDryRun(t *testing.T) {
 	client, tmpDir, _ := setupSyncWriteCount(t)
-	stdout, stderr := withSyncTestIO(t)
+	stdout, stderr := withPushIO(t)
 	before := snapshotTree(t, tmpDir)
 
-	if exit := RunSync([]string{"PROJ-42", "--project", "test"}); exit != 0 {
+	if exit := RunPush([]string{"PROJ-42", "--project", "test"}); exit != 0 {
 		t.Fatalf("exit = %d, stderr = %q", exit, stderr.String())
 	}
 	if client.writes != 0 {
 		t.Fatalf("remote writes = %d, want 0", client.writes)
 	}
 	assertTreeUnchanged(t, tmpDir, before)
-	want := "to run it for real: jirafs sync PROJ-42 --apply --project test"
+	want := "to run it for real: jirafs push PROJ-42 --apply --project test"
 	if !strings.Contains(stdout.String(), want) {
 		t.Fatalf("stdout missing %q:\n%s", want, stdout.String())
 	}
@@ -442,13 +442,13 @@ func TestSyncWithoutApplyIsDryRun(t *testing.T) {
 
 func TestSyncApplyWithDryRunIsUsageError(t *testing.T) {
 	client, tmpDir, _ := setupSyncWriteCount(t)
-	_, stderr := withSyncTestIO(t)
+	_, stderr := withPushIO(t)
 	before := snapshotTree(t, tmpDir)
 
-	if exit := RunSync([]string{"--project", "test", "--apply", "--dry-run", "PROJ-42"}); exit != 2 {
+	if exit := RunPush([]string{"--project", "test", "--apply", "--dry-run", "PROJ-42"}); exit != 2 {
 		t.Fatalf("exit = %d, want 2", exit)
 	}
-	if !strings.Contains(stderr.String(), "jirafs sync: --dry-run and --apply cannot be used together") {
+	if !strings.Contains(stderr.String(), "jirafs push: --dry-run and --apply cannot be used together") {
 		t.Fatalf("stderr = %q", stderr.String())
 	}
 	if client.writes != 0 {
@@ -459,17 +459,17 @@ func TestSyncApplyWithDryRunIsUsageError(t *testing.T) {
 
 func TestSyncWriteLocalHasNoEffectInDryRun(t *testing.T) {
 	client, tmpDir, _ := setupSyncWriteCount(t)
-	stdout, stderr := withSyncTestIO(t)
+	stdout, stderr := withPushIO(t)
 	before := snapshotTree(t, tmpDir)
 
-	if exit := RunSync([]string{"--project", "test", "--write-local", "PROJ-42"}); exit != 0 {
+	if exit := RunPush([]string{"--project", "test", "--write-local", "PROJ-42"}); exit != 0 {
 		t.Fatalf("exit = %d, stderr = %q", exit, stderr.String())
 	}
 	if client.writes != 0 {
 		t.Fatalf("remote writes = %d, want 0", client.writes)
 	}
 	assertTreeUnchanged(t, tmpDir, before)
-	want := "jirafs sync PROJ-42 --apply --write-local --project test"
+	want := "jirafs push PROJ-42 --apply --write-local --project test"
 	if !strings.Contains(stdout.String(), want) {
 		t.Fatalf("stdout missing %q:\n%s", want, stdout.String())
 	}
@@ -477,10 +477,10 @@ func TestSyncWriteLocalHasNoEffectInDryRun(t *testing.T) {
 
 func TestSyncApplyWithoutWriteLocalLeavesLocalFile(t *testing.T) {
 	client, _, localPath := setupSyncWriteCount(t)
-	_, stderr := withSyncTestIO(t)
+	_, stderr := withPushIO(t)
 	before, _ := os.ReadFile(localPath)
 
-	if exit := RunSync([]string{"--project", "test", "--apply", "PROJ-42"}); exit != 0 {
+	if exit := RunPush([]string{"--project", "test", "--apply", "PROJ-42"}); exit != 0 {
 		t.Fatalf("exit = %d, stderr = %q", exit, stderr.String())
 	}
 	if client.writes == 0 {

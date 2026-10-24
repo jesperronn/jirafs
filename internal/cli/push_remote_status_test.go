@@ -46,16 +46,16 @@ func setupStatusEnv(t *testing.T, localFrontmatterExtra, localSummary, remoteSta
 		Status:  remoteStatus,
 	})
 	factory := func(*config.Settings, *context.Context, string) (jira.Client, error) { return fake, nil }
-	withSyncClientFactory(t, factory)
+	withPushClientFactory(t, factory)
 	withDiffClientFactory(t, factory)
 	return fake, localPath
 }
 
-func TestRunSync_UnchangedStatusIsNotTransitioned(t *testing.T) {
+func TestPushUpdate_UnchangedStatusIsNotTransitioned(t *testing.T) {
 	fake, _ := setupStatusEnv(t, "status: 'Open'\n", "New summary", "Open")
-	stdout, stderr := withSyncTestIO(t)
+	stdout, stderr := withPushIO(t)
 
-	if exit := RunSync([]string{"--project", "test", "PROJ-42"}); exit != 0 {
+	if exit := RunPush([]string{"--project", "test", "PROJ-42"}); exit != 0 {
 		t.Fatalf("exit = %d, stderr = %q", exit, stderr.String())
 	}
 	if !strings.Contains(stdout.String(), "1 operation(s)") || strings.Contains(stdout.String(), "status") {
@@ -69,10 +69,10 @@ func TestRunSync_UnchangedStatusIsNotTransitioned(t *testing.T) {
 	}
 }
 
-func TestRunSync_StatusCaseInsensitiveNoOp(t *testing.T) {
+func TestPushUpdate_StatusCaseInsensitiveNoOp(t *testing.T) {
 	fake, _ := setupStatusEnv(t, "status: open\n", "New summary", "Open")
-	withSyncTestIO(t)
-	if exit := RunSync([]string{"--project", "test", "PROJ-42"}); exit != 0 {
+	withPushIO(t)
+	if exit := RunPush([]string{"--project", "test", "PROJ-42"}); exit != 0 {
 		t.Fatalf("exit = %d", exit)
 	}
 	if fake.FetchTransitionsCalls() != 0 {
@@ -80,10 +80,10 @@ func TestRunSync_StatusCaseInsensitiveNoOp(t *testing.T) {
 	}
 }
 
-func TestRunSync_UnknownRemoteStatusNeverTransitions(t *testing.T) {
+func TestPushUpdate_UnknownRemoteStatusNeverTransitions(t *testing.T) {
 	fake, _ := setupStatusEnv(t, "status: 'Open'\n", "New summary", "")
-	_, stderr := withSyncTestIO(t)
-	if exit := RunSync([]string{"--project", "test", "PROJ-42"}); exit != 0 {
+	_, stderr := withPushIO(t)
+	if exit := RunPush([]string{"--project", "test", "PROJ-42"}); exit != 0 {
 		t.Fatalf("exit = %d, stderr = %q", exit, stderr.String())
 	}
 	if fake.FetchTransitionsCalls() != 0 || len(fake.DoneTransitions()) != 0 {
@@ -114,24 +114,24 @@ func gatedTransition() []jira.Transition {
 	return ts
 }
 
-func TestRunSync_GatedTransitionWithoutValueBlocks(t *testing.T) {
+func TestPushUpdate_GatedTransitionWithoutValueBlocks(t *testing.T) {
 	fake, localPath := setupStatusEnv(t, "status: Done\n", "New summary", "Open")
 	fake.SetTransitions("PROJ-42", gatedTransition())
-	stdout, stderr := withSyncTestIO(t)
+	stdout, stderr := withPushIO(t)
 	before, _ := os.ReadFile(localPath)
 
 	for _, args := range [][]string{{"--project", "test", "PROJ-42"}, {"--project", "test", "--dry-run", "PROJ-42"}} {
-		if exit := RunSync(args); exit != 1 {
+		if exit := RunPush(args); exit != 1 {
 			t.Fatalf("%v: exit = %d, want 1", args, exit)
 		}
 	}
-	for _, want := range []string{`"Close"`, "customfield_900 (Root cause)", "jirafs sync PROJ-42 --dry-run", "nothing was written"} {
+	for _, want := range []string{`"Close"`, "customfield_900 (Root cause)", "jirafs push PROJ-42 --dry-run", "nothing was written"} {
 		if !strings.Contains(stderr.String(), want) {
 			t.Errorf("stderr missing %q: %q", want, stderr.String())
 		}
 	}
-	if stdout.Len() != 0 {
-		t.Errorf("stdout = %q, want empty", stdout.String())
+	if strings.Contains(stdout.String(), "applied") {
+		t.Errorf("stdout = %q, want no applied operations", stdout.String())
 	}
 	if len(fake.DoneTransitions()) != 0 {
 		t.Error("transition performed")
@@ -144,11 +144,11 @@ func TestRunSync_GatedTransitionWithoutValueBlocks(t *testing.T) {
 	}
 }
 
-func TestRunSync_GatedTransitionWithValueSendsFields(t *testing.T) {
+func TestPushUpdate_GatedTransitionWithValueSendsFields(t *testing.T) {
 	fake, _ := setupStatusEnv(t, "status: Done\ncustom_fields:\n  customfield_900: Bug in login\n", "New summary", "Open")
 	fake.SetTransitions("PROJ-42", gatedTransition())
-	_, stderr := withSyncTestIO(t)
-	if exit := RunSync([]string{"--project", "test", "--apply", "PROJ-42"}); exit != 0 {
+	_, stderr := withPushIO(t)
+	if exit := RunPush([]string{"--project", "test", "--apply", "PROJ-42"}); exit != 0 {
 		t.Fatalf("exit = %d, stderr = %q", exit, stderr.String())
 	}
 	if got := fake.DoneTransitions(); len(got) != 1 || got[0] != "PROJ-42:21" {

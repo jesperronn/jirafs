@@ -17,7 +17,6 @@ var helpCommands = [][]string{
 	{"diff"},
 	{"status"},
 	{"doctor"},
-	{"sync"},
 	{"new"},
 	{"push"},
 	{"registry"},
@@ -102,7 +101,7 @@ func TestUsageErrorsExitTwo(t *testing.T) {
 		{"mirror"}, {"mirror", "wat"}, {"mirror", "refresh"},
 		{"archive"}, {"archive", "wat"}, {"archive", "issue"},
 		{"registry"}, {"registry", "wat"}, {"registry", "show"},
-		{"new"}, {"push"}, {"sync"},
+		{"new"}, {"sync"},
 	} {
 		got := runSplit(t, home, args...)
 		if got.exitCode != 2 || got.stdout != "" || !strings.Contains(got.stderr, "Use --help for usage.") {

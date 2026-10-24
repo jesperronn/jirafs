@@ -377,7 +377,7 @@ Deliverables:
 - sync applier for create issue, field update, comment append, selected links,
   sprint assignment, fix versions, parent/epic assignment, and transitions
 - post-apply local metadata refresh
-- `jirafs sync` CLI path that consumes the planner output
+- `jirafs push` CLI path that consumes the planner output
 
 Sequencing:
 
@@ -656,7 +656,7 @@ The MVP is complete when all of the following are true:
 - that document can be edited locally in the supported field set
 - `jirafs diff` produces explicit operations and conflicts from local, remote,
   and last-synced state
-- `jirafs sync` safely applies the approved operations and refreshes local sync
+- `jirafs push` safely applies the approved operations and refreshes local sync
   metadata
 - a new issue can be created locally from a template and uploaded through the
   same planner/applier model

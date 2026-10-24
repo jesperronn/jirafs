@@ -1,7 +1,7 @@
 # Tasks: Credential Display & Timeout Feature
 
 ## Overview
-Implement credential display messaging and timeout handling for `jirafs sync` command with special support for 1password approval flow.
+Implement credential display messaging and timeout handling for `jirafs push` command with special support for 1password approval flow.
 
 ---
 
@@ -56,7 +56,7 @@ Messages should guide user toward resolution.
 ---
 
 ### 5. Integrate credential display & validation into sync command
-Wire up the new credential handling into `jirafs sync`:
+Wire up the new credential handling into `jirafs push`:
 - Call credential display before retrieval
 - Apply timeout to retrieval operation
 - Validate credential after retrieval

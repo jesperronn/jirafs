@@ -15,7 +15,7 @@ Suggested top-level commands:
 - `jirafs init`
 - `jirafs export`
 - `jirafs diff`
-- `jirafs sync`
+- `jirafs push`
 - `jirafs new`
 - `jirafs registry`
 - `jirafs board`
@@ -113,16 +113,25 @@ jirafs diff ABC-123 ABC-124
 jirafs diff --exit-code
 ```
 
-## Sync
+## Push
 
-Applies the planned operations to Jira.
+Writes local changes to Jira. A draft file (`state: draft`) is created as a new
+issue and renamed to `KEY.md`; an existing issue (KEY or its file) is updated,
+including status transitions. With no argument it pushes every locally modified
+file and draft (as listed by `jirafs status`). Dry run unless `--apply`;
+`--write-local` also refreshes the local file after an update. `--apply` with
+`--dry-run` exits 2. Each issue is reported as `ok`, `skipped (conflict)` or
+`failed`; one failure never stops the others and the exit code is 1 when any
+issue failed. Conflicted files (remote changed since the last pull) are skipped.
 
 Examples:
 
 ```text
-jirafs sync
-jirafs sync jira/live/issues/ABC-123.md
-jirafs sync --apply-transitions
+jirafs push
+jirafs push --apply
+jirafs push ABC-123
+jirafs push jira/live/issues/ABC-123.md --apply --write-local
+jirafs push jira/add-dark-mode.md --apply
 ```
 
 ## New

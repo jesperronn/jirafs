@@ -14,7 +14,6 @@ import (
 	"github.com/jirafs/jirafs/internal/config"
 	"github.com/jirafs/jirafs/internal/context"
 	"github.com/jirafs/jirafs/internal/jira"
-	"github.com/jirafs/jirafs/internal/schema"
 )
 
 func withPushTestIO(t *testing.T, fake *jira.FakeTransport) (*bytes.Buffer, *bytes.Buffer) {
@@ -86,10 +85,10 @@ func TestPushApplyRewritesAndRenames(t *testing.T) {
 			t.Errorf("missing %q in %s", want, out)
 		}
 	}
-	// A second push of the rewritten file is refused.
-	errBuf.Reset()
-	if code := RunPush([]string{newPath, "--apply", "--cwd", dir}); code != 1 || !strings.Contains(errBuf.String(), "not a draft") || !strings.Contains(errBuf.String(), "jirafs sync TEST-1") {
-		t.Fatalf("want refusal with hint, got %s", errBuf)
+	// A second push of the rewritten file is an update of the new issue.
+	out.Reset()
+	if code := RunPush([]string{newPath, "--apply", "--cwd", dir}); code != 0 || !strings.Contains(out.String(), "TEST-1  ok") {
+		t.Fatalf("want update of TEST-1, got out=%s err=%s", out, errBuf)
 	}
 }
 
@@ -97,9 +96,6 @@ func TestPushErrors(t *testing.T) {
 	dir := setupNewTest(t)
 	fake := jira.NewFakeTransport()
 	_, errBuf := withPushTestIO(t, fake)
-	if code := RunPush(nil); code != 2 || !strings.Contains(errBuf.String(), "jirafs push <draft.md>") {
-		t.Errorf("no args: %s", errBuf)
-	}
 	if code := RunPush([]string{filepath.Join(dir, "none.md")}); code != 1 {
 		t.Error("missing file should fail")
 	}
@@ -293,14 +289,13 @@ func TestPushDryRunNoClientWarns(t *testing.T) {
 }
 
 func TestPushApplyHintPreservesPathAndFlags(t *testing.T) {
-	if got, want := pushApplyHint("drafts/my draft.md", "test", "/w"), "jirafs push 'drafts/my draft.md' --apply --project test --cwd /w"; got != want {
+	if got, want := pushApplyHint([]string{"drafts/my draft.md"}, "test", "/w", false), "jirafs push 'drafts/my draft.md' --apply --project test --cwd /w"; got != want {
 		t.Fatalf("got %q want %q", got, want)
 	}
-	if got, want := pushApplyHint("d.md", "", ""), "jirafs push d.md --apply"; got != want {
+	if got, want := pushApplyHint([]string{"d.md"}, "", "", false), "jirafs push d.md --apply"; got != want {
 		t.Fatalf("got %q want %q", got, want)
 	}
-	issue := &schema.Issue{}
-	if h := syncHint(issue); strings.Contains(h, "jirafs sync") {
-		t.Errorf("keyless hint must not suggest sync: %q", h)
+	if got, want := pushApplyHint([]string{"A-1", "B-2"}, "", "", true), "jirafs push A-1 B-2 --apply --write-local"; got != want {
+		t.Fatalf("got %q want %q", got, want)
 	}
 }

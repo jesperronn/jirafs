@@ -109,7 +109,7 @@ func wantsHelpOrWord(args []string) bool {
 }
 
 // usageError prints one error line plus the standard hint to w and returns
-// the usage-error exit code 2. cmd is the command prefix, e.g. "jirafs sync".
+// the usage-error exit code 2. cmd is the command prefix, e.g. "jirafs push".
 func usageError(w io.Writer, cmd, format string, a ...any) int {
 	fmt.Fprintf(w, "%s: %s\n", cmd, fmt.Sprintf(format, a...))
 	fmt.Fprintf(w, "Use --help for usage.\n")

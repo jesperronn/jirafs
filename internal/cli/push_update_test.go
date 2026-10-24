@@ -14,87 +14,117 @@ import (
 	"github.com/jirafs/jirafs/internal/schema"
 )
 
-// TestRunSync_UnknownSubcommand verifies that RunSync with an unknown
+// TestPushUpdate_UnknownSubcommand verifies that RunPush with an unknown
 // subcommand (not "help") returns exit code 1.
-func TestRunSync_UnknownSubcommand(t *testing.T) {
-	exit := RunSync([]string{"bogus"})
+func TestPushUpdate_UnknownSubcommand(t *testing.T) {
+	exit := RunPush([]string{"bogus"})
 	if exit != 1 {
-		t.Errorf("RunSync([\"bogus\"]) = %d, want 1", exit)
+		t.Errorf("RunPush([\"bogus\"]) = %d, want 1", exit)
 	}
 }
 
-// TestRunSync_Help verifies that "help" returns exit code 0.
-func TestRunSync_Help(t *testing.T) {
-	exit := RunSync([]string{"help"})
+// TestPushUpdate_Help verifies that "help" returns exit code 0.
+func TestPushUpdate_Help(t *testing.T) {
+	exit := RunPush([]string{"help"})
 	if exit != 0 {
-		t.Errorf("RunSync([\"help\"]) = %d, want 0", exit)
+		t.Errorf("RunPush([\"help\"]) = %d, want 0", exit)
 	}
 }
 
-func withSyncTestIO(t *testing.T) (*bytes.Buffer, *bytes.Buffer) {
+func withPushIO(t *testing.T) (*bytes.Buffer, *bytes.Buffer) {
 	t.Helper()
 	stdout := &bytes.Buffer{}
 	stderr := &bytes.Buffer{}
-	oldStdout := syncStdout
-	oldStderr := syncStderr
-	syncStdout = stdout
-	syncStderr = stderr
+	oldStdout := pushStdout
+	oldStderr := pushStderr
+	pushStdout = stdout
+	pushStderr = stderr
 	t.Cleanup(func() {
-		syncStdout = oldStdout
-		syncStderr = oldStderr
+		pushStdout = oldStdout
+		pushStderr = oldStderr
 	})
 	return stdout, stderr
 }
 
-func withSyncClientFactory(t *testing.T, factory func(*config.Settings, *context.Context, string) (jira.Client, error)) {
+func withPushClientFactory(t *testing.T, factory func(*config.Settings, *context.Context, string) (jira.Client, error)) {
 	t.Helper()
-	oldFactory := syncClientFactory
-	syncClientFactory = factory
+	oldFactory := pushClientFactory
+	pushClientFactory = factory
 	t.Cleanup(func() {
-		syncClientFactory = oldFactory
+		pushClientFactory = oldFactory
 	})
 }
 
-// returns exit code 1.
-func TestRunSync_TooManyArgs(t *testing.T) {
+// setupLocalPush writes settings whose local_dirs holds PROJ-42.md (summary
+// "Local modified summary") and points HOME at them.
+func setupLocalPush(t *testing.T) {
+	t.Helper()
 	tmpDir := t.TempDir()
-	homeDir := writeSettings(t, tmpDir)
-	oldHome := os.Getenv("HOME")
-	os.Setenv("HOME", homeDir)
-	defer os.Setenv("HOME", oldHome)
-
-	_, stderr := withSyncTestIO(t)
-	exit := RunSync([]string{"--project", "test", "PROJ-1", "extra"})
-	if exit != 1 {
-		t.Fatalf("RunSync([\"PROJ-1\", \"extra\"]) = %d, want 1", exit)
+	homeDir := t.TempDir()
+	localDir := filepath.Join(tmpDir, "local")
+	if err := os.MkdirAll(localDir, 0o755); err != nil {
+		t.Fatal(err)
 	}
-	if !strings.Contains(stderr.String(), "too many positional arguments") {
-		t.Fatalf("stderr = %q, want too many positional arguments", stderr.String())
+	issue := "---\nkey: PROJ-42\ntype: story\nproject:\n  type: project\n  value: PROJ\n---\n\nSummary: Local modified summary\n"
+	if err := os.WriteFile(filepath.Join(localDir, "PROJ-42.md"), []byte(issue), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	settings := "version = 1\n\n[instances.default]\nbase_url = \"https://example.atlassian.net\"\nauth_type = \"basic\"\n\n[projects.test]\nkey = \"TEST\"\ninstance = \"default\"\nmirror_dir = \"" +
+		filepath.Join(tmpDir, "mirror") + "\"\nlocal_dirs = [\"" + localDir + "\"]\n"
+	if err := os.MkdirAll(filepath.Join(homeDir, ".jirafs"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(homeDir, ".jirafs", "settings.toml"), []byte(settings), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("HOME", homeDir)
+}
+
+// TestPushUpdate_FailureIsolation verifies that one failing target does not
+// stop the others and that the summary names each result.
+func TestPushUpdate_FailureIsolation(t *testing.T) {
+	setupLocalPush(t)
+	fake := jira.NewFakeTransport()
+	fake.SetIssue("PROJ-42", &schema.Issue{
+		Identity: schema.IssueIdentity{Key: "PROJ-42", Type: "story", Project: schema.TypedRef{Type: schema.RefProject, Value: "PROJ"}},
+		Summary:  "Remote original summary",
+	})
+	withPushClientFactory(t, func(*config.Settings, *context.Context, string) (jira.Client, error) { return fake, nil })
+	stdout, stderr := withPushIO(t)
+
+	exit := RunPush([]string{"--project", "test", "PROJ-1", "PROJ-42"})
+	if exit != 1 {
+		t.Fatalf("exit = %d, want 1; stderr = %q", exit, stderr.String())
+	}
+	for _, want := range []string{"PROJ-1  failed  issue PROJ-1 not found in local directories", "PROJ-42  ok  would apply 1 operation(s)", "1 ok, 0 skipped, 1 failed"} {
+		if !strings.Contains(stdout.String(), want) {
+			t.Errorf("stdout missing %q:\n%s", want, stdout.String())
+		}
 	}
 }
 
-// TestRunSync_NoProjectResolved verifies that sync without a resolvable
+// TestPushUpdate_NoProjectResolved verifies that sync without a resolvable
 // project returns exit code 1.
-func TestRunSync_NoProjectResolved(t *testing.T) {
+func TestPushUpdate_NoProjectResolved(t *testing.T) {
 	tmpDir := t.TempDir()
 	homeDir := writeSettings(t, tmpDir)
 	oldHome := os.Getenv("HOME")
 	os.Setenv("HOME", homeDir)
 	defer os.Setenv("HOME", oldHome)
 
-	_, stderr := withSyncTestIO(t)
-	exit := RunSync([]string{"--cwd", filepath.Join(tmpDir, "outside"), "PROJ-42"})
+	_, stderr := withPushIO(t)
+	exit := RunPush([]string{"--cwd", filepath.Join(tmpDir, "outside"), "PROJ-42"})
 	if exit != 1 {
-		t.Fatalf("RunSync([\"--project\", \"test\", \"--cwd\", ...]) = %d, want 1", exit)
+		t.Fatalf("RunPush([\"--project\", \"test\", \"--cwd\", ...]) = %d, want 1", exit)
 	}
 	if !strings.Contains(stderr.String(), "no project resolved") {
 		t.Fatalf("stderr = %q, want no project resolved", stderr.String())
 	}
 }
 
-// TestRunSync_NoLocalIssue verifies that sync returns an error when
+// TestPushUpdate_NoLocalIssue verifies that sync returns an error when
 // the local issue file is not found.
-func TestRunSync_NoLocalIssue(t *testing.T) {
+func TestPushUpdate_NoLocalIssue(t *testing.T) {
 	tmpDir := t.TempDir()
 	homeDir := writeSettings(t, tmpDir)
 	oldHome := os.Getenv("HOME")
@@ -110,23 +140,23 @@ func TestRunSync_NoLocalIssue(t *testing.T) {
 		},
 		Summary: "Remote issue",
 	})
-	withSyncClientFactory(t, func(*config.Settings, *context.Context, string) (jira.Client, error) {
+	withPushClientFactory(t, func(*config.Settings, *context.Context, string) (jira.Client, error) {
 		return fake, nil
 	})
-	_, stderr := withSyncTestIO(t)
+	_, stderr := withPushIO(t)
 
-	exit := RunSync([]string{"--project", "test", "PROJ-42"})
+	exit := RunPush([]string{"--project", "test", "PROJ-42"})
 	if exit != 1 {
-		t.Fatalf("RunSync([\"PROJ-42\"]) = %d, want 1", exit)
+		t.Fatalf("RunPush([\"PROJ-42\"]) = %d, want 1", exit)
 	}
 	if !strings.Contains(stderr.String(), "not found in local directories") {
 		t.Fatalf("stderr = %q, want not found in local directories", stderr.String())
 	}
 }
 
-// TestRunSync_Success_NoChanges verifies that sync reports no changes
+// TestPushUpdate_Success_NoChanges verifies that sync reports no changes
 // when local and remote match.
-func TestRunSync_Success_NoChanges(t *testing.T) {
+func TestPushUpdate_Success_NoChanges(t *testing.T) {
 	tmpDir := t.TempDir()
 	homeDir := writeSettings(t, tmpDir)
 
@@ -184,14 +214,14 @@ local_dirs = ["` + localDir + `"]
 		},
 		Summary: "Remote issue",
 	})
-	withSyncClientFactory(t, func(*config.Settings, *context.Context, string) (jira.Client, error) {
+	withPushClientFactory(t, func(*config.Settings, *context.Context, string) (jira.Client, error) {
 		return fake, nil
 	})
-	stdout, stderr := withSyncTestIO(t)
+	stdout, stderr := withPushIO(t)
 
-	exit := RunSync([]string{"--project", "test", "PROJ-42"})
+	exit := RunPush([]string{"--project", "test", "PROJ-42"})
 	if exit != 0 {
-		t.Fatalf("RunSync([\"PROJ-42\"]) = %d, stderr = %q", exit, stderr.String())
+		t.Fatalf("RunPush([\"PROJ-42\"]) = %d, stderr = %q", exit, stderr.String())
 	}
 
 	output := stdout.String()
@@ -203,9 +233,9 @@ local_dirs = ["` + localDir + `"]
 	}
 }
 
-// TestRunSync_Success_WithChanges verifies that sync reports operations
+// TestPushUpdate_Success_WithChanges verifies that sync reports operations
 // and pushes the updated remote when local and remote differ.
-func TestRunSync_Success_WithChanges(t *testing.T) {
+func TestPushUpdate_Success_WithChanges(t *testing.T) {
 	tmpDir := t.TempDir()
 	homeDir := writeSettings(t, tmpDir)
 
@@ -262,14 +292,14 @@ local_dirs = ["` + localDir + `"]
 		},
 		Summary: "Remote original summary",
 	})
-	withSyncClientFactory(t, func(*config.Settings, *context.Context, string) (jira.Client, error) {
+	withPushClientFactory(t, func(*config.Settings, *context.Context, string) (jira.Client, error) {
 		return fake, nil
 	})
-	stdout, stderr := withSyncTestIO(t)
+	stdout, stderr := withPushIO(t)
 
-	exit := RunSync([]string{"--project", "test", "--apply", "PROJ-42"})
+	exit := RunPush([]string{"--project", "test", "--apply", "PROJ-42"})
 	if exit != 0 {
-		t.Fatalf("RunSync([\"PROJ-42\"]) = %d, stderr = %q", exit, stderr.String())
+		t.Fatalf("RunPush([\"PROJ-42\"]) = %d, stderr = %q", exit, stderr.String())
 	}
 
 	output := stdout.String()
@@ -287,81 +317,69 @@ local_dirs = ["` + localDir + `"]
 	}
 }
 
-// TestRunSync_FetchError verifies that sync returns an error when
+// TestPushUpdate_FetchError verifies that sync returns an error when
 // the Jira fetch fails.
-func TestRunSync_FetchError(t *testing.T) {
-	tmpDir := t.TempDir()
-	homeDir := writeSettings(t, tmpDir)
-	oldHome := os.Getenv("HOME")
-	os.Setenv("HOME", homeDir)
-	defer os.Setenv("HOME", oldHome)
+func TestPushUpdate_FetchError(t *testing.T) {
+	setupLocalPush(t)
 
 	fake := jira.NewFakeTransport()
 	fake.SetErr("fetch", jira.NewHTTPErr(500, "server error"))
-	withSyncClientFactory(t, func(*config.Settings, *context.Context, string) (jira.Client, error) {
+	withPushClientFactory(t, func(*config.Settings, *context.Context, string) (jira.Client, error) {
 		return fake, nil
 	})
-	_, stderr := withSyncTestIO(t)
+	_, stderr := withPushIO(t)
 
-	exit := RunSync([]string{"--project", "test", "PROJ-42"})
+	exit := RunPush([]string{"--project", "test", "PROJ-42"})
 	if exit != 1 {
-		t.Fatalf("RunSync([\"PROJ-42\"]) = %d, want 1", exit)
+		t.Fatalf("RunPush([\"PROJ-42\"]) = %d, want 1", exit)
 	}
 	if !strings.Contains(stderr.String(), "server error") {
 		t.Fatalf("stderr = %q, want server error", stderr.String())
 	}
 }
 
-// TestRunSync_NotFound verifies that sync returns a not found error
+// TestPushUpdate_NotFound verifies that sync returns a not found error
 // when the remote issue does not exist.
-func TestRunSync_NotFound(t *testing.T) {
-	tmpDir := t.TempDir()
-	homeDir := writeSettings(t, tmpDir)
-	oldHome := os.Getenv("HOME")
-	os.Setenv("HOME", homeDir)
-	defer os.Setenv("HOME", oldHome)
+func TestPushUpdate_NotFound(t *testing.T) {
+	setupLocalPush(t)
 
 	fake := jira.NewFakeTransport()
-	withSyncClientFactory(t, func(*config.Settings, *context.Context, string) (jira.Client, error) {
+	withPushClientFactory(t, func(*config.Settings, *context.Context, string) (jira.Client, error) {
 		return fake, nil
 	})
-	_, stderr := withSyncTestIO(t)
+	_, stderr := withPushIO(t)
 
-	exit := RunSync([]string{"--project", "test", "PROJ-99"})
+	exit := RunPush([]string{"--project", "test", "PROJ-42"})
 	if exit != 1 {
-		t.Fatalf("RunSync([\"PROJ-99\"]) = %d, want 1", exit)
+		t.Fatalf("RunPush([\"PROJ-42\"]) = %d, want 1", exit)
 	}
 	if !strings.Contains(stderr.String(), "not_found") {
 		t.Fatalf("stderr = %q, want not_found error", stderr.String())
 	}
 }
 
-// TestRunSync_ClientCreationError verifies that sync returns an error
+// TestPushUpdate_ClientCreationError verifies that sync returns an error
 // when the Jira client cannot be created.
-func TestRunSync_ClientCreationError(t *testing.T) {
-	tmpDir := t.TempDir()
-	homeDir := writeSettings(t, tmpDir)
-	oldHome := os.Getenv("HOME")
-	os.Setenv("HOME", homeDir)
-	defer os.Setenv("HOME", oldHome)
+func TestPushUpdate_ClientCreationError(t *testing.T) {
+	setupLocalPush(t)
 
-	withSyncClientFactory(t, func(*config.Settings, *context.Context, string) (jira.Client, error) {
+	withPushClientFactory(t, func(*config.Settings, *context.Context, string) (jira.Client, error) {
 		return nil, os.ErrPermission
 	})
-	_, stderr := withSyncTestIO(t)
+	_, stderr := withPushIO(t)
 
-	exit := RunSync([]string{"--project", "test", "PROJ-42"})
+	exit := RunPush([]string{"--project", "test", "PROJ-42"})
 	if exit != 1 {
-		t.Fatalf("RunSync([\"PROJ-42\"]) = %d, want 1", exit)
+		t.Fatalf("RunPush([\"PROJ-42\"]) = %d, want 1", exit)
 	}
 	if !strings.Contains(stderr.String(), "cannot create Jira client") {
 		t.Fatalf("stderr = %q, want client creation error", stderr.String())
 	}
 }
 
-// TestRunSync_LocalIssueUnparseable verifies that sync skips files that
+// TestPushUpdate_LocalIssueUnparseable verifies that sync skips files that
 // cannot be parsed as issues.
-func TestRunSync_LocalIssueUnparseable(t *testing.T) {
+func TestPushUpdate_LocalIssueUnparseable(t *testing.T) {
 	tmpDir := t.TempDir()
 	homeDir := writeSettings(t, tmpDir)
 
@@ -387,23 +405,23 @@ func TestRunSync_LocalIssueUnparseable(t *testing.T) {
 		},
 		Summary: "Remote issue",
 	})
-	withSyncClientFactory(t, func(*config.Settings, *context.Context, string) (jira.Client, error) {
+	withPushClientFactory(t, func(*config.Settings, *context.Context, string) (jira.Client, error) {
 		return fake, nil
 	})
-	_, stderr := withSyncTestIO(t)
+	_, stderr := withPushIO(t)
 
-	exit := RunSync([]string{"--project", "test", "PROJ-42"})
+	exit := RunPush([]string{"--project", "test", "PROJ-42"})
 	if exit != 1 {
-		t.Fatalf("RunSync([\"PROJ-42\"]) = %d, want 1", exit)
+		t.Fatalf("RunPush([\"PROJ-42\"]) = %d, want 1", exit)
 	}
 	if !strings.Contains(stderr.String(), "not found in local directories") {
 		t.Fatalf("stderr = %q, want not found in local directories", stderr.String())
 	}
 }
 
-// TestRunSync_UpdateIssueError verifies that sync returns an error
+// TestPushUpdate_UpdateIssueError verifies that sync returns an error
 // when the Jira update fails after a successful plan.
-func TestRunSync_UpdateIssueError(t *testing.T) {
+func TestPushUpdate_UpdateIssueError(t *testing.T) {
 	tmpDir := t.TempDir()
 	homeDir := writeSettings(t, tmpDir)
 
@@ -462,23 +480,23 @@ local_dirs = ["` + localDir + `"]
 	})
 	// Configure the fake to fail on update.
 	fake.SetErr("update", jira.NewHTTPErr(500, "update server error"))
-	withSyncClientFactory(t, func(*config.Settings, *context.Context, string) (jira.Client, error) {
+	withPushClientFactory(t, func(*config.Settings, *context.Context, string) (jira.Client, error) {
 		return fake, nil
 	})
-	_, stderr := withSyncTestIO(t)
+	_, stderr := withPushIO(t)
 
-	exit := RunSync([]string{"--project", "test", "--apply", "PROJ-42"})
+	exit := RunPush([]string{"--project", "test", "--apply", "PROJ-42"})
 	if exit != 1 {
-		t.Fatalf("RunSync([\"PROJ-42\"]) = %d, want 1", exit)
+		t.Fatalf("RunPush([\"PROJ-42\"]) = %d, want 1", exit)
 	}
 	if !strings.Contains(stderr.String(), "cannot update remote issue") {
 		t.Fatalf("stderr = %q, want cannot update remote issue", stderr.String())
 	}
 }
 
-// TestRunSync_Success_WithChangesAndApply verifies that sync with --apply
+// TestPushUpdate_Success_WithChangesAndApply verifies that sync with --apply
 // writes the updated remote back to the local file system.
-func TestRunSync_Success_WithChangesAndApply(t *testing.T) {
+func TestPushUpdate_Success_WithChangesAndApply(t *testing.T) {
 	tmpDir := t.TempDir()
 	homeDir := writeSettings(t, tmpDir)
 
@@ -534,14 +552,14 @@ local_dirs = ["` + localDir + `"]
 		},
 		Summary: "Remote original summary",
 	})
-	withSyncClientFactory(t, func(*config.Settings, *context.Context, string) (jira.Client, error) {
+	withPushClientFactory(t, func(*config.Settings, *context.Context, string) (jira.Client, error) {
 		return fake, nil
 	})
-	stdout, stderr := withSyncTestIO(t)
+	stdout, stderr := withPushIO(t)
 
-	exit := RunSync([]string{"--project", "test", "--apply", "--write-local", "PROJ-42"})
+	exit := RunPush([]string{"--project", "test", "--apply", "--write-local", "PROJ-42"})
 	if exit != 0 {
-		t.Fatalf("RunSync([\"--project\", \"test\", \"--apply\", \"PROJ-42\"]) = %d, stderr = %q", exit, stderr.String())
+		t.Fatalf("RunPush([\"--project\", \"test\", \"--apply\", \"PROJ-42\"]) = %d, stderr = %q", exit, stderr.String())
 	}
 
 	output := stdout.String()
@@ -559,28 +577,28 @@ local_dirs = ["` + localDir + `"]
 	}
 }
 
-// TestRunSync_ResolveContextError verifies that sync returns an error
+// TestPushUpdate_ResolveContextError verifies that sync returns an error
 // when no project can be resolved for the given cwd.
-func TestRunSync_ResolveContextError(t *testing.T) {
+func TestPushUpdate_ResolveContextError(t *testing.T) {
 	tmpDir := t.TempDir()
 	homeDir := writeSettings(t, tmpDir)
 	oldHome := os.Getenv("HOME")
 	os.Setenv("HOME", homeDir)
 	defer os.Setenv("HOME", oldHome)
 
-	_, stderr := withSyncTestIO(t)
-	exit := RunSync([]string{"--cwd", filepath.Join(tmpDir, "outside"), "PROJ-42"})
+	_, stderr := withPushIO(t)
+	exit := RunPush([]string{"--cwd", filepath.Join(tmpDir, "outside"), "PROJ-42"})
 	if exit != 1 {
-		t.Fatalf("RunSync([\"--project\", \"test\", \"--cwd\", ...]) = %d, want 1", exit)
+		t.Fatalf("RunPush([\"--project\", \"test\", \"--cwd\", ...]) = %d, want 1", exit)
 	}
 	if !strings.Contains(stderr.String(), "no project resolved") {
 		t.Fatalf("stderr = %q, want no project resolved", stderr.String())
 	}
 }
 
-// TestResolveSyncContext_NoProject verifies that resolveSyncContext
+// TestResolvePushContext_NoProject verifies that resolvePushContext
 // returns false when no project can be resolved for the given cwd.
-func TestResolveSyncContext_NoProject(t *testing.T) {
+func TestResolvePushContext_NoProject(t *testing.T) {
 	tmpDir := t.TempDir()
 	homeDir := writeSettings(t, tmpDir)
 	oldHome := os.Getenv("HOME")
@@ -590,9 +608,9 @@ func TestResolveSyncContext_NoProject(t *testing.T) {
 	if err != nil {
 		t.Fatalf("config.Load: %v", err)
 	}
-	_, stderr := withSyncTestIO(t)
+	_, stderr := withPushIO(t)
 
-	ctx, ok := resolveSyncContext(settings, context.NewResolver(settings, ""))
+	ctx, ok := resolvePushContext(settings, "", filepath.Join(tmpDir, "outside"))
 	if ok {
 		t.Fatal("expected unresolved project")
 	}
@@ -657,25 +675,24 @@ func TestBuildSyncClient_CredentialError(t *testing.T) {
 	}
 }
 
-// TestRunSync_NoKeyBlocked verifies that multi-issue sync is rejected
-// without loading settings, building a client or touching files.
-func TestRunSync_NoKeyBlocked(t *testing.T) {
+// TestPushUpdate_NothingToPush verifies that push without arguments reports
+// a clean tree and writes nothing.
+func TestPushUpdate_NothingToPush(t *testing.T) {
+	tmpDir := t.TempDir()
+	homeDir := writeSettings(t, tmpDir)
+	t.Setenv("HOME", homeDir)
 	built := false
-	withSyncClientFactory(t, func(*config.Settings, *context.Context, string) (jira.Client, error) {
+	withPushClientFactory(t, func(*config.Settings, *context.Context, string) (jira.Client, error) {
 		built = true
 		return nil, nil
 	})
-	stdout, stderr := withSyncTestIO(t)
-	exit := RunSync([]string{"--project", "test"})
-	if exit != 2 {
-		t.Fatalf("exit = %d, want 2", exit)
+	stdout, stderr := withPushIO(t)
+	exit := RunPush([]string{"--project", "test", "--cwd", tmpDir})
+	if exit != 0 {
+		t.Fatalf("exit = %d, stderr = %q", exit, stderr.String())
 	}
-	want := "jirafs sync: syncing multiple issues is not implemented yet; sync one issue at a time: jirafs sync <KEY>\nUse --help for usage.\n"
-	if stderr.String() != want {
-		t.Fatalf("stderr = %q, want %q", stderr.String(), want)
-	}
-	if stdout.Len() != 0 || built {
-		t.Fatalf("stdout = %q, built = %v; want nothing", stdout.String(), built)
+	if !strings.Contains(stdout.String(), "nothing to push") || built {
+		t.Fatalf("stdout = %q, built = %v", stdout.String(), built)
 	}
 }
 
@@ -715,7 +732,7 @@ func (c *ctxClient) UpdateIssue(ctx stdcontext.Context, key string, issue *schem
 	return c.Client.UpdateIssue(ctx, key, issue)
 }
 
-func TestRunSyncIssue_CancelledContext(t *testing.T) {
+func TestPushTarget_CancelledContext(t *testing.T) {
 	tmpDir := t.TempDir()
 	localDir := filepath.Join(tmpDir, "local")
 	if err := os.MkdirAll(localDir, 0o755); err != nil {
@@ -739,16 +756,17 @@ func TestRunSyncIssue_CancelledContext(t *testing.T) {
 		Summary:  "Remote original summary",
 	})
 	client := &ctxClient{Client: fake}
-	withSyncClientFactory(t, func(*config.Settings, *context.Context, string) (jira.Client, error) {
+	withPushClientFactory(t, func(*config.Settings, *context.Context, string) (jira.Client, error) {
 		return client, nil
 	})
-	_, stderr := withSyncTestIO(t)
+	_, stderr := withPushIO(t)
 
 	ctx, cancel := stdcontext.WithCancel(stdcontext.Background())
 	cancel()
-	exit := runSyncIssue(ctx, []string{"PROJ-42"}, settings, context.NewResolver(settings, "test"), syncOptions{apply: true, writeLocal: true})
-	if exit != 1 {
-		t.Fatalf("runSyncIssue with cancelled context = %d, want 1; stderr = %q", exit, stderr.String())
+	run := &pushRun{cmdCtx: ctx, settings: settings, ctx: &context.Context{Name: "test", Key: "TEST", Instance: "default"}, opts: pushOptions{apply: true, writeLocal: true}}
+	res := run.pushTarget("PROJ-42", "")
+	if res.status != pushFailed {
+		t.Fatalf("pushTarget with cancelled context = %+v, want failed; stderr = %q", res, stderr.String())
 	}
 	if client.writes != 0 {
 		t.Fatalf("Jira writes = %d, want 0", client.writes)

@@ -70,7 +70,7 @@ type ChangeState string
 const (
 	// ChangeConflicted marks a modified file whose remote copy moved on.
 	ChangeConflicted ChangeState = "conflicted"
-	// ChangeModified marks a file edited since the last export/refresh/sync.
+	// ChangeModified marks a file edited since the last export/refresh/push.
 	ChangeModified ChangeState = "modified"
 	// ChangeDraft marks a locally created issue not yet pushed to Jira.
 	ChangeDraft ChangeState = "draft"
@@ -192,7 +192,11 @@ func collectLocalChanges(dirs []string, m mirror.Mirror) []LocalChange {
 				if remoteAhead(m.RemoteUpdatedFor(issue.Identity.Key), issue.Context.Updated) {
 					state = ChangeConflicted
 				}
-				changes = append(changes, LocalChange{state, key, path, "jirafs diff " + key})
+				cmd := "jirafs push " + key
+				if state == ChangeConflicted {
+					cmd = "jirafs diff " + key
+				}
+				changes = append(changes, LocalChange{state, key, path, cmd})
 			}
 		}
 	}

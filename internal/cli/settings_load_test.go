@@ -15,7 +15,7 @@ func TestMissingSettingsPrintsFirstRunHint(t *testing.T) {
 		stderr *io.Writer
 		run    func() int
 	}{
-		{"sync", &syncStderr, func() int { return RunSync([]string{"PLAT-1"}) }},
+		{"push", &pushStderr, func() int { return RunPush([]string{"PLAT-1"}) }},
 		{"export", &exportStderr, func() int { return RunExport([]string{"issue", "PLAT-1"}) }},
 		{"diff", &diffStderr, func() int { return RunDiff([]string{"PLAT-1"}) }},
 		{"mirror", &mirrorStderr, func() int { return RunMirror([]string{"refresh", "my-issues"}) }},
@@ -81,12 +81,12 @@ func TestLoadSettingsOrHintParseErrorNamesFile(t *testing.T) {
 	}
 
 	var buf bytes.Buffer
-	s, ok := loadSettingsOrHint(&buf, "sync")
+	s, ok := loadSettingsOrHint(&buf, "push")
 	if ok || s != nil {
 		t.Fatalf("loadSettingsOrHint = (%v, %v), want (nil, false)", s, ok)
 	}
 	out := buf.String()
-	if !strings.Contains(out, "jirafs sync: cannot load settings:") {
+	if !strings.Contains(out, "jirafs push: cannot load settings:") {
 		t.Errorf("missing error message:\n%s", out)
 	}
 	if !strings.Contains(out, path) {
