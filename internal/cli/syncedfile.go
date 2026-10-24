@@ -4,17 +4,22 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/jirafs/jirafs/internal/mirror"
 	"github.com/jirafs/jirafs/internal/schema"
 )
 
 // writeSyncedIssue renders issue, stamps it with its synced_hash and writes it
-// to dest. When mirrorDir holds a mirror.yml, the issue's remote updated
+// to dest and stores its remote-side content as the merge base under
+// .jirafs/base in mirrorDir. When mirrorDir holds a mirror.yml, the issue's remote updated
 // timestamp is recorded there so `jirafs status` can detect remote changes
 // offline. Mirror bookkeeping failures are returned so callers never silently
 // lose conflict information.
 func writeSyncedIssue(dest, mirrorDir string, issue *schema.Issue) error {
 	content := schema.StampSyncedHash(schema.RenderIssue(*issue))
 	if err := os.WriteFile(dest, []byte(content), 0o644); err != nil {
+		return err
+	}
+	if err := mirror.SaveBase(mirrorDir, issue); err != nil {
 		return err
 	}
 	return recordRemoteUpdated(mirrorDir, issue.Identity.Key, issue.Context.Updated)

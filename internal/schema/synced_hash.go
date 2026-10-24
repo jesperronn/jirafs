@@ -101,3 +101,22 @@ func StampSyncedHash(doc string) string {
 	sb.WriteString(body)
 	return sb.String()
 }
+
+// StripVolatile returns doc with the volatile frontmatter fields (synced_hash,
+// sync_time) removed. Documents without frontmatter are returned unchanged.
+func StripVolatile(doc string) string {
+	front, body, ok := splitDocument(doc)
+	if !ok {
+		return doc
+	}
+	var sb strings.Builder
+	sb.WriteString("---\n")
+	for _, l := range front {
+		if !isVolatileLine(l) {
+			sb.WriteString(l)
+		}
+	}
+	sb.WriteString("---\n")
+	sb.WriteString(body)
+	return sb.String()
+}

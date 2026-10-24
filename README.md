@@ -95,6 +95,15 @@ scopes:
 `my-issues` and `current-sprint` also work without a `mirror.yml` entry.
 Unknown scope names print the configured names and an example to add.
 
+## Base snapshots
+
+After every successful `pull` or `push` write of an issue, jirafs stores the
+rendered remote-side content of that issue (without `synced_hash` and
+`sync_time`) at `.jirafs/base/KEY.md` under the mirror directory. It is the
+merge base for per-field and three-way comparison. The `.jirafs/` directory is
+jirafs-internal state and is not to be edited by hand; a missing or unreadable
+base is treated as "no base" and never blocks a pull.
+
 ## Current Status
 
 What works today:

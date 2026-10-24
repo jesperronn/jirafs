@@ -509,6 +509,8 @@ func (r *pushRun) updateIssue(key string, localIssue schema.Issue, localPath str
 		if err := writeSyncedIssue(localPath, r.ctx.MirrorDir, result.Remote); err != nil {
 			return pushFail(key, fmt.Sprintf("cannot write updated local issue: %v", err))
 		}
+	} else if err := mirror.SaveBase(r.ctx.MirrorDir, result.Remote); err != nil {
+		return pushFail(key, fmt.Sprintf("cannot store base snapshot: %v", err))
 	}
 
 	fmt.Fprintf(pushStdout, "jirafs push: applied %d operation(s) successfully\n", len(ops))
