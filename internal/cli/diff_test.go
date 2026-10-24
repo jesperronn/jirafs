@@ -13,9 +13,9 @@ import (
 	"github.com/jirafs/jirafs/internal/schema"
 )
 
-// TestRunPlan_NoArgs verifies that calling RunPlan with no arguments
+// TestRunDiff_NoArgs verifies that calling RunDiff with no arguments
 // returns exit code 0 and lists local issues (possibly empty).
-func TestRunPlan_NoArgs(t *testing.T) {
+func TestRunDiff_NoArgs(t *testing.T) {
 	tmpDir := t.TempDir()
 	homeDir := filepath.Join(tmpDir, "home")
 	jirafsDir := filepath.Join(homeDir, ".jirafs")
@@ -23,7 +23,7 @@ func TestRunPlan_NoArgs(t *testing.T) {
 		t.Fatalf("MkdirAll: %v", err)
 	}
 
-	// Create settings with a default current_project, so RunPlan doesn't need --project flag.
+	// Create settings with a default current_project, so RunDiff doesn't need --project flag.
 	settingsTOML := `version = 1
 
 [instances.default]
@@ -47,10 +47,10 @@ current_project = "test"
 	os.Setenv("HOME", homeDir)
 	defer os.Setenv("HOME", oldHome)
 
-	stdout, _ := withPlanTestIO(t)
-	exit := RunPlan([]string{})
+	stdout, _ := withDiffTestIO(t)
+	exit := RunDiff([]string{})
 	if exit != 0 {
-		t.Errorf("RunPlan([]) = %d, want 0", exit)
+		t.Errorf("RunDiff([]) = %d, want 0", exit)
 	}
 	// Verify it found no issue files (since tmpDir/local doesn't exist).
 	if !strings.Contains(stdout.String(), "no issue files found") {
@@ -58,37 +58,37 @@ current_project = "test"
 	}
 }
 
-// TestRunPlan_UnknownSubcommand verifies that RunPlan with an unknown
+// TestRunDiff_UnknownSubcommand verifies that RunDiff with an unknown
 // subcommand (not "help") returns exit code 1.
-func TestRunPlan_UnknownSubcommand(t *testing.T) {
-	exit := RunPlan([]string{"bogus"})
+func TestRunDiff_UnknownSubcommand(t *testing.T) {
+	exit := RunDiff([]string{"bogus"})
 	if exit != 1 {
-		t.Errorf("RunPlan([\"bogus\"]) = %d, want 1", exit)
+		t.Errorf("RunDiff([\"bogus\"]) = %d, want 1", exit)
 	}
 }
 
-// TestRunPlan_NoKey_NoProject verifies that plan without an issue key
+// TestRunDiff_NoKey_NoProject verifies that diff without an issue key
 // and without a resolvable project returns exit code 1.
-func TestRunPlan_NoKey_NoProject(t *testing.T) {
+func TestRunDiff_NoKey_NoProject(t *testing.T) {
 	tmpDir := t.TempDir()
 	homeDir := writeSettings(t, tmpDir)
 	oldHome := os.Getenv("HOME")
 	os.Setenv("HOME", homeDir)
 	defer os.Setenv("HOME", oldHome)
 
-	_, stderr := withPlanTestIO(t)
-	exit := RunPlan([]string{"--cwd", filepath.Join(tmpDir, "outside")})
+	_, stderr := withDiffTestIO(t)
+	exit := RunDiff([]string{"--cwd", filepath.Join(tmpDir, "outside")})
 	if exit != 1 {
-		t.Fatalf("RunPlan([\"--cwd\", ...]) = %d, want 1", exit)
+		t.Fatalf("RunDiff([\"--cwd\", ...]) = %d, want 1", exit)
 	}
 	if !strings.Contains(stderr.String(), "no project resolved") {
 		t.Fatalf("stderr = %q, want no project resolved", stderr.String())
 	}
 }
 
-// TestRunPlan_NoKey_NoLocalDirs verifies that plan without an issue key
+// TestRunDiff_NoKey_NoLocalDirs verifies that diff without an issue key
 // but with a project that has no local_dirs returns exit code 0.
-func TestRunPlan_NoKey_NoLocalDirs(t *testing.T) {
+func TestRunDiff_NoKey_NoLocalDirs(t *testing.T) {
 	tmpDir := t.TempDir()
 	homeDir := writeSettings(t, tmpDir)
 
@@ -116,10 +116,10 @@ mirror_dir = "` + filepath.Join(tmpDir, "mirror") + `"
 	os.Setenv("HOME", homeDir)
 	defer os.Setenv("HOME", oldHome)
 
-	stdout, stderr := withPlanTestIO(t)
-	exit := RunPlan([]string{"--project", "test"})
+	stdout, stderr := withDiffTestIO(t)
+	exit := RunDiff([]string{"--project", "test"})
 	if exit != 0 {
-		t.Fatalf("RunPlan([\"--project\", \"test\"]) = %d, stderr = %q, want 0", exit, stderr.String())
+		t.Fatalf("RunDiff([\"--project\", \"test\"]) = %d, stderr = %q, want 0", exit, stderr.String())
 	}
 	output := stdout.String()
 	if !strings.Contains(output, "no local directories configured") {
@@ -127,9 +127,9 @@ mirror_dir = "` + filepath.Join(tmpDir, "mirror") + `"
 	}
 }
 
-// TestRunPlan_NoKey_NoIssueFiles verifies that plan without an issue key
+// TestRunDiff_NoKey_NoIssueFiles verifies that diff without an issue key
 // but with local_dirs that contain no issue files returns exit code 0.
-func TestRunPlan_NoKey_NoIssueFiles(t *testing.T) {
+func TestRunDiff_NoKey_NoIssueFiles(t *testing.T) {
 	tmpDir := t.TempDir()
 	homeDir := writeSettings(t, tmpDir)
 
@@ -163,10 +163,10 @@ local_dirs = ["` + localDir + `"]
 	os.Setenv("HOME", homeDir)
 	defer os.Setenv("HOME", oldHome)
 
-	stdout, stderr := withPlanTestIO(t)
-	exit := RunPlan([]string{"--project", "test"})
+	stdout, stderr := withDiffTestIO(t)
+	exit := RunDiff([]string{"--project", "test"})
 	if exit != 0 {
-		t.Fatalf("RunPlan([\"--project\", \"test\"]) = %d, stderr = %q, want 0", exit, stderr.String())
+		t.Fatalf("RunDiff([\"--project\", \"test\"]) = %d, stderr = %q, want 0", exit, stderr.String())
 	}
 	output := stdout.String()
 	if !strings.Contains(output, "no issue files found") {
@@ -174,9 +174,9 @@ local_dirs = ["` + localDir + `"]
 	}
 }
 
-// TestRunPlan_NoKey_ListIssues verifies that plan without an issue key
+// TestRunDiff_NoKey_ListIssues verifies that diff without an issue key
 // lists all local issues with their planned operations.
-func TestRunPlan_NoKey_ListIssues(t *testing.T) {
+func TestRunDiff_NoKey_ListIssues(t *testing.T) {
 	tmpDir := t.TempDir()
 	homeDir := writeSettings(t, tmpDir)
 
@@ -256,14 +256,14 @@ local_dirs = ["` + localDir + `"]
 		},
 		Summary: "Second issue",
 	})
-	withPlanClientFactory(t, func(*config.Settings, *context.Context, string) (jira.Client, error) {
+	withDiffClientFactory(t, func(*config.Settings, *context.Context, string) (jira.Client, error) {
 		return fake, nil
 	})
-	stdout, stderr := withPlanTestIO(t)
+	stdout, stderr := withDiffTestIO(t)
 
-	exit := RunPlan([]string{"--project", "test"})
+	exit := RunDiff([]string{"--project", "test"})
 	if exit != 0 {
-		t.Fatalf("RunPlan([\"--project\", \"test\"]) = %d, stderr = %q, want 0", exit, stderr.String())
+		t.Fatalf("RunDiff([\"--project\", \"test\"]) = %d, stderr = %q, want 0", exit, stderr.String())
 	}
 
 	output := stdout.String()
@@ -281,12 +281,12 @@ local_dirs = ["` + localDir + `"]
 	}
 }
 
-// TestRunPlan_NoKey_ListIssues_UsesSelectedProject verifies that calling
-// RunPlan without an issue key and without --project uses the remembered
+// TestRunDiff_NoKey_ListIssues_UsesSelectedProject verifies that calling
+// RunDiff without an issue key and without --project uses the remembered
 // (selected) project from settings state. This is the core acceptance
-// criterion for B095b: "jirafs plan uses the selected project when the
+// criterion for B095b: "jirafs diff uses the selected project when the
 // issue key is omitted."
-func TestRunPlan_NoKey_ListIssues_UsesSelectedProject(t *testing.T) {
+func TestRunDiff_NoKey_ListIssues_UsesSelectedProject(t *testing.T) {
 	tmpDir := t.TempDir()
 	homeDir := filepath.Join(tmpDir, "home")
 	jirafsDir := filepath.Join(homeDir, ".jirafs")
@@ -348,16 +348,16 @@ current_project = "test"
 		},
 		Summary: "First issue",
 	})
-	withPlanClientFactory(t, func(*config.Settings, *context.Context, string) (jira.Client, error) {
+	withDiffClientFactory(t, func(*config.Settings, *context.Context, string) (jira.Client, error) {
 		return fake, nil
 	})
-	stdout, stderr := withPlanTestIO(t)
+	stdout, stderr := withDiffTestIO(t)
 
-	// Call RunPlan with NO issue key and NO --project flag.
+	// Call RunDiff with NO issue key and NO --project flag.
 	// It should use the remembered project "test" from settings state.
-	exit := RunPlan([]string{})
+	exit := RunDiff([]string{})
 	if exit != 0 {
-		t.Fatalf("RunPlan([]) = %d, stderr = %q, want 0", exit, stderr.String())
+		t.Fatalf("RunDiff([]) = %d, stderr = %q, want 0", exit, stderr.String())
 	}
 
 	output := stdout.String()
@@ -373,9 +373,9 @@ current_project = "test"
 	}
 }
 
-// TestRunPlan_NoKey_ListIssues_WithChanges verifies that plan without an
+// TestRunDiff_NoKey_ListIssues_WithChanges verifies that diff without an
 // issue key lists issues with planned operations when changes exist.
-func TestRunPlan_NoKey_ListIssues_WithChanges(t *testing.T) {
+func TestRunDiff_NoKey_ListIssues_WithChanges(t *testing.T) {
 	tmpDir := t.TempDir()
 	homeDir := writeSettings(t, tmpDir)
 
@@ -432,14 +432,14 @@ local_dirs = ["` + localDir + `"]
 		},
 		Summary: "Remote original",
 	})
-	withPlanClientFactory(t, func(*config.Settings, *context.Context, string) (jira.Client, error) {
+	withDiffClientFactory(t, func(*config.Settings, *context.Context, string) (jira.Client, error) {
 		return fake, nil
 	})
-	stdout, stderr := withPlanTestIO(t)
+	stdout, stderr := withDiffTestIO(t)
 
-	exit := RunPlan([]string{"--project", "test"})
+	exit := RunDiff([]string{"--project", "test"})
 	if exit != 0 {
-		t.Fatalf("RunPlan([\"--project\", \"test\"]) = %d, stderr = %q, want 0", exit, stderr.String())
+		t.Fatalf("RunDiff([\"--project\", \"test\"]) = %d, stderr = %q, want 0", exit, stderr.String())
 	}
 
 	output := stdout.String()
@@ -454,9 +454,9 @@ local_dirs = ["` + localDir + `"]
 	}
 }
 
-// TestRunPlan_NoKey_SkipsUnparseable verifies that plan without an issue
+// TestRunDiff_NoKey_SkipsUnparseable verifies that diff without an issue
 // key skips files that cannot be parsed as issues.
-func TestRunPlan_NoKey_SkipsUnparseable(t *testing.T) {
+func TestRunDiff_NoKey_SkipsUnparseable(t *testing.T) {
 	tmpDir := t.TempDir()
 	homeDir := writeSettings(t, tmpDir)
 
@@ -517,14 +517,14 @@ local_dirs = ["` + localDir + `"]
 		},
 		Summary: "Valid issue",
 	})
-	withPlanClientFactory(t, func(*config.Settings, *context.Context, string) (jira.Client, error) {
+	withDiffClientFactory(t, func(*config.Settings, *context.Context, string) (jira.Client, error) {
 		return fake, nil
 	})
-	stdout, stderr := withPlanTestIO(t)
+	stdout, stderr := withDiffTestIO(t)
 
-	exit := RunPlan([]string{"--project", "test"})
+	exit := RunDiff([]string{"--project", "test"})
 	if exit != 0 {
-		t.Fatalf("RunPlan([\"--project\", \"test\"]) = %d, stderr = %q, want 0", exit, stderr.String())
+		t.Fatalf("RunDiff([\"--project\", \"test\"]) = %d, stderr = %q, want 0", exit, stderr.String())
 	}
 
 	output := stdout.String()
@@ -537,41 +537,41 @@ local_dirs = ["` + localDir + `"]
 	}
 }
 
-// TestRunPlan_Help verifies that "help" returns exit code 0.
-func TestRunPlan_Help(t *testing.T) {
-	exit := RunPlan([]string{"help"})
+// TestRunDiff_Help verifies that "help" returns exit code 0.
+func TestRunDiff_Help(t *testing.T) {
+	exit := RunDiff([]string{"help"})
 	if exit != 0 {
-		t.Errorf("RunPlan([\"help\"]) = %d, want 0", exit)
+		t.Errorf("RunDiff([\"help\"]) = %d, want 0", exit)
 	}
 }
 
-func withPlanTestIO(t *testing.T) (*bytes.Buffer, *bytes.Buffer) {
+func withDiffTestIO(t *testing.T) (*bytes.Buffer, *bytes.Buffer) {
 	t.Helper()
 	stdout := &bytes.Buffer{}
 	stderr := &bytes.Buffer{}
-	oldStdout := planStdout
-	oldStderr := planStderr
-	planStdout = stdout
-	planStderr = stderr
+	oldStdout := diffStdout
+	oldStderr := diffStderr
+	diffStdout = stdout
+	diffStderr = stderr
 	t.Cleanup(func() {
-		planStdout = oldStdout
-		planStderr = oldStderr
+		diffStdout = oldStdout
+		diffStderr = oldStderr
 	})
 	return stdout, stderr
 }
 
-func withPlanClientFactory(t *testing.T, factory func(*config.Settings, *context.Context, string) (jira.Client, error)) {
+func withDiffClientFactory(t *testing.T, factory func(*config.Settings, *context.Context, string) (jira.Client, error)) {
 	t.Helper()
-	oldFactory := planClientFactory
-	planClientFactory = factory
+	oldFactory := diffClientFactory
+	diffClientFactory = factory
 	t.Cleanup(func() {
-		planClientFactory = oldFactory
+		diffClientFactory = oldFactory
 	})
 }
 
-// TestRunPlan_NoKey_ProjectNotFound verifies that plan without an issue key
+// TestRunDiff_NoKey_ProjectNotFound verifies that diff without an issue key
 // returns exit code 1 when --project points to a non-existent project.
-func TestRunPlan_NoKey_ProjectNotFound(t *testing.T) {
+func TestRunDiff_NoKey_ProjectNotFound(t *testing.T) {
 	tmpDir := t.TempDir()
 	homeDir := writeSettings(t, tmpDir)
 
@@ -599,19 +599,19 @@ Summary: Test issue
 	os.Setenv("HOME", homeDir)
 	defer os.Setenv("HOME", oldHome)
 
-	_, stderr := withPlanTestIO(t)
-	exit := RunPlan([]string{"--project", "nonexistent"})
+	_, stderr := withDiffTestIO(t)
+	exit := RunDiff([]string{"--project", "nonexistent"})
 	if exit != 1 {
-		t.Fatalf("RunPlan([\"--project\", \"nonexistent\"]) = %d, want 1", exit)
+		t.Fatalf("RunDiff([\"--project\", \"nonexistent\"]) = %d, want 1", exit)
 	}
 	if !strings.Contains(stderr.String(), "not found in settings") {
 		t.Fatalf("stderr = %q, want not found in settings", stderr.String())
 	}
 }
 
-// TestRunPlan_NoKey_ClientError verifies that plan without an issue key
+// TestRunDiff_NoKey_ClientError verifies that diff without an issue key
 // skips issues that fail client creation.
-func TestRunPlan_NoKey_ClientError(t *testing.T) {
+func TestRunDiff_NoKey_ClientError(t *testing.T) {
 	tmpDir := t.TempDir()
 	homeDir := writeSettings(t, tmpDir)
 
@@ -640,22 +640,22 @@ Summary: Test issue
 	defer os.Setenv("HOME", oldHome)
 
 	// Return an error from the client factory.
-	withPlanClientFactory(t, func(*config.Settings, *context.Context, string) (jira.Client, error) {
+	withDiffClientFactory(t, func(*config.Settings, *context.Context, string) (jira.Client, error) {
 		return nil, os.ErrPermission
 	})
-	_, stderr := withPlanTestIO(t)
-	exit := RunPlan([]string{"--project", "test"})
+	_, stderr := withDiffTestIO(t)
+	exit := RunDiff([]string{"--project", "test"})
 	if exit != 0 {
-		t.Fatalf("RunPlan([\"--project\", \"test\"]) = %d, want 0", exit)
+		t.Fatalf("RunDiff([\"--project\", \"test\"]) = %d, want 0", exit)
 	}
 	if !strings.Contains(stderr.String(), "cannot create client") {
 		t.Fatalf("stderr = %q, want client creation error", stderr.String())
 	}
 }
 
-// TestRunPlan_NoKey_NoParseableFiles verifies that plan without an issue key
+// TestRunDiff_NoKey_NoParseableFiles verifies that diff without an issue key
 // reports no parseable files when all files are unparseable.
-func TestRunPlan_NoKey_NoParseableFiles(t *testing.T) {
+func TestRunDiff_NoKey_NoParseableFiles(t *testing.T) {
 	tmpDir := t.TempDir()
 	homeDir := writeSettings(t, tmpDir)
 
@@ -675,10 +675,10 @@ func TestRunPlan_NoKey_NoParseableFiles(t *testing.T) {
 	os.Setenv("HOME", homeDir)
 	defer os.Setenv("HOME", oldHome)
 
-	stdout, stderr := withPlanTestIO(t)
-	exit := RunPlan([]string{"--project", "test"})
+	stdout, stderr := withDiffTestIO(t)
+	exit := RunDiff([]string{"--project", "test"})
 	if exit != 0 {
-		t.Fatalf("RunPlan([\"--project\", \"test\"]) = %d, stderr = %q, want 0", exit, stderr.String())
+		t.Fatalf("RunDiff([\"--project\", \"test\"]) = %d, stderr = %q, want 0", exit, stderr.String())
 	}
 	output := stdout.String()
 	if !strings.Contains(output, "no parseable issue files found") {
@@ -686,47 +686,28 @@ func TestRunPlan_NoKey_NoParseableFiles(t *testing.T) {
 	}
 }
 
-// TestRunPlan_TooManyArgs verifies that plan with too many arguments
-// returns exit code 1.
-func TestRunPlan_TooManyArgs(t *testing.T) {
-	tmpDir := t.TempDir()
-	homeDir := writeSettings(t, tmpDir)
-	oldHome := os.Getenv("HOME")
-	os.Setenv("HOME", homeDir)
-	defer os.Setenv("HOME", oldHome)
-
-	_, stderr := withPlanTestIO(t)
-	exit := RunPlan([]string{"--project", "test", "PROJ-1", "extra"})
-	if exit != 1 {
-		t.Fatalf("RunPlan([\"PROJ-1\", \"extra\"]) = %d, want 1", exit)
-	}
-	if !strings.Contains(stderr.String(), "too many positional arguments") {
-		t.Fatalf("stderr = %q, want too many positional arguments", stderr.String())
-	}
-}
-
-// TestRunPlan_NoProjectResolved verifies that plan without a resolvable
+// TestRunDiff_NoProjectResolved verifies that diff without a resolvable
 // project returns exit code 1.
-func TestRunPlan_NoProjectResolved(t *testing.T) {
+func TestRunDiff_NoProjectResolved(t *testing.T) {
 	tmpDir := t.TempDir()
 	homeDir := writeSettings(t, tmpDir)
 	oldHome := os.Getenv("HOME")
 	os.Setenv("HOME", homeDir)
 	defer os.Setenv("HOME", oldHome)
 
-	_, stderr := withPlanTestIO(t)
-	exit := RunPlan([]string{"--cwd", filepath.Join(tmpDir, "outside"), "PROJ-42"})
+	_, stderr := withDiffTestIO(t)
+	exit := RunDiff([]string{"--cwd", filepath.Join(tmpDir, "outside"), "PROJ-42"})
 	if exit != 1 {
-		t.Fatalf("RunPlan([\"--project\", \"test\", \"--cwd\", ...]) = %d, want 1", exit)
+		t.Fatalf("RunDiff([\"--project\", \"test\", \"--cwd\", ...]) = %d, want 1", exit)
 	}
 	if !strings.Contains(stderr.String(), "no project resolved") {
 		t.Fatalf("stderr = %q, want no project resolved", stderr.String())
 	}
 }
 
-// TestRunPlan_NoLocalIssue verifies that plan returns an error when
+// TestRunDiff_NoLocalIssue verifies that diff returns an error when
 // the local issue file is not found.
-func TestRunPlan_NoLocalIssue(t *testing.T) {
+func TestRunDiff_NoLocalIssue(t *testing.T) {
 	tmpDir := t.TempDir()
 	homeDir := writeSettings(t, tmpDir)
 	oldHome := os.Getenv("HOME")
@@ -742,23 +723,23 @@ func TestRunPlan_NoLocalIssue(t *testing.T) {
 		},
 		Summary: "Remote issue",
 	})
-	withPlanClientFactory(t, func(*config.Settings, *context.Context, string) (jira.Client, error) {
+	withDiffClientFactory(t, func(*config.Settings, *context.Context, string) (jira.Client, error) {
 		return fake, nil
 	})
-	_, stderr := withPlanTestIO(t)
+	_, stderr := withDiffTestIO(t)
 
-	exit := RunPlan([]string{"--project", "test", "PROJ-42"})
+	exit := RunDiff([]string{"--project", "test", "PROJ-42"})
 	if exit != 1 {
-		t.Fatalf("RunPlan([\"PROJ-42\"]) = %d, want 1", exit)
+		t.Fatalf("RunDiff([\"PROJ-42\"]) = %d, want 1", exit)
 	}
 	if !strings.Contains(stderr.String(), "not found in local directories") {
 		t.Fatalf("stderr = %q, want not found in local directories", stderr.String())
 	}
 }
 
-// TestRunPlan_Success_NoChanges verifies that plan reports no changes
+// TestRunDiff_Success_NoChanges verifies that diff reports no changes
 // when local and remote match.
-func TestRunPlan_Success_NoChanges(t *testing.T) {
+func TestRunDiff_Success_NoChanges(t *testing.T) {
 	tmpDir := t.TempDir()
 	homeDir := writeSettings(t, tmpDir)
 
@@ -816,14 +797,14 @@ local_dirs = ["` + localDir + `"]
 		},
 		Summary: "Remote issue",
 	})
-	withPlanClientFactory(t, func(*config.Settings, *context.Context, string) (jira.Client, error) {
+	withDiffClientFactory(t, func(*config.Settings, *context.Context, string) (jira.Client, error) {
 		return fake, nil
 	})
-	stdout, stderr := withPlanTestIO(t)
+	stdout, stderr := withDiffTestIO(t)
 
-	exit := RunPlan([]string{"--project", "test", "PROJ-42"})
+	exit := RunDiff([]string{"--project", "test", "PROJ-42"})
 	if exit != 0 {
-		t.Fatalf("RunPlan([\"PROJ-42\"]) = %d, stderr = %q", exit, stderr.String())
+		t.Fatalf("RunDiff([\"PROJ-42\"]) = %d, stderr = %q", exit, stderr.String())
 	}
 
 	output := stdout.String()
@@ -835,9 +816,9 @@ local_dirs = ["` + localDir + `"]
 	}
 }
 
-// TestRunPlan_Success_WithChanges verifies that plan reports operations
+// TestRunDiff_Success_WithChanges verifies that diff reports operations
 // when local and remote differ.
-func TestRunPlan_Success_WithChanges(t *testing.T) {
+func TestRunDiff_Success_WithChanges(t *testing.T) {
 	tmpDir := t.TempDir()
 	homeDir := writeSettings(t, tmpDir)
 
@@ -873,14 +854,14 @@ Summary: Local modified summary
 		},
 		Summary: "Remote original summary",
 	})
-	withPlanClientFactory(t, func(*config.Settings, *context.Context, string) (jira.Client, error) {
+	withDiffClientFactory(t, func(*config.Settings, *context.Context, string) (jira.Client, error) {
 		return fake, nil
 	})
-	stdout, stderr := withPlanTestIO(t)
+	stdout, stderr := withDiffTestIO(t)
 
-	exit := RunPlan([]string{"--project", "test", "PROJ-42"})
+	exit := RunDiff([]string{"--project", "test", "PROJ-42"})
 	if exit != 0 {
-		t.Fatalf("RunPlan([\"PROJ-42\"]) = %d, stderr = %q", exit, stderr.String())
+		t.Fatalf("RunDiff([\"PROJ-42\"]) = %d, stderr = %q", exit, stderr.String())
 	}
 
 	output := stdout.String()
@@ -895,9 +876,9 @@ Summary: Local modified summary
 	}
 }
 
-// TestRunPlan_Success_MultipleOperations verifies that plan reports
+// TestRunDiff_Success_MultipleOperations verifies that diff reports
 // multiple operations when many fields differ.
-func TestRunPlan_Success_MultipleOperations(t *testing.T) {
+func TestRunDiff_Success_MultipleOperations(t *testing.T) {
 	tmpDir := t.TempDir()
 	homeDir := writeSettings(t, tmpDir)
 
@@ -951,14 +932,14 @@ Local description body
 		Sprint:      "Sprint 41",
 		FixVersions: []string{"1.0"},
 	})
-	withPlanClientFactory(t, func(*config.Settings, *context.Context, string) (jira.Client, error) {
+	withDiffClientFactory(t, func(*config.Settings, *context.Context, string) (jira.Client, error) {
 		return fake, nil
 	})
-	stdout, stderr := withPlanTestIO(t)
+	stdout, stderr := withDiffTestIO(t)
 
-	exit := RunPlan([]string{"--project", "test", "PROJ-42"})
+	exit := RunDiff([]string{"--project", "test", "PROJ-42"})
 	if exit != 0 {
-		t.Fatalf("RunPlan([\"PROJ-42\"]) = %d, stderr = %q", exit, stderr.String())
+		t.Fatalf("RunDiff([\"PROJ-42\"]) = %d, stderr = %q", exit, stderr.String())
 	}
 
 	output := stdout.String()
@@ -970,9 +951,9 @@ Local description body
 	}
 }
 
-// TestRunPlan_FetchError verifies that plan returns an error when
+// TestRunDiff_FetchError verifies that diff returns an error when
 // the Jira fetch fails.
-func TestRunPlan_FetchError(t *testing.T) {
+func TestRunDiff_FetchError(t *testing.T) {
 	tmpDir := t.TempDir()
 	homeDir := writeSettings(t, tmpDir)
 	oldHome := os.Getenv("HOME")
@@ -981,23 +962,23 @@ func TestRunPlan_FetchError(t *testing.T) {
 
 	fake := jira.NewFakeTransport()
 	fake.SetErr("fetch", jira.NewHTTPErr(500, "server error"))
-	withPlanClientFactory(t, func(*config.Settings, *context.Context, string) (jira.Client, error) {
+	withDiffClientFactory(t, func(*config.Settings, *context.Context, string) (jira.Client, error) {
 		return fake, nil
 	})
-	_, stderr := withPlanTestIO(t)
+	_, stderr := withDiffTestIO(t)
 
-	exit := RunPlan([]string{"--project", "test", "PROJ-42"})
+	exit := RunDiff([]string{"--project", "test", "PROJ-42"})
 	if exit != 1 {
-		t.Fatalf("RunPlan([\"PROJ-42\"]) = %d, want 1", exit)
+		t.Fatalf("RunDiff([\"PROJ-42\"]) = %d, want 1", exit)
 	}
 	if !strings.Contains(stderr.String(), "server error") {
 		t.Fatalf("stderr = %q, want server error", stderr.String())
 	}
 }
 
-// TestRunPlan_NotFound verifies that plan returns a not found error
+// TestRunDiff_NotFound verifies that diff returns a not found error
 // when the remote issue does not exist.
-func TestRunPlan_NotFound(t *testing.T) {
+func TestRunDiff_NotFound(t *testing.T) {
 	tmpDir := t.TempDir()
 	homeDir := writeSettings(t, tmpDir)
 	oldHome := os.Getenv("HOME")
@@ -1005,46 +986,46 @@ func TestRunPlan_NotFound(t *testing.T) {
 	defer os.Setenv("HOME", oldHome)
 
 	fake := jira.NewFakeTransport()
-	withPlanClientFactory(t, func(*config.Settings, *context.Context, string) (jira.Client, error) {
+	withDiffClientFactory(t, func(*config.Settings, *context.Context, string) (jira.Client, error) {
 		return fake, nil
 	})
-	_, stderr := withPlanTestIO(t)
+	_, stderr := withDiffTestIO(t)
 
-	exit := RunPlan([]string{"--project", "test", "PROJ-99"})
+	exit := RunDiff([]string{"--project", "test", "PROJ-99"})
 	if exit != 1 {
-		t.Fatalf("RunPlan([\"PROJ-99\"]) = %d, want 1", exit)
+		t.Fatalf("RunDiff([\"PROJ-99\"]) = %d, want 1", exit)
 	}
 	if !strings.Contains(stderr.String(), "not_found") {
 		t.Fatalf("stderr = %q, want not_found error", stderr.String())
 	}
 }
 
-// TestRunPlan_ClientCreationError verifies that plan returns an error
+// TestRunDiff_ClientCreationError verifies that diff returns an error
 // when the Jira client cannot be created.
-func TestRunPlan_ClientCreationError(t *testing.T) {
+func TestRunDiff_ClientCreationError(t *testing.T) {
 	tmpDir := t.TempDir()
 	homeDir := writeSettings(t, tmpDir)
 	oldHome := os.Getenv("HOME")
 	os.Setenv("HOME", homeDir)
 	defer os.Setenv("HOME", oldHome)
 
-	withPlanClientFactory(t, func(*config.Settings, *context.Context, string) (jira.Client, error) {
+	withDiffClientFactory(t, func(*config.Settings, *context.Context, string) (jira.Client, error) {
 		return nil, os.ErrPermission
 	})
-	_, stderr := withPlanTestIO(t)
+	_, stderr := withDiffTestIO(t)
 
-	exit := RunPlan([]string{"--project", "test", "PROJ-42"})
+	exit := RunDiff([]string{"--project", "test", "PROJ-42"})
 	if exit != 1 {
-		t.Fatalf("RunPlan([\"PROJ-42\"]) = %d, want 1", exit)
+		t.Fatalf("RunDiff([\"PROJ-42\"]) = %d, want 1", exit)
 	}
 	if !strings.Contains(stderr.String(), "cannot create Jira client") {
 		t.Fatalf("stderr = %q, want client creation error", stderr.String())
 	}
 }
 
-// TestRunPlan_LocalIssueUnparseable verifies that plan skips files that
+// TestRunDiff_LocalIssueUnparseable verifies that diff skips files that
 // cannot be parsed as issues.
-func TestRunPlan_LocalIssueUnparseable(t *testing.T) {
+func TestRunDiff_LocalIssueUnparseable(t *testing.T) {
 	tmpDir := t.TempDir()
 	homeDir := writeSettings(t, tmpDir)
 
@@ -1070,14 +1051,14 @@ func TestRunPlan_LocalIssueUnparseable(t *testing.T) {
 		},
 		Summary: "Remote issue",
 	})
-	withPlanClientFactory(t, func(*config.Settings, *context.Context, string) (jira.Client, error) {
+	withDiffClientFactory(t, func(*config.Settings, *context.Context, string) (jira.Client, error) {
 		return fake, nil
 	})
-	_, stderr := withPlanTestIO(t)
+	_, stderr := withDiffTestIO(t)
 
-	exit := RunPlan([]string{"--project", "test", "PROJ-42"})
+	exit := RunDiff([]string{"--project", "test", "PROJ-42"})
 	if exit != 1 {
-		t.Fatalf("RunPlan([\"PROJ-42\"]) = %d, want 1", exit)
+		t.Fatalf("RunDiff([\"PROJ-42\"]) = %d, want 1", exit)
 	}
 	if !strings.Contains(stderr.String(), "not found in local directories") {
 		t.Fatalf("stderr = %q, want not found in local directories", stderr.String())
@@ -1111,28 +1092,28 @@ func TestBuildPlanClient_Success(t *testing.T) {
 	}
 }
 
-// TestRunPlan_ResolveContextError verifies that plan returns an error
+// TestRunDiff_ResolveContextError verifies that diff returns an error
 // when no project can be resolved for the given cwd.
-func TestRunPlan_ResolveContextError(t *testing.T) {
+func TestRunDiff_ResolveContextError(t *testing.T) {
 	tmpDir := t.TempDir()
 	homeDir := writeSettings(t, tmpDir)
 	oldHome := os.Getenv("HOME")
 	os.Setenv("HOME", homeDir)
 	defer os.Setenv("HOME", oldHome)
 
-	_, stderr := withPlanTestIO(t)
-	exit := RunPlan([]string{"--cwd", filepath.Join(tmpDir, "outside"), "PROJ-42"})
+	_, stderr := withDiffTestIO(t)
+	exit := RunDiff([]string{"--cwd", filepath.Join(tmpDir, "outside"), "PROJ-42"})
 	if exit != 1 {
-		t.Fatalf("RunPlan([\"--project\", \"test\", \"--cwd\", ...]) = %d, want 1", exit)
+		t.Fatalf("RunDiff([\"--project\", \"test\", \"--cwd\", ...]) = %d, want 1", exit)
 	}
 	if !strings.Contains(stderr.String(), "no project resolved") {
 		t.Fatalf("stderr = %q, want no project resolved", stderr.String())
 	}
 }
 
-// TestResolvePlanContext_NoProject verifies that resolvePlanContext
+// TestResolveDiffContext_NoProject verifies that resolveDiffContext
 // returns false when no project can be resolved for the given cwd.
-func TestResolvePlanContext_NoProject(t *testing.T) {
+func TestResolveDiffContext_NoProject(t *testing.T) {
 	tmpDir := t.TempDir()
 	homeDir := writeSettings(t, tmpDir)
 	oldHome := os.Getenv("HOME")
@@ -1142,9 +1123,9 @@ func TestResolvePlanContext_NoProject(t *testing.T) {
 	if err != nil {
 		t.Fatalf("config.Load: %v", err)
 	}
-	_, stderr := withPlanTestIO(t)
+	_, stderr := withDiffTestIO(t)
 
-	ctx, ok := resolvePlanContext(settings, "", filepath.Join(tmpDir, "outside"))
+	ctx, ok := resolveDiffContext(settings, "", filepath.Join(tmpDir, "outside"))
 	if ok {
 		t.Fatal("expected unresolved project")
 	}
@@ -1181,4 +1162,130 @@ func TestBuildPlanClient_CredentialError(t *testing.T) {
 		t.Fatalf("error = %q, want no_usable_instance", err.Error())
 	}
 
+}
+
+// diffFixture writes settings with one local dir holding the given issue
+// files (key -> summary) and returns a fake Jira holding remote summaries.
+func diffFixture(t *testing.T, local, remote map[string]string) {
+	t.Helper()
+	tmpDir := t.TempDir()
+	homeDir := writeSettings(t, tmpDir)
+	localDir := filepath.Join(tmpDir, "local")
+	if err := os.MkdirAll(localDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	fake := jira.NewFakeTransport()
+	for key, sum := range local {
+		doc := "---\nkey: " + key + "\ntype: story\nproject:\n  type: project\n  value: PROJ\nsummary: " + sum + "\n---\n\nSummary: " + sum + "\n"
+		if err := os.WriteFile(filepath.Join(localDir, key+".md"), []byte(doc), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		fake.SetIssue(key, &schema.Issue{
+			Identity: schema.IssueIdentity{Key: schema.IssueKey(key), Type: "story",
+				Project: schema.TypedRef{Type: schema.RefProject, Value: "PROJ"}},
+			Summary: remote[key],
+		})
+	}
+	settingsTOML := `version = 1
+
+[instances.default]
+base_url = "https://example.atlassian.net"
+auth_type = "basic"
+
+[projects.test]
+key = "TEST"
+instance = "default"
+mirror_dir = "` + filepath.Join(tmpDir, "mirror") + `"
+local_dirs = ["` + localDir + `"]
+`
+	jirafsDir := filepath.Join(homeDir, ".jirafs")
+	if err := os.MkdirAll(jirafsDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(jirafsDir, "settings.toml"), []byte(settingsTOML), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("HOME", homeDir)
+	withDiffClientFactory(t, func(*config.Settings, *context.Context, string) (jira.Client, error) {
+		return fake, nil
+	})
+}
+
+func TestRunDiff_NoArgs_TwoModifiedFiles(t *testing.T) {
+	diffFixture(t,
+		map[string]string{"PROJ-1": "L1", "PROJ-2": "L2"},
+		map[string]string{"PROJ-1": "R1", "PROJ-2": "R2"})
+	stdout, stderr := withDiffTestIO(t)
+	if exit := RunDiff([]string{"--project", "test"}); exit != 0 {
+		t.Fatalf("exit = %d, stderr = %q", exit, stderr.String())
+	}
+	out := stdout.String()
+	for _, want := range []string{"PROJ-1: 1 operation(s)", "PROJ-2: 1 operation(s)", "2 issue(s) changed"} {
+		if !strings.Contains(out, want) {
+			t.Fatalf("stdout = %q, want %q", out, want)
+		}
+	}
+}
+
+func TestRunDiff_ExitCode(t *testing.T) {
+	diffFixture(t,
+		map[string]string{"PROJ-1": "L1", "PROJ-2": "same"},
+		map[string]string{"PROJ-1": "R1", "PROJ-2": "same"})
+	stdout, _ := withDiffTestIO(t)
+	if exit := RunDiff([]string{"--project", "test", "--exit-code", "PROJ-1"}); exit != 1 {
+		t.Fatalf("with changes: exit = %d, want 1", exit)
+	}
+	if !strings.Contains(stdout.String(), "1 issue(s) changed") {
+		t.Fatalf("stdout = %q, want summary", stdout.String())
+	}
+	if exit := RunDiff([]string{"--project", "test", "--exit-code", "PROJ-2"}); exit != 0 {
+		t.Fatalf("without changes: exit = %d, want 0", exit)
+	}
+	if exit := RunDiff([]string{"--project", "test", "PROJ-1"}); exit != 0 {
+		t.Fatalf("without --exit-code: exit = %d, want 0", exit)
+	}
+	if exit := RunDiff([]string{"--project", "test", "--exit-code"}); exit != 1 {
+		t.Fatalf("no-arg with changes: exit = %d, want 1", exit)
+	}
+}
+
+func TestRunDiff_MultipleKeys(t *testing.T) {
+	diffFixture(t,
+		map[string]string{"PROJ-1": "L1", "PROJ-2": "same"},
+		map[string]string{"PROJ-1": "R1", "PROJ-2": "same"})
+	stdout, stderr := withDiffTestIO(t)
+	if exit := RunDiff([]string{"--project", "test", "PROJ-1", "PROJ-2"}); exit != 0 {
+		t.Fatalf("exit = %d, stderr = %q", exit, stderr.String())
+	}
+	out := stdout.String()
+	if !strings.Contains(out, "1 operation(s) for issue PROJ-1") || !strings.Contains(out, "issue PROJ-2") || !strings.Contains(out, "1 issue(s) changed") {
+		t.Fatalf("stdout = %q", out)
+	}
+	if exit := RunDiff([]string{"--project", "test", "PROJ-1", "PROJ-404"}); exit != 1 {
+		t.Fatalf("missing key: exit = %d, want 1", exit)
+	}
+}
+
+func TestRunDiff_SkipsFilesUnchangedSinceSync(t *testing.T) {
+	diffFixture(t, map[string]string{"PROJ-1": "L1"}, map[string]string{"PROJ-1": "R1"})
+	settings, err := config.Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(settings.Projects["test"].LocalDirs[0], "PROJ-1.md")
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	synced := schema.StampSyncedHash(string(data))
+	if err := os.WriteFile(path, []byte(synced), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	stdout, _ := withDiffTestIO(t)
+	if exit := RunDiff([]string{"--project", "test", "--exit-code"}); exit != 0 {
+		t.Fatalf("exit = %d, want 0 (nothing changed locally)", exit)
+	}
+	if !strings.Contains(stdout.String(), "0 issue(s) changed") {
+		t.Fatalf("stdout = %q", stdout.String())
+	}
 }

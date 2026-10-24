@@ -51,7 +51,7 @@ func RunBoard(args []string) int {
 		return 1
 	}
 
-	ctx, ok := resolvePlanContext(settings, *projectFlag, *cwdFlag)
+	ctx, ok := resolveDiffContext(settings, *projectFlag, *cwdFlag)
 	if !ok {
 		return 1
 	}

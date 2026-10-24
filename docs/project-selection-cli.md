@@ -165,7 +165,7 @@ If non-interactive and unresolved, they must fail.
 These commands may not need `--project` because the target implies it:
 
 - `jirafs export issue ABC-123`
-- `jirafs plan jira/live/issues/ABC-123.md`
+- `jirafs diff ABC-123`
 - `jirafs sync jira/live/issues/ABC-123.md`
 
 They should still accept `--project` for validation or disambiguation, but

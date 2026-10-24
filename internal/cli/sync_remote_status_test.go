@@ -47,7 +47,7 @@ func setupStatusEnv(t *testing.T, localFrontmatterExtra, localSummary, remoteSta
 	})
 	factory := func(*config.Settings, *context.Context, string) (jira.Client, error) { return fake, nil }
 	withSyncClientFactory(t, factory)
-	withPlanClientFactory(t, factory)
+	withDiffClientFactory(t, factory)
 	return fake, localPath
 }
 
@@ -94,10 +94,10 @@ func TestRunSync_UnknownRemoteStatusNeverTransitions(t *testing.T) {
 	}
 }
 
-func TestRunPlan_UnchangedStatusShowsNoStatusOp(t *testing.T) {
+func TestRunDiff_UnchangedStatusShowsNoStatusOp(t *testing.T) {
 	setupStatusEnv(t, "status: 'Open'\n", "New summary", "Open")
-	stdout, stderr := withPlanTestIO(t)
-	if exit := RunPlan([]string{"--project", "test"}); exit != 0 {
+	stdout, stderr := withDiffTestIO(t)
+	if exit := RunDiff([]string{"--project", "test"}); exit != 0 {
 		t.Fatalf("exit = %d, stderr = %q", exit, stderr.String())
 	}
 	out := stdout.String()

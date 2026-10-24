@@ -17,7 +17,7 @@ func TestMissingSettingsPrintsFirstRunHint(t *testing.T) {
 	}{
 		{"sync", &syncStderr, func() int { return RunSync([]string{"PLAT-1"}) }},
 		{"export", &exportStderr, func() int { return RunExport([]string{"issue", "PLAT-1"}) }},
-		{"plan", &planStderr, func() int { return RunPlan([]string{"PLAT-1"}) }},
+		{"diff", &diffStderr, func() int { return RunDiff([]string{"PLAT-1"}) }},
 		{"mirror", &mirrorStderr, func() int { return RunMirror([]string{"refresh", "my-issues"}) }},
 		{"board", &boardStderr, func() int { return RunBoard(nil) }},
 		{"status", &statusStderr, func() int { return RunStatus(nil) }},

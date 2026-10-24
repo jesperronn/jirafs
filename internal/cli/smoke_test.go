@@ -55,7 +55,7 @@ func TestSmokeExportEditPlanSyncReexport(t *testing.T) {
 	withSyncClientFactory(t, func(*config.Settings, *context.Context, string) (jira.Client, error) {
 		return fake, nil
 	})
-	withPlanClientFactory(t, func(*config.Settings, *context.Context, string) (jira.Client, error) {
+	withDiffClientFactory(t, func(*config.Settings, *context.Context, string) (jira.Client, error) {
 		return fake, nil
 	})
 
@@ -96,10 +96,10 @@ func TestSmokeExportEditPlanSyncReexport(t *testing.T) {
 	}
 
 	// Step 3: Plan what operations would be needed.
-	_, planStderr := withPlanTestIO(t)
-	exit = RunPlan([]string{"--project", "test", "PROJ-42"})
+	_, diffStderr := withDiffTestIO(t)
+	exit = RunDiff([]string{"--project", "test", "PROJ-42"})
 	if exit != 0 {
-		t.Fatalf("RunPlan([\"PROJ-42\"]) = %d, stderr = %q", exit, planStderr.String())
+		t.Fatalf("RunDiff([\"PROJ-42\"]) = %d, stderr = %q", exit, diffStderr.String())
 	}
 
 	// Step 4: Sync (push changes to Jira and apply locally).
@@ -166,7 +166,7 @@ func TestSmokeExportEditPlanSyncReexport_MinimalIssue(t *testing.T) {
 	withSyncClientFactory(t, func(*config.Settings, *context.Context, string) (jira.Client, error) {
 		return fake, nil
 	})
-	withPlanClientFactory(t, func(*config.Settings, *context.Context, string) (jira.Client, error) {
+	withDiffClientFactory(t, func(*config.Settings, *context.Context, string) (jira.Client, error) {
 		return fake, nil
 	})
 
@@ -203,10 +203,10 @@ func TestSmokeExportEditPlanSyncReexport_MinimalIssue(t *testing.T) {
 	}
 
 	// Step 3: Plan.
-	_, planStderr := withPlanTestIO(t)
-	exit = RunPlan([]string{"--project", "test", "DRF-1"})
+	_, diffStderr := withDiffTestIO(t)
+	exit = RunDiff([]string{"--project", "test", "DRF-1"})
 	if exit != 0 {
-		t.Fatalf("RunPlan minimal = %d, stderr = %q", exit, planStderr.String())
+		t.Fatalf("RunDiff minimal = %d, stderr = %q", exit, diffStderr.String())
 	}
 
 	// Step 4: Sync.
@@ -289,7 +289,7 @@ func TestSmokeExportEditPlanSyncReexport_Conflict(t *testing.T) {
 	withSyncClientFactory(t, func(*config.Settings, *context.Context, string) (jira.Client, error) {
 		return fake, nil
 	})
-	withPlanClientFactory(t, func(*config.Settings, *context.Context, string) (jira.Client, error) {
+	withDiffClientFactory(t, func(*config.Settings, *context.Context, string) (jira.Client, error) {
 		return fake, nil
 	})
 
@@ -323,10 +323,10 @@ func TestSmokeExportEditPlanSyncReexport_Conflict(t *testing.T) {
 	}
 
 	// Step 3: Plan (should show operations).
-	_, planStderr := withPlanTestIO(t)
-	exit = RunPlan([]string{"--project", "test", "PROJ-42"})
+	_, diffStderr := withDiffTestIO(t)
+	exit = RunDiff([]string{"--project", "test", "PROJ-42"})
 	if exit != 0 {
-		t.Fatalf("RunPlan = %d, stderr = %q", exit, planStderr.String())
+		t.Fatalf("RunDiff = %d, stderr = %q", exit, diffStderr.String())
 	}
 
 	// Step 4: Sync (should report conflicts, not push).
@@ -377,7 +377,7 @@ func TestSmokeExportEditPlanSyncReexport_UpdateError(t *testing.T) {
 	withSyncClientFactory(t, func(*config.Settings, *context.Context, string) (jira.Client, error) {
 		return fake, nil
 	})
-	withPlanClientFactory(t, func(*config.Settings, *context.Context, string) (jira.Client, error) {
+	withDiffClientFactory(t, func(*config.Settings, *context.Context, string) (jira.Client, error) {
 		return fake, nil
 	})
 
@@ -406,10 +406,10 @@ func TestSmokeExportEditPlanSyncReexport_UpdateError(t *testing.T) {
 	}
 
 	// Step 2: Plan (should show operations).
-	_, planStderr := withPlanTestIO(t)
-	exit = RunPlan([]string{"--project", "test", "PROJ-42"})
+	_, diffStderr := withDiffTestIO(t)
+	exit = RunDiff([]string{"--project", "test", "PROJ-42"})
 	if exit != 0 {
-		t.Fatalf("RunPlan = %d, stderr = %q", exit, planStderr.String())
+		t.Fatalf("RunDiff = %d, stderr = %q", exit, diffStderr.String())
 	}
 
 	// Step 3: Sync (should fail on update).

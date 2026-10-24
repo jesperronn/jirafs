@@ -39,7 +39,7 @@ Those belong in the CLI and core library.
 2. Agent selects a template.
 3. Agent fills a draft Markdown issue file.
 4. User reviews or edits locally.
-5. `jirafs plan` and `jirafs sync` handle the write path.
+5. `jirafs diff` and `jirafs sync` handle the write path.
 
 ### Archive Analysis
 

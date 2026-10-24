@@ -345,7 +345,7 @@ Sequencing:
 2. Compare local editable fields against last-synced state.
 3. Compare current remote state against last-synced state.
 4. Emit explicit operations and explicit conflicts.
-5. Surface plan output through `jirafs plan`.
+5. Surface plan output through `jirafs diff`.
 
 Architectural checkpoint:
 
@@ -654,7 +654,7 @@ The MVP is complete when all of the following are true:
 
 - one remote issue can be exported into a stable local Markdown document
 - that document can be edited locally in the supported field set
-- `jirafs plan` produces explicit operations and conflicts from local, remote,
+- `jirafs diff` produces explicit operations and conflicts from local, remote,
   and last-synced state
 - `jirafs sync` safely applies the approved operations and refreshes local sync
   metadata

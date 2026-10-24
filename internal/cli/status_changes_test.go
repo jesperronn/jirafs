@@ -75,8 +75,8 @@ func TestRunStatus_ListsAllGroups(t *testing.T) {
 	t.Logf("status output:\n%s", out)
 	for _, want := range []string{
 		"Local changes:",
-		"  conflicted:\n    TEST-4  " + filepath.Join(local, "TEST-4.md") + "\n      run: jirafs plan TEST-4\n",
-		"  modified:\n    TEST-2  " + filepath.Join(local, "TEST-2.md") + "\n      run: jirafs plan TEST-2\n",
+		"  conflicted:\n    TEST-4  " + filepath.Join(local, "TEST-4.md") + "\n      run: jirafs diff TEST-4\n",
+		"  modified:\n    TEST-2  " + filepath.Join(local, "TEST-2.md") + "\n      run: jirafs diff TEST-2\n",
 		"  draft:\n    TEST-3  " + filepath.Join(local, "TEST-3.md") + "\n      run: jirafs push " + filepath.Join(local, "TEST-3.md") + "\n",
 	} {
 		if !strings.Contains(out, want) {

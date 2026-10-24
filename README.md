@@ -15,7 +15,7 @@ The current CLI is usable as a narrow operator workflow:
 3. Refresh one live mirror scope with `jirafs mirror refresh`.
 4. Export or inspect one issue locally with `jirafs export issue`.
 5. Edit the mirrored Markdown file.
-6. Review the planned write-back with `jirafs plan`.
+6. Review the planned write-back with `jirafs diff`.
 7. Apply the write path with `jirafs sync KEY --apply` (plain `jirafs sync KEY` is a dry run).
 
 Example:
@@ -35,7 +35,7 @@ jirafs use
 jirafs mirror refresh my-issues
 jirafs export issue PLAT-123            # writes <local_dir>/PLAT-123.md
 jirafs export issue PLAT-123 --stdout > /tmp/PLAT-123.md
-jirafs plan PLAT-123
+jirafs diff PLAT-123
 jirafs sync PLAT-123                    # dry run: prints the plan, writes nothing
 jirafs sync PLAT-123 --apply            # writes to Jira
 jirafs sync PLAT-123 --apply --write-local   # ...and refreshes the local file
@@ -108,7 +108,7 @@ If you are trying `jirafs` for the first time:
 3. Run `jirafs mirror refresh my-issues`.
 4. Inspect the mirror directory and `mirror.yml`.
 5. Run `jirafs export issue ABC-123` or open a mirrored issue file.
-6. Run `jirafs plan ABC-123` before any write attempt.
+6. Run `jirafs diff ABC-123` before any write attempt.
 
 If something fails:
 
@@ -152,7 +152,7 @@ The most important commands right now are:
 - `jirafs use`
 - `jirafs mirror refresh`
 - `jirafs export issue`
-- `jirafs plan`
+- `jirafs diff`
 - `jirafs sync`
 
 ## Creating Issues With An AI

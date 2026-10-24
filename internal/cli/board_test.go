@@ -14,14 +14,14 @@ func withBoardTestIO(t *testing.T) (*bytes.Buffer, *bytes.Buffer) {
 	stderr := &bytes.Buffer{}
 	oldStdout := boardStdout
 	oldStderr := boardStderr
-	oldPlanStderr := planStderr
+	oldPlanStderr := diffStderr
 	boardStdout = stdout
 	boardStderr = stderr
-	planStderr = stderr
+	diffStderr = stderr
 	t.Cleanup(func() {
 		boardStdout = oldStdout
 		boardStderr = oldStderr
-		planStderr = oldPlanStderr
+		diffStderr = oldPlanStderr
 	})
 	return stdout, stderr
 }

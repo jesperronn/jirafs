@@ -14,7 +14,7 @@ Suggested top-level commands:
 - `jirafs mirror`
 - `jirafs init`
 - `jirafs export`
-- `jirafs plan`
+- `jirafs diff`
 - `jirafs sync`
 - `jirafs new`
 - `jirafs registry`
@@ -80,15 +80,16 @@ jirafs export backlog
 jirafs export selected ABC-123 OPS-9
 ```
 
-## Plan
+## Diff
 
-Shows the operations required to sync local changes back to Jira.
+Shows the operations required to sync local changes back to Jira. Read-only; only the remote issue is fetched. With no key it diffs every locally changed issue file. It prints `N issue(s) changed` and exits 0 whether or not there are differences; `--exit-code` exits 1 when any issue differs.
 
 Examples:
 
 ```text
-jirafs plan
-jirafs plan jira/live/issues/ABC-123.md
+jirafs diff
+jirafs diff ABC-123 ABC-124
+jirafs diff --exit-code
 ```
 
 ## Sync

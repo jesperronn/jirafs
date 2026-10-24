@@ -186,7 +186,7 @@ func collectLocalChanges(dirs []string, m mirror.Mirror) []LocalChange {
 				if remoteAhead(m.RemoteUpdatedFor(issue.Identity.Key), issue.Context.Updated) {
 					state = ChangeConflicted
 				}
-				changes = append(changes, LocalChange{state, key, path, "jirafs plan " + key})
+				changes = append(changes, LocalChange{state, key, path, "jirafs diff " + key})
 			}
 		}
 	}

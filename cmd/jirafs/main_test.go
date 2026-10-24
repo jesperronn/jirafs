@@ -145,7 +145,7 @@ func TestExportCommand(t *testing.T) {
 	}
 }
 
-func TestPlanCommand(t *testing.T) {
+func TestDiffCommand(t *testing.T) {
 	tmpDir := t.TempDir()
 	homeDir := filepath.Join(tmpDir, "home")
 	jirafsDir := filepath.Join(homeDir, settingsDir)
@@ -175,7 +175,7 @@ mirror_dir = "` + jirafsDir + `/jira/platform"
 		t.Fatal(err)
 	}
 
-	output := runMainHelperWithHome(t, homeDir, "plan", "--cwd", mirrorDir)
+	output := runMainHelperWithHome(t, homeDir, "diff", "--cwd", mirrorDir)
 	// When no issue key is provided, plan resolves the project and lists
 	// local issues (possibly empty). Exit code 0 is expected.
 	if output.exitCode != 0 {
@@ -1297,7 +1297,7 @@ func ownedInProcess(args []string) bool {
 		return true
 	}
 	switch args[0] {
-	case "board", "init", "new", "push", "registry", "archive", "sync", "mirror", "export", "plan", "status", "doctor":
+	case "board", "init", "new", "push", "registry", "archive", "sync", "mirror", "export", "diff", "status", "doctor":
 		return false
 	}
 	return true
@@ -1370,4 +1370,14 @@ func writeMinimalHome(t *testing.T) string {
 		t.Fatal(err)
 	}
 	return home
+}
+
+func TestPlanIsUnknownCommand(t *testing.T) {
+	output := runMainHelper(t, "plan")
+	if output.exitCode == 0 {
+		t.Fatalf("exitCode = 0, want non-zero")
+	}
+	if !strings.Contains(output.stderr, `unknown command: "plan"`) {
+		t.Fatalf("stderr = %q, want unknown command", output.stderr)
+	}
 }

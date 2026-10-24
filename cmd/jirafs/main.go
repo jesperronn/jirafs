@@ -60,8 +60,8 @@ func run(args []string, stdout, stderr io.Writer) int {
 		return cli.RunMirror(rest)
 	case "export":
 		return cli.RunExport(rest)
-	case "plan":
-		return cli.RunPlan(rest)
+	case "diff":
+		return cli.RunDiff(rest)
 	case "status":
 		return cli.RunStatus(rest)
 	case "doctor":
@@ -403,7 +403,7 @@ func printHelp(stderr io.Writer) {
 	commands := [][2]string{
 		{"init", "initialize a new jirafs project in the current directory"},
 		{"export", "export Jira issues into local Markdown files"},
-		{"plan", "show a sync plan without applying changes"},
+		{"diff", "show what sync would change in Jira (read-only)"},
 		{"setup", "record Jira instance and project settings"},
 		{"status", "show workspace status and next-step hints"},
 		{"doctor", "run health checks on config, credentials, and live connectivity"},
