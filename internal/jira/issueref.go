@@ -19,18 +19,18 @@ func ParseIssueRef(arg string, baseURL string) (key string, err error) {
 		return arg, nil
 	}
 	if !strings.Contains(arg, "://") {
-		return "", fmt.Errorf("%q is not an issue key or Jira URL; try: jirafs export issue KEY --project <name>", arg)
+		return "", fmt.Errorf("%q is not an issue key or Jira URL; try: jirafs pull KEY --project <name>", arg)
 	}
 	u, perr := url.Parse(arg)
 	if perr != nil || u.Host == "" {
-		return "", fmt.Errorf("cannot parse %q as a Jira URL; try: jirafs export issue KEY --project <name>", arg)
+		return "", fmt.Errorf("cannot parse %q as a Jira URL; try: jirafs pull KEY --project <name>", arg)
 	}
 	base, perr := url.Parse(strings.TrimSpace(baseURL))
 	if perr != nil || base.Host == "" {
-		return "", fmt.Errorf("invalid base_url %q; try: jirafs export issue KEY --project <name>", baseURL)
+		return "", fmt.Errorf("invalid base_url %q; try: jirafs pull KEY --project <name>", baseURL)
 	}
 	if !strings.EqualFold(u.Host, base.Host) {
-		return "", fmt.Errorf("URL host %q does not match project base_url host %q; try: jirafs export issue KEY --project <name>", u.Host, base.Host)
+		return "", fmt.Errorf("URL host %q does not match project base_url host %q; try: jirafs pull KEY --project <name>", u.Host, base.Host)
 	}
 	if k := u.Query().Get("selectedIssue"); issueKeyPattern.MatchString(k) {
 		return k, nil
@@ -41,5 +41,5 @@ func ParseIssueRef(arg string, baseURL string) (key string, err error) {
 			return segs[i+1], nil
 		}
 	}
-	return "", fmt.Errorf("no issue key found in %q; try: jirafs export issue KEY --project <name>", arg)
+	return "", fmt.Errorf("no issue key found in %q; try: jirafs pull KEY --project <name>", arg)
 }

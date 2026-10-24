@@ -16,10 +16,10 @@ import (
 func swapStreams(t *testing.T) (*bytes.Buffer, *bytes.Buffer) {
 	t.Helper()
 	out, errb := &bytes.Buffer{}, &bytes.Buffer{}
-	stdouts := []*io.Writer{&archiveStdout, &boardStdout, &doctorStdout, &exportStdout, &initStdout,
-		&diffStdout, &mirrorStdout, &newStdout, &pushStdout, &statusStdout, &registryStdout, &useStdout}
-	stderrs := []*io.Writer{&archiveStderr, &boardStderr, &doctorStderr, &exportStderr, &initStderr,
-		&diffStderr, &mirrorStderr, &newStderr, &pushStderr, &statusStderr, &registryStderr, &useStderr}
+	stdouts := []*io.Writer{&archiveStdout, &boardStdout, &doctorStdout, &initStdout,
+		&diffStdout, &pullStdout, &newStdout, &pushStdout, &statusStdout, &registryStdout, &useStdout}
+	stderrs := []*io.Writer{&archiveStderr, &boardStderr, &doctorStderr, &initStderr,
+		&diffStderr, &pullStderr, &newStderr, &pushStderr, &statusStderr, &registryStderr, &useStderr}
 	var saved []io.Writer
 	for _, p := range append(append([]*io.Writer{}, stdouts...), stderrs...) {
 		saved = append(saved, *p)

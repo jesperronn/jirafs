@@ -164,7 +164,7 @@ If non-interactive and unresolved, they must fail.
 
 These commands may not need `--project` because the target implies it:
 
-- `jirafs export issue ABC-123`
+- `jirafs pull ABC-123`
 - `jirafs diff ABC-123`
 - `jirafs push jira/live/issues/ABC-123.md`
 
@@ -288,7 +288,7 @@ $ jirafs export backlog --non-interactive --project ABC --json
 ### Conflicting Explicit Inputs
 
 ```text
-$ jirafs export issue ABC-123 --project OPS
+$ jirafs pull ABC-123 --project OPS
 error: issue ABC-123 belongs to project ABC but --project was OPS
 ```
 

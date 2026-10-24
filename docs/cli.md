@@ -11,9 +11,8 @@ It must be usable without Codex or another agent layer.
 Suggested top-level commands:
 
 - `jirafs use`
-- `jirafs mirror`
+- `jirafs pull`
 - `jirafs init`
-- `jirafs export`
 - `jirafs diff`
 - `jirafs push`
 - `jirafs new`
@@ -66,9 +65,9 @@ jirafs use --project platform
 jirafs use --clear
 ```
 
-## Mirror
+## Mirror Scopes
 
-Refreshes and manages named live mirror scopes.
+Named live mirror scopes, pulled with `jirafs pull <scope>`.
 
 The primary live mirror scopes are:
 
@@ -80,25 +79,25 @@ The primary live mirror scopes are:
 Examples:
 
 ```text
-jirafs mirror refresh current-sprint
-jirafs mirror refresh my-issues
-jirafs mirror refresh --all
-jirafs mirror archive-sweep
-jirafs mirror status
+jirafs pull current-sprint
+jirafs pull my-issues
+jirafs pull
+jirafs pull my-issues --full
+jirafs archive sweep
 ```
 
-## Export
+## Pull
 
-Exports remote Jira data into the local filesystem.
+Fetches remote Jira data into the local filesystem. An argument shaped like an issue key (`ABC-123`) or a Jira browse URL pulls that one issue; any other argument is a scope name from `mirror.yml` (or a built-in scope such as `my-issues`), refreshed incrementally. With no argument every configured scope is pulled. A name that is both an issue key and a scope name is an error: rename the scope.
 
 Examples:
 
 ```text
-jirafs export issue ABC-123
-jirafs export sprint current
-jirafs export jql 'assignee = currentUser()'
-jirafs export backlog
-jirafs export selected ABC-123 OPS-9
+jirafs pull ABC-123
+jirafs pull ABC-123 --stdout
+jirafs pull my-issues
+jirafs pull my-issues --full
+jirafs pull --dry-run
 ```
 
 ## Diff

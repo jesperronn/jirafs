@@ -51,7 +51,7 @@ func (e *incrEnv) refresh(t *testing.T, args ...string) int {
 	t.Helper()
 	e.stdout.Reset()
 	e.stderr.Reset()
-	return RunMirror(append([]string{"refresh", "--project", "test"}, append(args, "my-issues")...))
+	return RunPull(append([]string{"--project", "test"}, append(args, "my-issues")...))
 }
 
 func newIncrEnv(t *testing.T, scopeExtra string) *incrEnv {
@@ -78,17 +78,17 @@ scopes:
 		fake.SetIssue(k, iss)
 		rec.issues = append(rec.issues, iss)
 	}
-	withMirrorClientFactory(t, func(*config.Settings, *context.Context, string) (jira.Client, error) {
+	withPullClientFactory(t, func(*config.Settings, *context.Context, string) (jira.Client, error) {
 		return rec, nil
 	})
-	oldNow := mirrorNow
-	mirrorNow = func() time.Time { return time.Date(2026, 1, 2, 10, 30, 0, 0, time.UTC) }
-	t.Cleanup(func() { mirrorNow = oldNow })
+	oldNow := pullNow
+	pullNow = func() time.Time { return time.Date(2026, 1, 2, 10, 30, 0, 0, time.UTC) }
+	t.Cleanup(func() { pullNow = oldNow })
 
 	stdout, stderr := &strings.Builder{}, &strings.Builder{}
-	oldOut, oldErr := mirrorStdout, mirrorStderr
-	mirrorStdout, mirrorStderr = stdout, stderr
-	t.Cleanup(func() { mirrorStdout, mirrorStderr = oldOut, oldErr })
+	oldOut, oldErr := pullStdout, pullStderr
+	pullStdout, pullStderr = stdout, stderr
+	t.Cleanup(func() { pullStdout, pullStderr = oldOut, oldErr })
 	return &incrEnv{tmpDir: tmpDir, rec: rec, stdout: stdout, stderr: stderr}
 }
 
@@ -97,7 +97,7 @@ func wantSince(t *testing.T) string {
 	return time.Date(2026, 1, 2, 10, 29, 0, 0, time.UTC).Local().Format("2006/01/02 15:04")
 }
 
-func TestRunMirrorRefresh_IncrementalCursor(t *testing.T) {
+func TestRunPull_IncrementalCursor(t *testing.T) {
 	e := newIncrEnv(t, "")
 
 	if exit := e.refresh(t); exit != 0 {
@@ -166,7 +166,7 @@ func TestRunMirrorRefresh_IncrementalCursor(t *testing.T) {
 	}
 }
 
-func TestRunMirrorRefresh_FullIgnoresCursor(t *testing.T) {
+func TestRunPull_FullIgnoresCursor(t *testing.T) {
 	e := newIncrEnv(t, "    last_synced: \"2026-01-02T08:00:00Z\"\n")
 	if exit := e.refresh(t, "--full"); exit != 0 {
 		t.Fatalf("exit = %d, stderr = %q", exit, e.stderr.String())
@@ -181,7 +181,7 @@ func TestRunMirrorRefresh_FullIgnoresCursor(t *testing.T) {
 	}
 }
 
-func TestRunMirrorRefresh_DryRunKeepsCursor(t *testing.T) {
+func TestRunPull_DryRunKeepsCursor(t *testing.T) {
 	e := newIncrEnv(t, "    last_synced: \"2026-01-02T08:00:00Z\"\n")
 	if exit := e.refresh(t, "--dry-run"); exit != 0 {
 		t.Fatalf("exit = %d, stderr = %q", exit, e.stderr.String())
@@ -194,7 +194,7 @@ func TestRunMirrorRefresh_DryRunKeepsCursor(t *testing.T) {
 	}
 }
 
-func TestRunMirrorRefresh_FailureKeepsCursor(t *testing.T) {
+func TestRunPull_FailureKeepsCursor(t *testing.T) {
 	e := newIncrEnv(t, "    last_synced: \"2026-01-02T08:00:00Z\"\n")
 	if err := os.MkdirAll(e.path("local", "TEST-2.md"), 0o755); err != nil {
 		t.Fatal(err)
@@ -208,7 +208,7 @@ func TestRunMirrorRefresh_FailureKeepsCursor(t *testing.T) {
 	}
 }
 
-func TestRunMirrorRefresh_KeepsLocalEdits(t *testing.T) {
+func TestRunPull_KeepsLocalEdits(t *testing.T) {
 	e := newIncrEnv(t, "")
 	if exit := e.refresh(t); exit != 0 {
 		t.Fatalf("first refresh exit = %d, stderr = %q", exit, e.stderr.String())
@@ -249,7 +249,7 @@ func TestRunMirrorRefresh_KeepsLocalEdits(t *testing.T) {
 	}
 }
 
-func TestRunMirrorRefresh_BuiltinScopeStoresCursor(t *testing.T) {
+func TestRunPull_BuiltinScopeStoresCursor(t *testing.T) {
 	e := newIncrEnv(t, "")
 	writeMirrorWithScopes(t, e.tmpDir, "")
 	if exit := e.refresh(t); exit != 0 {

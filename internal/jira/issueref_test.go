@@ -30,7 +30,7 @@ func TestParseIssueRef(t *testing.T) {
 			if got != tt.want {
 				t.Fatalf("key = %q, want %q", got, tt.want)
 			}
-			if err != nil && !contains(err.Error(), "jirafs export issue KEY --project <name>") {
+			if err != nil && !contains(err.Error(), "jirafs pull KEY --project <name>") {
 				t.Fatalf("error %q lacks copy-pasteable hint", err)
 			}
 		})

@@ -65,9 +65,9 @@ func TestExportIssueFlagAfterKey(t *testing.T) {
 	tmpDir := t.TempDir()
 	t.Setenv("HOME", writeSettings(t, tmpDir))
 	fake := exportFakeIssue("PROJ-42")
-	withExportClientFactory(t, func(*config.Settings, *context.Context, string) (jira.Client, error) { return fake, nil })
-	stdout, stderr := withExportTestIO(t)
-	if exit := RunExport([]string{"issue", "PROJ-42", "--stdout", "--project", "test"}); exit != 0 {
+	withPullClientFactory(t, func(*config.Settings, *context.Context, string) (jira.Client, error) { return fake, nil })
+	stdout, stderr := withPullTestIO(t)
+	if exit := RunPull([]string{"PROJ-42", "--stdout", "--project", "test"}); exit != 0 {
 		t.Fatalf("exit=%d stderr=%q", exit, stderr)
 	}
 	if !strings.Contains(stdout.String(), "PROJ-42") {

@@ -16,9 +16,10 @@ func TestMissingSettingsPrintsFirstRunHint(t *testing.T) {
 		run    func() int
 	}{
 		{"push", &pushStderr, func() int { return RunPush([]string{"PLAT-1"}) }},
-		{"export", &exportStderr, func() int { return RunExport([]string{"issue", "PLAT-1"}) }},
+		{"pull key", &pullStderr, func() int { return RunPull([]string{"PLAT-1"}) }},
 		{"diff", &diffStderr, func() int { return RunDiff([]string{"PLAT-1"}) }},
-		{"mirror", &mirrorStderr, func() int { return RunMirror([]string{"refresh", "my-issues"}) }},
+		{"pull scope", &pullStderr, func() int { return RunPull([]string{"my-issues"}) }},
+		{"archive sweep", &archiveStderr, func() int { return RunArchive([]string{"sweep"}) }},
 		{"board", &boardStderr, func() int { return RunBoard(nil) }},
 		{"status", &statusStderr, func() int { return RunStatus(nil) }},
 		{"doctor", &doctorStderr, func() int { return RunDoctor(nil) }},

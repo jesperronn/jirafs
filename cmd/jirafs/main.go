@@ -47,10 +47,8 @@ func run(args []string, stdout, stderr io.Writer) int {
 		return cli.RunArchive(rest)
 	case "use":
 		return cli.RunUse(rest)
-	case "mirror":
-		return cli.RunMirror(rest)
-	case "export":
-		return cli.RunExport(rest)
+	case "pull":
+		return cli.RunPull(rest)
 	case "diff":
 		return cli.RunDiff(rest)
 	case "status":
@@ -70,7 +68,7 @@ func printHelp(stderr io.Writer) {
 	fmt.Fprintf(stderr, "%s:\n", color.BoldGreen(stderr, "Commands"))
 	commands := [][2]string{
 		{"init", "configure a Jira instance and project, and create its mirror directory"},
-		{"export", "export Jira issues into local Markdown files"},
+		{"pull", "fetch Jira issues into local Markdown files (one issue or a scope)"},
 		{"diff", "show what push would change in Jira (read-only)"},
 		{"status", "show workspace status and next-step hints"},
 		{"doctor", "run health checks on config, credentials, and live connectivity"},
@@ -78,8 +76,7 @@ func printHelp(stderr io.Writer) {
 		{"push", "create drafts and update modified issues in Jira (dry run unless --apply)"},
 		{"registry", "manage local registry files for typed references"},
 		{"board", "show a local kanban-style board view"},
-		{"archive", "manage archived issue files"},
-		{"mirror", "manage live mirror scopes and archive candidates"},
+		{"archive", "archive resolved issues and list archived files"},
 		{"use", "update remembered project context"},
 		{"help", "show this help message"},
 	}

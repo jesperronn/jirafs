@@ -49,7 +49,7 @@ func TestSmokeExportEditPlanSyncReexport(t *testing.T) {
 		},
 	})
 	// Override the client factory to use the fake transport.
-	withExportClientFactory(t, func(*config.Settings, *context.Context, string) (jira.Client, error) {
+	withPullClientFactory(t, func(*config.Settings, *context.Context, string) (jira.Client, error) {
 		return fake, nil
 	})
 	withPushClientFactory(t, func(*config.Settings, *context.Context, string) (jira.Client, error) {
@@ -60,20 +60,20 @@ func TestSmokeExportEditPlanSyncReexport(t *testing.T) {
 	})
 
 	// Step 1: Export the issue from Jira to a local file.
-	// withExportTestIO swaps the global exportStdout to a buffer and returns it.
-	exportStdout, exportStderr := withExportTestIO(t)
+	// withPullTestIO swaps the global pullStdout to a buffer and returns it.
+	pullStdout, pullStderr := withPullTestIO(t)
 	// Use a dedicated export directory (not in local_dirs) so we control the file.
 	exportDir := filepath.Join(tmpDir, "exported")
 	if err := os.MkdirAll(exportDir, 0o755); err != nil {
 		t.Fatalf("MkdirAll export: %v", err)
 	}
 
-	exit := RunExport([]string{"issue", "--stdout", "--project", "test", "PROJ-42"})
+	exit := RunPull([]string{"--stdout", "--project", "test", "PROJ-42"})
 	if exit != 0 {
-		t.Fatalf("RunExport([\"issue\", \"--project\", \"test\", \"PROJ-42\"]) = %d, stderr = %q", exit, exportStderr.String())
+		t.Fatalf("RunPull([\"issue\", \"--project\", \"test\", \"PROJ-42\"]) = %d, stderr = %q", exit, pullStderr.String())
 	}
 
-	exportedContent := exportStdout.String()
+	exportedContent := pullStdout.String()
 	if exportedContent == "" {
 		t.Fatal("export produced no output")
 	}
@@ -110,14 +110,14 @@ func TestSmokeExportEditPlanSyncReexport(t *testing.T) {
 	}
 
 	// Step 5: Re-export to verify the remote was updated.
-	exportStdout, exportStderr = withExportTestIO(t)
+	pullStdout, pullStderr = withPullTestIO(t)
 
-	exit = RunExport([]string{"issue", "--stdout", "--project", "test", "PROJ-42"})
+	exit = RunPull([]string{"--stdout", "--project", "test", "PROJ-42"})
 	if exit != 0 {
-		t.Fatalf("RunExport re-export = %d, stderr = %q", exit, exportStderr.String())
+		t.Fatalf("RunPull re-export = %d, stderr = %q", exit, pullStderr.String())
 	}
 
-	reexportedContent := exportStdout.String()
+	reexportedContent := pullStdout.String()
 	if reexportedContent == "" {
 		t.Fatal("re-export produced no output")
 	}
@@ -160,7 +160,7 @@ func TestSmokeExportEditPlanSyncReexport_MinimalIssue(t *testing.T) {
 		MachineOwned: schema.MachineOwned{SchemaVersion: "1"},
 	})
 	// Override the client factory to use the fake transport.
-	withExportClientFactory(t, func(*config.Settings, *context.Context, string) (jira.Client, error) {
+	withPullClientFactory(t, func(*config.Settings, *context.Context, string) (jira.Client, error) {
 		return fake, nil
 	})
 	withPushClientFactory(t, func(*config.Settings, *context.Context, string) (jira.Client, error) {
@@ -171,15 +171,15 @@ func TestSmokeExportEditPlanSyncReexport_MinimalIssue(t *testing.T) {
 	})
 
 	// Step 1: Export the minimal issue.
-	// withExportTestIO swaps the global exportStdout to a buffer and returns it.
-	exportStdout, exportStderr := withExportTestIO(t)
+	// withPullTestIO swaps the global pullStdout to a buffer and returns it.
+	pullStdout, pullStderr := withPullTestIO(t)
 
-	exit := RunExport([]string{"issue", "--stdout", "--project", "test", "DRF-1"})
+	exit := RunPull([]string{"--stdout", "--project", "test", "DRF-1"})
 	if exit != 0 {
-		t.Fatalf("RunExport minimal = %d, stderr = %q", exit, exportStderr.String())
+		t.Fatalf("RunPull minimal = %d, stderr = %q", exit, pullStderr.String())
 	}
 
-	exportedContent := exportStdout.String()
+	exportedContent := pullStdout.String()
 	if exportedContent == "" {
 		t.Fatal("export produced no output for minimal issue")
 	}
@@ -217,14 +217,14 @@ func TestSmokeExportEditPlanSyncReexport_MinimalIssue(t *testing.T) {
 	}
 
 	// Step 5: Re-export.
-	exportStdout, exportStderr = withExportTestIO(t)
+	pullStdout, pullStderr = withPullTestIO(t)
 
-	exit = RunExport([]string{"issue", "--stdout", "--project", "test", "DRF-1"})
+	exit = RunPull([]string{"--stdout", "--project", "test", "DRF-1"})
 	if exit != 0 {
-		t.Fatalf("RunExport re-export minimal = %d, stderr = %q", exit, exportStderr.String())
+		t.Fatalf("RunPull re-export minimal = %d, stderr = %q", exit, pullStderr.String())
 	}
 
-	reexportedContent := exportStdout.String()
+	reexportedContent := pullStdout.String()
 	if reexportedContent == "" {
 		t.Fatal("re-export produced no output for minimal issue")
 	}
@@ -249,17 +249,17 @@ func TestSmokeExportEditPlanSyncReexport_FetchError(t *testing.T) {
 	// Set up the fake transport to fail on fetch.
 	fake := jira.NewFakeTransport()
 	fake.SetErr("fetch", jira.NewHTTPErr(500, "server error"))
-	withExportClientFactory(t, func(*config.Settings, *context.Context, string) (jira.Client, error) {
+	withPullClientFactory(t, func(*config.Settings, *context.Context, string) (jira.Client, error) {
 		return fake, nil
 	})
 
-	_, exportStderr := withExportTestIO(t)
-	exit := RunExport([]string{"issue", "--stdout", "--project", "test", "PROJ-42"})
+	_, pullStderr := withPullTestIO(t)
+	exit := RunPull([]string{"--stdout", "--project", "test", "PROJ-42"})
 	if exit != 1 {
-		t.Fatalf("RunExport with fetch error = %d, want 1", exit)
+		t.Fatalf("RunPull with fetch error = %d, want 1", exit)
 	}
-	if !strings.Contains(exportStderr.String(), "server error") {
-		t.Fatalf("stderr = %q, want server error", exportStderr.String())
+	if !strings.Contains(pullStderr.String(), "server error") {
+		t.Fatalf("stderr = %q, want server error", pullStderr.String())
 	}
 }
 
@@ -283,7 +283,7 @@ func TestSmokeExportEditPlanSyncReexport_Conflict(t *testing.T) {
 		Status:  "To Do",
 	})
 	// Override the client factory to use the fake transport.
-	withExportClientFactory(t, func(*config.Settings, *context.Context, string) (jira.Client, error) {
+	withPullClientFactory(t, func(*config.Settings, *context.Context, string) (jira.Client, error) {
 		return fake, nil
 	})
 	withPushClientFactory(t, func(*config.Settings, *context.Context, string) (jira.Client, error) {
@@ -294,14 +294,14 @@ func TestSmokeExportEditPlanSyncReexport_Conflict(t *testing.T) {
 	})
 
 	// Step 1: Export.
-	// withExportTestIO swaps the global exportStdout to a buffer and returns it.
-	exportStdout, exportStderr := withExportTestIO(t)
-	exit := RunExport([]string{"issue", "--stdout", "--project", "test", "PROJ-42"})
+	// withPullTestIO swaps the global pullStdout to a buffer and returns it.
+	pullStdout, pullStderr := withPullTestIO(t)
+	exit := RunPull([]string{"--stdout", "--project", "test", "PROJ-42"})
 	if exit != 0 {
-		t.Fatalf("RunExport = %d, stderr = %q", exit, exportStderr.String())
+		t.Fatalf("RunPull = %d, stderr = %q", exit, pullStderr.String())
 	}
 
-	exportedContent := exportStdout.String()
+	exportedContent := pullStdout.String()
 	if exportedContent == "" {
 		t.Fatal("export produced no output")
 	}
@@ -371,7 +371,7 @@ func TestSmokeExportEditPlanSyncReexport_UpdateError(t *testing.T) {
 	// Fail on update.
 	fake.SetErr("update", jira.NewHTTPErr(500, "update server error"))
 	// Override the client factory to use the fake transport.
-	withExportClientFactory(t, func(*config.Settings, *context.Context, string) (jira.Client, error) {
+	withPullClientFactory(t, func(*config.Settings, *context.Context, string) (jira.Client, error) {
 		return fake, nil
 	})
 	withPushClientFactory(t, func(*config.Settings, *context.Context, string) (jira.Client, error) {
@@ -382,14 +382,14 @@ func TestSmokeExportEditPlanSyncReexport_UpdateError(t *testing.T) {
 	})
 
 	// Step 1: Export.
-	// withExportTestIO swaps the global exportStdout to a buffer and returns it.
-	exportStdout, exportStderr := withExportTestIO(t)
-	exit := RunExport([]string{"issue", "--stdout", "--project", "test", "PROJ-42"})
+	// withPullTestIO swaps the global pullStdout to a buffer and returns it.
+	pullStdout, pullStderr := withPullTestIO(t)
+	exit := RunPull([]string{"--stdout", "--project", "test", "PROJ-42"})
 	if exit != 0 {
-		t.Fatalf("RunExport = %d, stderr = %q", exit, exportStderr.String())
+		t.Fatalf("RunPull = %d, stderr = %q", exit, pullStderr.String())
 	}
 
-	exportedContent := exportStdout.String()
+	exportedContent := pullStdout.String()
 	if exportedContent == "" {
 		t.Fatal("export produced no output")
 	}
@@ -423,14 +423,14 @@ func TestSmokeExportEditPlanSyncReexport_UpdateError(t *testing.T) {
 	}
 
 	// Step 4: Verify re-export still shows the original (unchanged) remote.
-	exportStdout, exportStderr = withExportTestIO(t)
+	pullStdout, pullStderr = withPullTestIO(t)
 
-	exit = RunExport([]string{"issue", "--stdout", "--project", "test", "PROJ-42"})
+	exit = RunPull([]string{"--stdout", "--project", "test", "PROJ-42"})
 	if exit != 0 {
-		t.Fatalf("RunExport re-export = %d, stderr = %q", exit, exportStderr.String())
+		t.Fatalf("RunPull re-export = %d, stderr = %q", exit, pullStderr.String())
 	}
 
-	reexportedContent := exportStdout.String()
+	reexportedContent := pullStdout.String()
 	// The remote should still have the original summary since update failed.
 	if !strings.Contains(reexportedContent, "Original summary") {
 		t.Fatalf("re-exported content should still have original summary, got: %s", reexportedContent)

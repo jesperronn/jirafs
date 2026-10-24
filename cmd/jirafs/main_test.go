@@ -35,16 +35,6 @@ func TestHelpCommand(t *testing.T) {
 	}
 }
 
-func TestMirrorHelpCommand(t *testing.T) {
-	output := runMainHelper(t, "mirror", "help")
-	if !strings.Contains(output.stderr, "refresh one named live mirror scope") {
-		t.Fatalf("stderr = %q, want mirror help text", output.stderr)
-	}
-	if output.exitCode != 0 {
-		t.Fatalf("exitCode = %d, want 0", output.exitCode)
-	}
-}
-
 func TestShortHelpFlag(t *testing.T) {
 	output := runMainHelper(t, "-h")
 	if !strings.Contains(output.stderr, "Run \"jirafs <command> --help\"") {
@@ -137,16 +127,6 @@ func TestCommandsWired(t *testing.T) {
 	}
 }
 
-func TestExportCommand(t *testing.T) {
-	output := runMainHelper(t, "export")
-	if output.exitCode != 2 {
-		t.Fatalf("exitCode = %d, want 2", output.exitCode)
-	}
-	if !strings.Contains(output.stderr, "jirafs export: missing subcommand") {
-		t.Fatalf("stderr = %q, want missing subcommand message", output.stderr)
-	}
-}
-
 func TestDiffCommand(t *testing.T) {
 	tmpDir := t.TempDir()
 	homeDir := filepath.Join(tmpDir, "home")
@@ -185,49 +165,6 @@ mirror_dir = "` + jirafsDir + `/jira/platform"
 	}
 	if !strings.Contains(output.stderr, "no local directories configured") {
 		t.Fatalf("stderr = %q, want no local directories configured", output.stderr)
-	}
-}
-
-func TestMirrorNoSubcommand(t *testing.T) {
-	output := runMainHelper(t, "mirror")
-	if !strings.Contains(output.stderr, "jirafs mirror: missing subcommand") {
-		t.Fatalf("stderr = %q, want missing subcommand message", output.stderr)
-	}
-	if output.exitCode != 2 {
-		t.Fatalf("exitCode = %d, want 2", output.exitCode)
-	}
-}
-
-func TestMirrorUnknownSubcommand(t *testing.T) {
-	tmpDir := t.TempDir()
-	homeDir := filepath.Join(tmpDir, "home")
-	jirafsDir := filepath.Join(homeDir, settingsDir)
-	if err := os.MkdirAll(jirafsDir, 0o755); err != nil {
-		t.Fatal(err)
-	}
-
-	settings := `
-version = 1
-
-[instances.work]
-base_url = "https://jira.example.com"
-auth_type = "atlassian_api_token"
-
-[projects.platform]
-key = "PLAT"
-instance = "work"
-mirror_dir = "` + jirafsDir + `/jira/platform"
-`
-	if err := os.WriteFile(filepath.Join(jirafsDir, settingsFile), []byte(settings), 0o644); err != nil {
-		t.Fatal(err)
-	}
-
-	output := runMainHelperWithHome(t, homeDir, "mirror", "unknown-sub")
-	if !strings.Contains(output.stderr, `jirafs mirror: unknown subcommand "unknown-sub"`) {
-		t.Fatalf("stderr = %q, want unknown subcommand message", output.stderr)
-	}
-	if output.exitCode != 2 {
-		t.Fatalf("exitCode = %d, want 2", output.exitCode)
 	}
 }
 
@@ -1286,7 +1223,7 @@ func ownedInProcess(args []string) bool {
 		return true
 	}
 	switch args[0] {
-	case "board", "init", "use", "new", "push", "registry", "archive", "mirror", "export", "diff", "status", "doctor":
+	case "board", "init", "use", "new", "push", "registry", "archive", "pull", "diff", "status", "doctor":
 		return false
 	}
 	return true
@@ -1368,5 +1305,31 @@ func TestPlanIsUnknownCommand(t *testing.T) {
 	}
 	if !strings.Contains(output.stderr, `unknown command: "plan"`) {
 		t.Fatalf("stderr = %q, want unknown command", output.stderr)
+	}
+}
+
+func TestPullHelpCommand(t *testing.T) {
+	output := runMainHelper(t, "pull", "--help")
+	if !strings.Contains(output.stderr, "pull [scope|KEY]") {
+		t.Fatalf("stdout = %q, want pull help text", output.stderr)
+	}
+	if output.exitCode != 0 {
+		t.Fatalf("exitCode = %d, want 0", output.exitCode)
+	}
+}
+
+// TestRemovedCommandsAreUnknown verifies the old fetch commands no longer
+// exist: no aliases, no deprecation messages.
+func TestRemovedCommandsAreUnknown(t *testing.T) {
+	for _, cmd := range []string{"export", "mirror"} {
+		for _, args := range [][]string{{cmd}, {cmd, "issue", "PLAT-1"}, {cmd, "refresh", "my-issues"}} {
+			output := runMainHelper(t, args...)
+			if output.exitCode != 2 {
+				t.Fatalf("%v: exitCode = %d, want 2", args, output.exitCode)
+			}
+			if !strings.Contains(output.stderr, "unknown command") {
+				t.Fatalf("%v: stderr = %q, want unknown command", args, output.stderr)
+			}
+		}
 	}
 }

@@ -122,7 +122,7 @@ tests/
 3. Merge WS2 once resolver/config contracts are stable enough for planning and
    export consumers.
 4. Merge WS3 after it targets WS1 models instead of inventing its own shapes.
-5. Merge WS5 after WS2 and WS3 have stable enough contracts for mirror refresh
+5. Merge WS5 after WS2 and WS3 have stable enough contracts for pull
    and archive membership rules.
 6. Merge WS6 incrementally: command shells can land early, but full wiring
    should wait for the called services to exist behind stable interfaces.
@@ -171,7 +171,7 @@ tests/
 
 - Phase 1 complete when WS0-WS3 have stable contract tests and `export` can
   round-trip one issue into the local model without CLI hacks.
-- Phase 2 complete when WS4, WS5, and WS6 deliver mirror refresh, `plan`, and
+- Phase 2 complete when WS4, WS5, and WS6 deliver pull, `plan`, and
   `sync` for the initial safe field set with explicit conflict output.
 - Phase 3 complete when WS7 adds templates, archive flows, and board/agent
   features without reopening core ownership boundaries.

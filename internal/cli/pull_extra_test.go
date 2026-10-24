@@ -22,7 +22,7 @@ func TestMaterializeScopeIssues_WritesFilesAndSkipsInvalid(t *testing.T) {
 	settings := &config.Settings{Projects: map[string]config.Project{"p": {LocalDirs: []string{localDir}}}}
 	fake := jira.NewFakeTransport()
 	fake.SetIssuesByScope("sc", []*schema.Issue{testIssue("A-1"), nil, testIssue(""), testIssue("A-2")})
-	out, _ := withMirrorTestIO(t)
+	out, _ := withPullTestIO(t)
 
 	_, err := materializeScopeIssues(context.Background(), fake, settings, &icontext.Context{Name: "p"}, "sc")
 	if err != nil {
@@ -48,7 +48,7 @@ func TestMaterializeScopeIssues_WritesFilesAndSkipsInvalid(t *testing.T) {
 
 func TestMaterializeScopeIssues_EmptyScope(t *testing.T) {
 	settings := &config.Settings{Projects: map[string]config.Project{"p": {LocalDirs: []string{t.TempDir()}}}}
-	out, _ := withMirrorTestIO(t)
+	out, _ := withPullTestIO(t)
 	fake := jira.NewFakeTransport()
 	fake.SetIssuesByScope("empty", []*schema.Issue{})
 	if _, err := materializeScopeIssues(context.Background(), fake, settings, &icontext.Context{Name: "p"}, "empty"); err != nil {
@@ -83,7 +83,7 @@ func TestMaterializeScopeIssues_Errors(t *testing.T) {
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			withMirrorTestIO(t)
+			withPullTestIO(t)
 			_, err := materializeScopeIssues(context.Background(), c.client, c.settings, &icontext.Context{Name: c.proj}, "sc")
 			if err == nil || !strings.Contains(err.Error(), c.want) {
 				t.Errorf("err = %v, want containing %q", err, c.want)
@@ -92,7 +92,7 @@ func TestMaterializeScopeIssues_Errors(t *testing.T) {
 	}
 }
 
-func TestRunMirrorRefresh_FlagAndArgErrors(t *testing.T) {
+func TestRunPull_FlagAndArgErrors(t *testing.T) {
 	tmpDir := t.TempDir()
 	t.Setenv("HOME", writeSettings(t, tmpDir))
 	writeMirror(t, tmpDir)
@@ -100,12 +100,14 @@ func TestRunMirrorRefresh_FlagAndArgErrors(t *testing.T) {
 		args []string
 		want string
 	}{
-		{[]string{"refresh", "--bogus"}, "flag provided but not defined"},
-		{[]string{"refresh", "--project", "test"}, "missing scope name"},
+		{[]string{"--bogus"}, "flag provided but not defined"},
+		{[]string{"a", "b"}, "too many positional arguments"},
+		{[]string{"my-issues", "--stdout"}, "--stdout only applies"},
+		{[]string{"PLAT-1", "--full"}, "--full only applies"},
 	} {
-		_, stderr := withMirrorTestIO(t)
-		if code := RunMirror(c.args); code != 2 || !strings.Contains(stderr.String(), c.want) {
-			t.Errorf("RunMirror(%v) = %d stderr=%q", c.args, code, stderr.String())
+		_, stderr := withPullTestIO(t)
+		if code := RunPull(c.args); code != 2 || !strings.Contains(stderr.String(), c.want) {
+			t.Errorf("RunPull(%v) = %d stderr=%q", c.args, code, stderr.String())
 		}
 	}
 }

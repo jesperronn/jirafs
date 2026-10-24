@@ -77,8 +77,7 @@ func TestFlagError(t *testing.T) {
 // settings file; help must print on stdout, exit 0 and leave stderr empty.
 func TestSubcommandHelpBeforeSettings(t *testing.T) {
 	archOut, archErr := withArchiveTestIO(t)
-	expOut, expErr := withExportTestIO(t)
-	mirOut, mirErr := withMirrorTestIO(t)
+	pullOut, pullErr := withPullTestIO(t)
 	cases := []struct {
 		name     string
 		run      func() int
@@ -86,10 +85,10 @@ func TestSubcommandHelpBeforeSettings(t *testing.T) {
 	}{
 		{"archive issue", func() int { return RunArchive([]string{"issue", "--help"}) }, archOut, archErr},
 		{"archive list", func() int { return RunArchive([]string{"list", "-h"}) }, archOut, archErr},
-		{"export issue", func() int { return RunExport([]string{"issue", "--help"}) }, expOut, expErr},
-		{"mirror refresh", func() int { return RunMirror([]string{"refresh", "--help"}) }, mirOut, mirErr},
-		{"mirror my-issues", func() int { return RunMirror([]string{"my-issues", "-h"}) }, mirOut, mirErr},
-		{"mirror archive-sweep", func() int { return RunMirror([]string{"archive-sweep", "--help"}) }, mirOut, mirErr},
+		{"archive sweep", func() int { return RunArchive([]string{"sweep", "--help"}) }, archOut, archErr},
+		{"pull", func() int { return RunPull([]string{"--help"}) }, pullOut, pullErr},
+		{"pull my-issues", func() int { return RunPull([]string{"my-issues", "-h"}) }, pullOut, pullErr},
+		{"pull KEY", func() int { return RunPull([]string{"PLAT-1", "-h"}) }, pullOut, pullErr},
 	}
 	for _, c := range cases {
 		c.out.Reset()

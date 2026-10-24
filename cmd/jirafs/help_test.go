@@ -13,7 +13,7 @@ import (
 var helpCommands = [][]string{
 	{},
 	{"init"},
-	{"export"}, {"export", "issue"},
+	{"pull"},
 	{"diff"},
 	{"status"},
 	{"doctor"},
@@ -21,8 +21,7 @@ var helpCommands = [][]string{
 	{"push"},
 	{"registry"},
 	{"board"},
-	{"archive"}, {"archive", "issue"}, {"archive", "list"},
-	{"mirror"}, {"mirror", "refresh"}, {"mirror", "archive-sweep"},
+	{"archive"}, {"archive", "issue"}, {"archive", "list"}, {"archive", "sweep"},
 	{"use"},
 }
 
@@ -67,7 +66,7 @@ func TestHelpNeedsNoSettings(t *testing.T) {
 			}
 		}
 	}
-	for _, args := range [][]string{{"help"}, {"export", "help"}, {"mirror", "help"}, {"archive", "help"}, {"registry", "help"}} {
+	for _, args := range [][]string{{"help"}, {"pull", "help"}, {"archive", "help"}, {"registry", "help"}} {
 		got := runSplit(t, emptyHome, args...)
 		if got.exitCode != 0 || got.stdout == "" || got.stderr != "" {
 			t.Errorf("%v: exit=%d stdout=%q stderr=%q", args, got.exitCode, got.stdout, got.stderr)
@@ -97,8 +96,8 @@ func TestUsageErrorsExitTwo(t *testing.T) {
 	home := writeMinimalHome(t)
 	for _, args := range [][]string{
 		{"wat"},
-		{"export"}, {"export", "wat"}, {"export", "issue"},
-		{"mirror"}, {"mirror", "wat"}, {"mirror", "refresh"},
+		{"export"}, {"export", "issue", "PLAT-1"}, {"mirror"}, {"mirror", "refresh", "my-issues"}, {"mirror", "archive-sweep"},
+		{"pull", "a", "b"},
 		{"archive"}, {"archive", "wat"}, {"archive", "issue"},
 		{"registry"}, {"registry", "wat"}, {"registry", "show"},
 		{"new"}, {"sync"},
@@ -112,7 +111,7 @@ func TestUsageErrorsExitTwo(t *testing.T) {
 
 // TestUnknownSubcommandNeedsNoSettings: usage errors do not depend on settings.
 func TestUnknownSubcommandNeedsNoSettings(t *testing.T) {
-	got := runSplit(t, t.TempDir(), "export", "wat")
+	got := runSplit(t, t.TempDir(), "archive", "wat")
 	if got.exitCode != 2 || strings.Contains(got.stderr, "settings") {
 		t.Fatalf("exit=%d stderr=%q; want exit 2 without a settings message", got.exitCode, got.stderr)
 	}

@@ -298,7 +298,7 @@ Deliverables:
   queries, and metadata refresh
 - export command for a single issue first
 - registry refresh command for the initial registry set
-- mirror refresh for at least one named scope such as `my-issues` or
+- pull for at least one named scope such as `my-issues` or
   `current-sprint`
 
 Sequencing:
@@ -307,8 +307,8 @@ Sequencing:
 2. Implement remote-to-model normalization.
 3. Write exported issue docs through the codec.
 4. Write registry refresh outputs through registry models.
-5. Add CLI integration for `export issue` and `registry refresh`.
-6. Add live mirror refresh for one shallow scope.
+5. Add CLI integration for `pull KEY` and `registry refresh`.
+6. Add live pull for one shallow scope.
 
 Acceptance criteria:
 
@@ -317,7 +317,7 @@ Acceptance criteria:
 - export populates sync metadata required for later conflict detection
 - registry refresh writes valid registry files for the supported entity types
 - re-exporting the same unchanged issue produces stable local output
-- mirror refresh can populate a shallow live working set without recursively
+- pull can populate a shallow live working set without recursively
   importing every linked issue
 
 Parallel work:

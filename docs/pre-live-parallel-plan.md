@@ -22,8 +22,8 @@ path until that loop is green against real data.
 The pre-live tranche is complete only when all of the following are true:
 
 - credential refs resolve for at least `env://` and `file://`
-- `jirafs export issue ABC-123` writes a canonical Markdown issue file
-- `jirafs mirror refresh my-issues` or `current-sprint` refreshes a live set
+- `jirafs pull ABC-123` writes a canonical Markdown issue file
+- `jirafs pull my-issues` or `current-sprint` refreshes a live set
 - `jirafs diff` emits typed operations and typed conflicts
 - `jirafs push` applies one validated update path safely
 - one real-data smoke test has been run against a disposable Jira issue
@@ -79,8 +79,8 @@ These streams can overlap, but the dependency edges matter.
 ### Wave 2
 
 - WS3 writes single-issue export through the codec.
-- WS5 wires `jirafs export issue` and `jirafs registry refresh`.
-- WS5 wires `jirafs mirror refresh` for one named scope.
+- WS5 wires `jirafs pull` and `jirafs registry refresh`.
+- WS5 wires `jirafs pull` for one named scope.
 
 ### Wave 3
 
@@ -146,7 +146,7 @@ Ready queue:
 - B055b implement real `SearchIssues` for `current-sprint`
 - B056a export one fetched issue through the canonical codec
 - B056b refresh project-scoped registries needed by exported refs
-- B056c keep linked issues shallow during export and mirror refresh
+- B056c keep linked issues shallow during export and pull
 
 Exit condition:
 
@@ -187,11 +187,11 @@ Ready queue:
 - B071b pinned or unsynced issues remain live
 - B080a `jirafs use --project` updates remembered project
 - B080b `jirafs use` interactive and non-interactive behavior matches docs
-- B081a `jirafs mirror refresh` resolves project context and calls refresh service
-- B081b `jirafs mirror refresh` reports deterministic changed issue keys
-- B082a `jirafs mirror archive-sweep` reports eligible actions without mutation
-- B082b `jirafs mirror archive-sweep --apply` calls archive service
-- B083a wire `jirafs export issue`
+- B081a `jirafs pull` resolves project context and calls refresh service
+- B081b `jirafs pull` reports deterministic changed issue keys
+- B082a `jirafs archive sweep` reports eligible actions without mutation
+- B082b `jirafs archive sweep --apply` calls archive service
+- B083a wire `jirafs pull`
 - B083b wire `jirafs diff`
 - B083c wire `jirafs push`
 - B083d add disposable real-data smoke script for export-edit-plan-sync-reexport

@@ -12,8 +12,8 @@ The current CLI is usable as a narrow operator workflow:
 
 1. Configure one Jira instance and one project with `jirafs init`.
 2. Select or confirm the active project with `jirafs use`.
-3. Refresh one live mirror scope with `jirafs mirror refresh`.
-4. Export or inspect one issue locally with `jirafs export issue`.
+3. Pull one live mirror scope with `jirafs pull <scope>` (or every configured scope with `jirafs pull`).
+4. Pull or inspect one issue locally with `jirafs pull KEY`.
 5. Edit the mirrored Markdown file.
 6. Review the planned write-back with `jirafs diff`.
 7. Apply the write path with `jirafs push KEY --apply` (plain `jirafs push KEY` is a dry run).
@@ -31,9 +31,9 @@ jirafs init platform \
   --set-current
 
 jirafs use
-jirafs mirror refresh my-issues
-jirafs export issue PLAT-123            # writes <local_dir>/PLAT-123.md
-jirafs export issue PLAT-123 --stdout > /tmp/PLAT-123.md
+jirafs pull my-issues
+jirafs pull PLAT-123                    # writes <local_dir>/PLAT-123.md
+jirafs pull PLAT-123 --stdout > /tmp/PLAT-123.md
 jirafs diff PLAT-123
 jirafs push PLAT-123                    # dry run: prints the plan, writes nothing
 jirafs push PLAT-123 --apply            # writes to Jira
@@ -63,8 +63,10 @@ reported, never overwritten. The exit code is 1 when any issue failed.
 
 ## Mirror scopes
 
-Scopes live in `<mirror_dir>/mirror.yml`. Refresh one by name with
-`jirafs mirror refresh <scope-name>`.
+Scopes live in `<mirror_dir>/mirror.yml`. Pull one by name with
+`jirafs pull <scope-name>`; `jirafs pull` with no argument pulls every scope in
+`mirror.yml`. An argument shaped like an issue key (`PLAT-123`) pulls that one
+issue, so a scope must not be named like an issue key.
 
 Refresh is incremental. After a refresh that finishes without failures, the
 scope records `last_synced` (RFC3339) in `mirror.yml`. The next refresh asks
@@ -99,7 +101,7 @@ What works today:
 
 - user-level setup writes `~/.jirafs/settings.toml`
 - project selection and remembered current-project state
-- mirror refresh wiring for named scopes such as `my-issues`
+- pull wiring for named scopes such as `my-issues`
 - export, plan, and sync command paths for the current safe field set
 - `jirafs status` lists local changes offline, grouped as `conflicted`,
   `modified` and `draft`, each with a copy-pasteable command;
@@ -127,9 +129,9 @@ If you are trying `jirafs` for the first time:
 
 1. Run `jirafs init <name> ... --set-current`.
 2. Run `jirafs use` to confirm the active project.
-3. Run `jirafs mirror refresh my-issues`.
+3. Run `jirafs pull my-issues`.
 4. Inspect the mirror directory and `mirror.yml`.
-5. Run `jirafs export issue ABC-123` or open a mirrored issue file.
+5. Run `jirafs pull ABC-123` or open a mirrored issue file.
 6. Run `jirafs diff ABC-123` before any write attempt.
 
 If something fails:
@@ -139,11 +141,11 @@ If something fails:
 - config or auth issue: inspect `~/.jirafs/settings.toml`
 - scope issue: inspect `<mirror_dir>/mirror.yml`
 - project resolution issue: run `jirafs use <name>`
-- live Jira issue: retry with a single issue export before a whole-scope refresh
-- empty sync scope: run `jirafs mirror refresh current-sprint` or
-  `jirafs mirror refresh my-issues`, then `jirafs push` to write your edits back
-- not sure what a command will change: add `--dry-run` (push, export
-  issue, new, archive issue, mirror refresh, mirror archive-sweep); it prints
+- live Jira issue: retry with `jirafs pull KEY` for a single issue before a whole-scope pull
+- empty sync scope: run `jirafs pull current-sprint` or
+  `jirafs pull my-issues`, then `jirafs push` to write your edits back
+- not sure what a command will change: add `--dry-run` (push, pull,
+  new, archive issue, archive sweep); it prints
   the plan and the command for the real run, and writes nothing
 
 ## Testing Policy
@@ -171,8 +173,7 @@ The most important commands right now are:
 
 - `jirafs init`
 - `jirafs use`
-- `jirafs mirror refresh`
-- `jirafs export issue`
+- `jirafs pull`
 - `jirafs diff`
 - `jirafs push`
 

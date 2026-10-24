@@ -199,7 +199,7 @@ func runRegistryRefresh(args []string) int {
 	}
 	typ := positionals[0]
 
-	fmt.Fprintf(registryStderr, "jirafs registry refresh %s: requires a live Jira connection; not available offline. Run 'jirafs mirror refresh <scope>' to populate registries from Jira.\n", typ)
+	fmt.Fprintf(registryStderr, "jirafs registry refresh %s: requires a live Jira connection; not available offline. Run 'jirafs pull <scope>' to populate registries from Jira.\n", typ)
 	return 1
 }
 
@@ -273,9 +273,8 @@ func renderRegistry[K ~string, V any](entries map[K]V, summary func(V) string, j
 
 // resolveRegistryContext resolves the active project context for registry
 // operations. It mirrors resolveMirrorContext but emits registry-named
-// messages: resolveMirrorContext is hardcoded to "jirafs mirror …" output and
-// lives in a file this command must not edit. On failure it prints an error
-// plus a next-step hint and returns false.
+// messages to registryStderr. On failure it prints an error plus a next-step
+// hint and returns false.
 func resolveRegistryContext(settings *config.Settings, project, cwd string) (*context.Context, bool) {
 	res := context.NewResolver(settings, project)
 	ctx, err := res.Resolve(cwd)

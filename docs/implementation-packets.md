@@ -259,8 +259,8 @@ Own:
 Implement:
 
 - `jirafs use`
-- `jirafs mirror refresh`
-- `jirafs mirror archive-sweep`
+- `jirafs pull`
+- `jirafs archive sweep`
 - prompt and non-interactive selection behavior
 
 Depends on:

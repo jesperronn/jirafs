@@ -1,7 +1,6 @@
 package cli
 
 import (
-	"bytes"
 	"errors"
 	"os"
 	"path/filepath"
@@ -18,111 +17,47 @@ func ptrString(s string) *string {
 	return &s
 }
 
-// TestRunExport_NoSubcommand verifies that calling RunExport with no
-// subcommand returns exit code 1 and prints a usage hint.
-func TestRunExport_NoSubcommand(t *testing.T) {
-	exit := RunExport([]string{})
-	if exit != 2 {
-		t.Errorf("RunExport([]) = %d, want 2", exit)
-	}
-}
-
-// TestRunExport_UnknownSubcommand verifies that an unknown subcommand
-// returns exit code 1.
-func TestRunExport_UnknownSubcommand(t *testing.T) {
+// TestRunPull_NoArgNoScopes verifies that a bare pull without any configured
+// scope fails with a copy-pasteable mirror.yml example.
+func TestRunPull_NoArgNoScopes(t *testing.T) {
 	tmpDir := t.TempDir()
-	homeDir := writeSettings(t, tmpDir)
-	// Use a cwd that doesn't match any project's mirror_dir.
-	oldHome := os.Getenv("HOME")
-	os.Setenv("HOME", homeDir)
-	defer os.Setenv("HOME", oldHome)
-
-	_, stderr := withExportTestIO(t)
-	exit := RunExport([]string{"bogus"})
-	if exit != 2 {
-		t.Fatalf("RunExport([\"bogus\"]) = %d, want 2", exit)
-	}
-	if !strings.Contains(stderr.String(), "unknown subcommand") {
-		t.Fatalf("stderr = %q, want unknown subcommand", stderr.String())
-	}
-}
-
-// TestRunExport_Help verifies that "help" returns exit code 0.
-func TestRunExport_Help(t *testing.T) {
-	exit := RunExport([]string{"help"})
-	if exit != 0 {
-		t.Errorf("RunExport([\"help\"]) = %d, want 0", exit)
-	}
-}
-
-func withExportTestIO(t *testing.T) (*bytes.Buffer, *bytes.Buffer) {
-	t.Helper()
-	stdout := &bytes.Buffer{}
-	stderr := &bytes.Buffer{}
-	oldStdout := exportStdout
-	oldStderr := exportStderr
-	exportStdout = stdout
-	exportStderr = stderr
-	t.Cleanup(func() {
-		exportStdout = oldStdout
-		exportStderr = oldStderr
-	})
-	return stdout, stderr
-}
-
-func withExportClientFactory(t *testing.T, factory func(*config.Settings, *context.Context, string) (jira.Client, error)) {
-	t.Helper()
-	oldFactory := exportClientFactory
-	exportClientFactory = factory
-	t.Cleanup(func() {
-		exportClientFactory = oldFactory
-	})
-}
-
-// TestRunExportIssue_MissingKey verifies that export issue without a key
-// returns exit code 1.
-func TestRunExportIssue_MissingKey(t *testing.T) {
-	tmpDir := t.TempDir()
-	homeDir := writeSettings(t, tmpDir)
-	// Use a cwd that doesn't match any project's mirror_dir.
-	oldHome := os.Getenv("HOME")
-	os.Setenv("HOME", homeDir)
-	defer os.Setenv("HOME", oldHome)
-
-	_, stderr := withExportTestIO(t)
-	exit := RunExport([]string{"issue", "--cwd", filepath.Join(tmpDir, "outside")})
-	if exit != 2 {
-		t.Fatalf("RunExport([\"issue\", \"--cwd\", ...]) = %d, want 2", exit)
-	}
-	if !strings.Contains(stderr.String(), "missing issue key") {
-		t.Fatalf("stderr = %q, want missing issue key", stderr.String())
-	}
-}
-
-// TestRunExportIssue_MissingProject verifies that export issue without
-// a resolvable project returns exit code 1.
-func TestRunExportIssue_MissingProject(t *testing.T) {
-	tmpDir := t.TempDir()
-	homeDir := writeSettings(t, tmpDir)
-	// Use a cwd that doesn't match any project's mirror_dir.
-	oldHome := os.Getenv("HOME")
-	os.Setenv("HOME", homeDir)
-	defer os.Setenv("HOME", oldHome)
-
-	_, stderr := withExportTestIO(t)
-	// Don't pass --project, and use a non-matching cwd.
-	exit := RunExport([]string{"issue", "--cwd", filepath.Join(tmpDir, "outside"), "PROJ-1"})
+	t.Setenv("HOME", writeSettings(t, tmpDir))
+	_, stderr := withPullTestIO(t)
+	exit := RunPull([]string{"--project", "test"})
 	if exit != 1 {
-		t.Fatalf("RunExport([\"issue\", \"--cwd\", ...]) = %d, want 1", exit)
+		t.Fatalf("RunPull([]) = %d, want 1", exit)
+	}
+	for _, want := range []string{"no scopes configured", "jirafs pull my-issues", "scopes:"} {
+		if !strings.Contains(stderr.String(), want) {
+			t.Fatalf("stderr = %q, want %q", stderr.String(), want)
+		}
+	}
+}
+
+// TestRunPullIssue_MissingProject verifies that pull KEY without
+// a resolvable project returns exit code 1.
+func TestRunPullIssue_MissingProject(t *testing.T) {
+	tmpDir := t.TempDir()
+	homeDir := writeSettings(t, tmpDir)
+	// Use a cwd that doesn't match any project's mirror_dir.
+	oldHome := os.Getenv("HOME")
+	os.Setenv("HOME", homeDir)
+	defer os.Setenv("HOME", oldHome)
+
+	_, stderr := withPullTestIO(t)
+	// Don't pass --project, and use a non-matching cwd.
+	exit := RunPull([]string{"--cwd", filepath.Join(tmpDir, "outside"), "PROJ-1"})
+	if exit != 1 {
+		t.Fatalf("RunPull([\"issue\", \"--cwd\", ...]) = %d, want 1", exit)
 	}
 	if !strings.Contains(stderr.String(), "no project resolved") {
 		t.Fatalf("stderr = %q, want no project resolved", stderr.String())
 	}
 }
 
-// TestRunExportIssue_Success verifies that export issue fetches and
+// TestRunPullIssue_Success verifies that pull KEY fetches and
 // exports a single issue through the real service path.
-func TestRunExportIssue_Success(t *testing.T) {
+func TestRunPullIssue_Success(t *testing.T) {
 	tmpDir := t.TempDir()
 	homeDir := writeSettings(t, tmpDir)
 	oldHome := os.Getenv("HOME")
@@ -147,14 +82,14 @@ func TestRunExportIssue_Success(t *testing.T) {
 			ContentHash:   "abc123",
 		},
 	})
-	withExportClientFactory(t, func(*config.Settings, *context.Context, string) (jira.Client, error) {
+	withPullClientFactory(t, func(*config.Settings, *context.Context, string) (jira.Client, error) {
 		return fake, nil
 	})
-	stdout, stderr := withExportTestIO(t)
+	stdout, stderr := withPullTestIO(t)
 
-	exit := RunExport([]string{"issue", "--stdout", "--project", "test", "PROJ-42"})
+	exit := RunPull([]string{"--stdout", "--project", "test", "PROJ-42"})
 	if exit != 0 {
-		t.Fatalf("RunExport([\"issue\", \"--project\", \"test\", \"PROJ-42\"]) = %d, stderr = %q", exit, stderr.String())
+		t.Fatalf("RunPull([\"issue\", \"--project\", \"test\", \"PROJ-42\"]) = %d, stderr = %q", exit, stderr.String())
 	}
 
 	// Verify the exported output contains the issue key and summary.
@@ -179,9 +114,9 @@ func TestRunExportIssue_Success(t *testing.T) {
 	}
 }
 
-// TestRunExportIssue_NotFound verifies that exporting a non-existent
+// TestRunPullIssue_NotFound verifies that exporting a non-existent
 // issue returns a not found error.
-func TestRunExportIssue_NotFound(t *testing.T) {
+func TestRunPullIssue_NotFound(t *testing.T) {
 	tmpDir := t.TempDir()
 	homeDir := writeSettings(t, tmpDir)
 	oldHome := os.Getenv("HOME")
@@ -189,23 +124,23 @@ func TestRunExportIssue_NotFound(t *testing.T) {
 	defer os.Setenv("HOME", oldHome)
 
 	fake := jira.NewFakeTransport()
-	withExportClientFactory(t, func(*config.Settings, *context.Context, string) (jira.Client, error) {
+	withPullClientFactory(t, func(*config.Settings, *context.Context, string) (jira.Client, error) {
 		return fake, nil
 	})
-	_, stderr := withExportTestIO(t)
+	_, stderr := withPullTestIO(t)
 
-	exit := RunExport([]string{"issue", "--project", "test", "PROJ-99"})
+	exit := RunPull([]string{"--project", "test", "PROJ-99"})
 	if exit != 1 {
-		t.Fatalf("RunExport([\"issue\", \"PROJ-99\"]) = %d, want 1", exit)
+		t.Fatalf("RunPull([\"issue\", \"PROJ-99\"]) = %d, want 1", exit)
 	}
 	if !strings.Contains(stderr.String(), "not_found") {
 		t.Fatalf("stderr = %q, want not_found error", stderr.String())
 	}
 }
 
-// TestRunExportIssue_TooManyArgs verifies that export issue with
+// TestRunPullIssue_TooManyArgs verifies that pull KEY with
 // too many positional arguments returns an error.
-func TestRunExportIssue_TooManyArgs(t *testing.T) {
+func TestRunPullIssue_TooManyArgs(t *testing.T) {
 	tmpDir := t.TempDir()
 	homeDir := writeSettings(t, tmpDir)
 	// Use a cwd that doesn't match any project's mirror_dir.
@@ -213,42 +148,42 @@ func TestRunExportIssue_TooManyArgs(t *testing.T) {
 	os.Setenv("HOME", homeDir)
 	defer os.Setenv("HOME", oldHome)
 
-	_, stderr := withExportTestIO(t)
-	exit := RunExport([]string{"issue", "--cwd", filepath.Join(tmpDir, "outside"), "PROJ-1", "extra"})
+	_, stderr := withPullTestIO(t)
+	exit := RunPull([]string{"--cwd", filepath.Join(tmpDir, "outside"), "PROJ-1", "extra"})
 	if exit != 2 {
-		t.Fatalf("RunExport([\"issue\", \"PROJ-1\", \"extra\"]) = %d, want 2", exit)
+		t.Fatalf("RunPull([\"issue\", \"PROJ-1\", \"extra\"]) = %d, want 2", exit)
 	}
 	if !strings.Contains(stderr.String(), "too many positional arguments") {
 		t.Fatalf("stderr = %q, want too many positional arguments", stderr.String())
 	}
 }
 
-// TestRunExportIssue_ClientCreationError verifies that export issue
+// TestRunPullIssue_ClientCreationError verifies that pull KEY
 // returns an error when the Jira client cannot be created.
-func TestRunExportIssue_ClientCreationError(t *testing.T) {
+func TestRunPullIssue_ClientCreationError(t *testing.T) {
 	tmpDir := t.TempDir()
 	homeDir := writeSettings(t, tmpDir)
 	// Use a cwd that doesn't match any project's mirror_dir.
 	oldHome := os.Getenv("HOME")
 	os.Setenv("HOME", homeDir)
 	defer os.Setenv("HOME", oldHome)
-	withExportClientFactory(t, func(*config.Settings, *context.Context, string) (jira.Client, error) {
+	withPullClientFactory(t, func(*config.Settings, *context.Context, string) (jira.Client, error) {
 		return nil, os.ErrPermission
 	})
-	_, stderr := withExportTestIO(t)
+	_, stderr := withPullTestIO(t)
 
-	exit := RunExport([]string{"issue", "--project", "test", "--cwd", filepath.Join(tmpDir, "outside"), "PROJ-1"})
+	exit := RunPull([]string{"--project", "test", "--cwd", filepath.Join(tmpDir, "outside"), "PROJ-1"})
 	if exit != 1 {
-		t.Fatalf("RunExport([\"issue\", \"PROJ-1\"]) = %d, want 1", exit)
+		t.Fatalf("RunPull([\"issue\", \"PROJ-1\"]) = %d, want 1", exit)
 	}
 	if !strings.Contains(stderr.String(), "cannot create Jira client") {
 		t.Fatalf("stderr = %q, want client creation error", stderr.String())
 	}
 }
 
-// TestRunExportIssue_FetchError verifies that export issue returns
+// TestRunPullIssue_FetchError verifies that pull KEY returns
 // an error when the Jira fetch fails.
-func TestRunExportIssue_FetchError(t *testing.T) {
+func TestRunPullIssue_FetchError(t *testing.T) {
 	tmpDir := t.TempDir()
 	homeDir := writeSettings(t, tmpDir)
 	// Use a cwd that doesn't match any project's mirror_dir.
@@ -258,23 +193,23 @@ func TestRunExportIssue_FetchError(t *testing.T) {
 
 	fake := jira.NewFakeTransport()
 	fake.SetErr("fetch", jira.NewHTTPErr(500, "server error"))
-	withExportClientFactory(t, func(*config.Settings, *context.Context, string) (jira.Client, error) {
+	withPullClientFactory(t, func(*config.Settings, *context.Context, string) (jira.Client, error) {
 		return fake, nil
 	})
-	_, stderr := withExportTestIO(t)
+	_, stderr := withPullTestIO(t)
 
-	exit := RunExport([]string{"issue", "--project", "test", "--cwd", filepath.Join(tmpDir, "outside"), "PROJ-1"})
+	exit := RunPull([]string{"--project", "test", "--cwd", filepath.Join(tmpDir, "outside"), "PROJ-1"})
 	if exit != 1 {
-		t.Fatalf("RunExport([\"issue\", \"PROJ-1\"]) = %d, want 1", exit)
+		t.Fatalf("RunPull([\"issue\", \"PROJ-1\"]) = %d, want 1", exit)
 	}
 	if !strings.Contains(stderr.String(), "server error") {
 		t.Fatalf("stderr = %q, want server error", stderr.String())
 	}
 }
 
-// TestRunExportIssue_MinimalIssue verifies that exporting a minimal
+// TestRunPullIssue_MinimalIssue verifies that exporting a minimal
 // (draft) issue still produces valid output.
-func TestRunExportIssue_MinimalIssue(t *testing.T) {
+func TestRunPullIssue_MinimalIssue(t *testing.T) {
 	tmpDir := t.TempDir()
 	homeDir := writeSettings(t, tmpDir)
 	// Use a cwd that doesn't match any project's mirror_dir.
@@ -291,14 +226,14 @@ func TestRunExportIssue_MinimalIssue(t *testing.T) {
 		},
 		MachineOwned: schema.MachineOwned{SchemaVersion: "1"},
 	})
-	withExportClientFactory(t, func(*config.Settings, *context.Context, string) (jira.Client, error) {
+	withPullClientFactory(t, func(*config.Settings, *context.Context, string) (jira.Client, error) {
 		return fake, nil
 	})
-	stdout, stderr := withExportTestIO(t)
+	stdout, stderr := withPullTestIO(t)
 
-	exit := RunExport([]string{"issue", "--stdout", "--project", "test", "--cwd", filepath.Join(tmpDir, "outside"), "DRF-1"})
+	exit := RunPull([]string{"--stdout", "--project", "test", "--cwd", filepath.Join(tmpDir, "outside"), "DRF-1"})
 	if exit != 0 {
-		t.Fatalf("RunExport([\"issue\", \"DRF-1\"]) = %d, stderr = %q", exit, stderr.String())
+		t.Fatalf("RunPull([\"issue\", \"DRF-1\"]) = %d, stderr = %q", exit, stderr.String())
 	}
 
 	output := stdout.String()
@@ -343,9 +278,9 @@ func TestBuildExportClient_Success(t *testing.T) {
 	}
 }
 
-// TestRunExportIssue_ResolveContextError verifies that export issue
+// TestRunPullIssue_ResolveContextError verifies that pull KEY
 // returns an error when no project can be resolved for the given cwd.
-func TestRunExportIssue_ResolveContextError(t *testing.T) {
+func TestRunPullIssue_ResolveContextError(t *testing.T) {
 	tmpDir := t.TempDir()
 	homeDir := writeSettings(t, tmpDir)
 	// Use a cwd that doesn't match any project's mirror_dir.
@@ -353,36 +288,10 @@ func TestRunExportIssue_ResolveContextError(t *testing.T) {
 	os.Setenv("HOME", homeDir)
 	defer os.Setenv("HOME", oldHome)
 
-	_, stderr := withExportTestIO(t)
-	exit := RunExport([]string{"issue", "--cwd", filepath.Join(tmpDir, "outside"), "PROJ-1"})
+	_, stderr := withPullTestIO(t)
+	exit := RunPull([]string{"--cwd", filepath.Join(tmpDir, "outside"), "PROJ-1"})
 	if exit != 1 {
-		t.Fatalf("RunExport([\"issue\", \"--cwd\", ...]) = %d, want 1", exit)
-	}
-	if !strings.Contains(stderr.String(), "no project resolved") {
-		t.Fatalf("stderr = %q, want no project resolved", stderr.String())
-	}
-}
-
-// TestResolveExportContext_NoProject verifies that resolveExportContext
-// returns false when no project can be resolved for the given cwd.
-func TestResolveExportContext_NoProject(t *testing.T) {
-	tmpDir := t.TempDir()
-	homeDir := writeSettings(t, tmpDir)
-	oldHome := os.Getenv("HOME")
-	os.Setenv("HOME", homeDir)
-	defer os.Setenv("HOME", oldHome)
-	settings, err := config.Load()
-	if err != nil {
-		t.Fatalf("config.Load: %v", err)
-	}
-	_, stderr := withExportTestIO(t)
-
-	ctx, ok := resolveExportContext(settings, "", filepath.Join(tmpDir, "outside"))
-	if ok {
-		t.Fatal("expected unresolved project")
-	}
-	if ctx != nil {
-		t.Fatalf("expected nil context, got %#v", ctx)
+		t.Fatalf("RunPull([\"issue\", \"--cwd\", ...]) = %d, want 1", exit)
 	}
 	if !strings.Contains(stderr.String(), "no project resolved") {
 		t.Fatalf("stderr = %q, want no project resolved", stderr.String())
@@ -412,9 +321,9 @@ func TestBuildExportClient_CredentialError(t *testing.T) {
 	}
 }
 
-// TestRunExportIssue_BrowseURL verifies that a Jira browse URL on the
+// TestRunPullIssue_BrowseURL verifies that a Jira browse URL on the
 // project's base_url host is accepted in place of an issue key.
-func TestRunExportIssue_BrowseURL(t *testing.T) {
+func TestRunPullIssue_BrowseURL(t *testing.T) {
 	tmpDir := t.TempDir()
 	homeDir := writeSettings(t, tmpDir)
 	oldHome := os.Getenv("HOME")
@@ -432,12 +341,12 @@ func TestRunExportIssue_BrowseURL(t *testing.T) {
 		MachineOwned:   schema.MachineOwned{SchemaVersion: "1"},
 		RemoteMetadata: schema.RemoteMetadata{StateFile: "synced", RemoteVersion: "1", ContentHash: "h"},
 	})
-	withExportClientFactory(t, func(*config.Settings, *context.Context, string) (jira.Client, error) {
+	withPullClientFactory(t, func(*config.Settings, *context.Context, string) (jira.Client, error) {
 		return fake, nil
 	})
-	stdout, stderr := withExportTestIO(t)
+	stdout, stderr := withPullTestIO(t)
 
-	exit := RunExport([]string{"issue", "--stdout", "--project", "test", "https://example.atlassian.net/browse/PROJ-42"})
+	exit := RunPull([]string{"--stdout", "--project", "test", "https://example.atlassian.net/browse/PROJ-42"})
 	if exit != 0 {
 		t.Fatalf("exit = %d, stderr = %q", exit, stderr.String())
 	}
@@ -447,11 +356,11 @@ func TestRunExportIssue_BrowseURL(t *testing.T) {
 
 	stdout.Reset()
 	stderr.Reset()
-	exit = RunExport([]string{"issue", "--project", "test", "https://evil.example.com/browse/PROJ-42"})
+	exit = RunPull([]string{"--project", "test", "https://evil.example.com/browse/PROJ-42"})
 	if exit != 1 {
 		t.Fatalf("wrong-host exit = %d, want 1", exit)
 	}
-	if !strings.Contains(stderr.String(), "jirafs export issue KEY --project test") {
+	if !strings.Contains(stderr.String(), "jirafs pull KEY --project test") {
 		t.Fatalf("stderr = %q, want copy-pasteable hint", stderr.String())
 	}
 }
@@ -471,18 +380,18 @@ func exportFakeIssue(key string) *jira.FakeTransport {
 	return fake
 }
 
-// TestRunExportIssue_WritesFile verifies the default mode writes
+// TestRunPullIssue_WritesFile verifies the default mode writes
 // <local_dirs[0]>/<KEY>.md (creating the missing directory) and prints the
 // absolute path.
-func TestRunExportIssue_WritesFile(t *testing.T) {
+func TestRunPullIssue_WritesFile(t *testing.T) {
 	tmpDir := t.TempDir()
 	homeDir := writeSettings(t, tmpDir)
 	t.Setenv("HOME", homeDir)
 	fake := exportFakeIssue("PROJ-7")
-	withExportClientFactory(t, func(*config.Settings, *context.Context, string) (jira.Client, error) {
+	withPullClientFactory(t, func(*config.Settings, *context.Context, string) (jira.Client, error) {
 		return fake, nil
 	})
-	stdout, stderr := withExportTestIO(t)
+	stdout, stderr := withPullTestIO(t)
 
 	// The local dir does not exist yet; it must be created.
 	localDir := filepath.Join(tmpDir, "local")
@@ -490,7 +399,7 @@ func TestRunExportIssue_WritesFile(t *testing.T) {
 		t.Fatal("local dir unexpectedly exists")
 	}
 
-	exit := RunExport([]string{"issue", "--project", "test", "PROJ-7"})
+	exit := RunPull([]string{"--project", "test", "PROJ-7"})
 	if exit != 0 {
 		t.Fatalf("exit = %d, stderr = %q", exit, stderr.String())
 	}
@@ -511,19 +420,19 @@ func TestRunExportIssue_WritesFile(t *testing.T) {
 	}
 }
 
-// TestRunExportIssue_StdoutWritesNoFile verifies --stdout prints the document
+// TestRunPullIssue_StdoutWritesNoFile verifies --stdout prints the document
 // and writes no file.
-func TestRunExportIssue_StdoutWritesNoFile(t *testing.T) {
+func TestRunPullIssue_StdoutWritesNoFile(t *testing.T) {
 	tmpDir := t.TempDir()
 	homeDir := writeSettings(t, tmpDir)
 	t.Setenv("HOME", homeDir)
 	fake := exportFakeIssue("PROJ-8")
-	withExportClientFactory(t, func(*config.Settings, *context.Context, string) (jira.Client, error) {
+	withPullClientFactory(t, func(*config.Settings, *context.Context, string) (jira.Client, error) {
 		return fake, nil
 	})
-	stdout, stderr := withExportTestIO(t)
+	stdout, stderr := withPullTestIO(t)
 
-	exit := RunExport([]string{"issue", "--stdout", "--project", "test", "PROJ-8"})
+	exit := RunPull([]string{"--stdout", "--project", "test", "PROJ-8"})
 	if exit != 0 {
 		t.Fatalf("exit = %d, stderr = %q", exit, stderr.String())
 	}
@@ -535,23 +444,23 @@ func TestRunExportIssue_StdoutWritesNoFile(t *testing.T) {
 	}
 }
 
-// TestRunExportIssue_NoLocalDirs verifies a project without local_dirs fails
+// TestRunPullIssue_NoLocalDirs verifies a project without local_dirs fails
 // with a hint in file mode.
-func TestRunExportIssue_NoLocalDirs(t *testing.T) {
+func TestRunPullIssue_NoLocalDirs(t *testing.T) {
 	tmpDir := t.TempDir()
 	homeDir := writeSettings(t, tmpDir)
 	t.Setenv("HOME", homeDir)
 	fake := exportFakeIssue("PROJ-9")
-	withExportClientFactory(t, func(*config.Settings, *context.Context, string) (jira.Client, error) {
+	withPullClientFactory(t, func(*config.Settings, *context.Context, string) (jira.Client, error) {
 		return fake, nil
 	})
-	_, stderr := withExportTestIO(t)
+	_, stderr := withPullTestIO(t)
 	// Make local dir creation impossible: a regular file occupies its path.
 	if err := os.WriteFile(filepath.Join(tmpDir, "local"), []byte("x"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 
-	exit := RunExport([]string{"issue", "--project", "test", "PROJ-9"})
+	exit := RunPull([]string{"--project", "test", "PROJ-9"})
 	if exit != 1 {
 		t.Fatalf("exit = %d, want 1", exit)
 	}
@@ -560,7 +469,7 @@ func TestRunExportIssue_NoLocalDirs(t *testing.T) {
 	}
 }
 
-func TestRunExportIssue_IncludesCommentsAndWarnsOnFailure(t *testing.T) {
+func TestRunPullIssue_IncludesCommentsAndWarnsOnFailure(t *testing.T) {
 	tmpDir := t.TempDir()
 	homeDir := writeSettings(t, tmpDir)
 	oldHome := os.Getenv("HOME")
@@ -576,11 +485,11 @@ func TestRunExportIssue_IncludesCommentsAndWarnsOnFailure(t *testing.T) {
 		{Author: "bob", Created: "2024-02-01T00:00:00Z", Body: "newer"},
 		{Author: "alice", Created: "2024-01-01T00:00:00Z", Body: "older"},
 	})
-	withExportClientFactory(t, func(*config.Settings, *context.Context, string) (jira.Client, error) {
+	withPullClientFactory(t, func(*config.Settings, *context.Context, string) (jira.Client, error) {
 		return fake, nil
 	})
-	stdout, stderr := withExportTestIO(t)
-	if exit := RunExport([]string{"issue", "--stdout", "--project", "test", "PROJ-42"}); exit != 0 {
+	stdout, stderr := withPullTestIO(t)
+	if exit := RunPull([]string{"--stdout", "--project", "test", "PROJ-42"}); exit != 0 {
 		t.Fatalf("exit = %d, stderr = %q", exit, stderr.String())
 	}
 	out := stdout.String()
@@ -593,7 +502,7 @@ func TestRunExportIssue_IncludesCommentsAndWarnsOnFailure(t *testing.T) {
 	fake.SetErr("comments", errors.New("comments down"))
 	stdout.Reset()
 	stderr.Reset()
-	if exit := RunExport([]string{"issue", "--stdout", "--project", "test", "PROJ-42"}); exit != 0 {
+	if exit := RunPull([]string{"--stdout", "--project", "test", "PROJ-42"}); exit != 0 {
 		t.Fatalf("exit = %d, want 0 on comments failure; stderr = %q", exit, stderr.String())
 	}
 	if !strings.Contains(stderr.String(), "warning: cannot fetch comments") || strings.Contains(stdout.String(), "## Comments") {
@@ -601,9 +510,9 @@ func TestRunExportIssue_IncludesCommentsAndWarnsOnFailure(t *testing.T) {
 	}
 }
 
-// TestRunExportIssue_NoLocalDirsSuggestsStdout verifies that exporting to a file when the
+// TestRunPullIssue_NoLocalDirsSuggestsStdout verifies that exporting to a file when the
 // project has no local_dirs fails with exit 1 and points the user at --stdout.
-func TestRunExportIssue_NoLocalDirsSuggestsStdout(t *testing.T) {
+func TestRunPullIssue_NoLocalDirsSuggestsStdout(t *testing.T) {
 	tmpDir := t.TempDir()
 	homeDir := filepath.Join(tmpDir, "home")
 	jirafsDir := filepath.Join(homeDir, ".jirafs")
@@ -643,14 +552,14 @@ mirror_dir = "` + filepath.Join(tmpDir, "mirror") + `"
 		Summary:      "No local dir",
 		MachineOwned: schema.MachineOwned{SchemaVersion: "1"},
 	})
-	withExportClientFactory(t, func(*config.Settings, *context.Context, string) (jira.Client, error) {
+	withPullClientFactory(t, func(*config.Settings, *context.Context, string) (jira.Client, error) {
 		return fake, nil
 	})
-	stdout, stderr := withExportTestIO(t)
+	stdout, stderr := withPullTestIO(t)
 
-	exit := RunExport([]string{"issue", "--project", "test", "PROJ-42"})
+	exit := RunPull([]string{"--project", "test", "PROJ-42"})
 	if exit != 1 {
-		t.Fatalf("RunExport(issue PROJ-42) = %d, want 1; stdout = %q", exit, stdout.String())
+		t.Fatalf("RunPull(issue PROJ-42) = %d, want 1; stdout = %q", exit, stdout.String())
 	}
 	if !strings.Contains(stderr.String(), "no local_dirs configured") || !strings.Contains(stderr.String(), "--stdout") {
 		t.Errorf("stderr = %q, want no local_dirs error suggesting --stdout", stderr.String())

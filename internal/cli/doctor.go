@@ -321,8 +321,8 @@ func onboardingCommands(snap DoctorSnapshot) []string {
 	for _, step := range snap.MissingSteps {
 		if step == "no issues imported or in scope" {
 			return []string{
-				"jirafs mirror refresh current-sprint",
-				"jirafs mirror refresh my-issues",
+				"jirafs pull current-sprint",
+				"jirafs pull my-issues",
 			}
 		}
 	}
@@ -356,6 +356,6 @@ func epicLinkReport(settings *config.Settings, project string) []string {
 		"  epic_link_field: (unset) — epic links are not exported",
 		fmt.Sprintf("    set it in ~/.jirafs/settings.toml under [projects.%s]:", name),
 		"      epic_link_field = \"customfield_10014\"",
-		"    or for one run: JIRAFS_EPIC_LINK_FIELD=customfield_10014 jirafs export issue <KEY>",
+		"    or for one run: JIRAFS_EPIC_LINK_FIELD=customfield_10014 jirafs pull <KEY>",
 	}
 }

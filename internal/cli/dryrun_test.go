@@ -150,11 +150,11 @@ func TestMirrorRefreshDryRunWritesNothing(t *testing.T) {
 		{Identity: schema.IssueIdentity{Key: "TEST-2", Type: "story"}},
 		{Identity: schema.IssueIdentity{Key: "TEST-1", Type: "bug"}},
 	})
-	withMirrorClientFactory(t, func(*config.Settings, *context.Context, string) (jira.Client, error) { return fake, nil })
-	stdout, stderr := withMirrorTestIO(t)
+	withPullClientFactory(t, func(*config.Settings, *context.Context, string) (jira.Client, error) { return fake, nil })
+	stdout, stderr := withPullTestIO(t)
 	before := snapshotTree(t, tmpDir)
 
-	if exit := RunMirror([]string{"refresh", "--project", "test", "--dry-run", "my-issues"}); exit != 0 {
+	if exit := RunPull([]string{"--project", "test", "--dry-run", "my-issues"}); exit != 0 {
 		t.Fatalf("exit = %d, stderr = %q", exit, stderr.String())
 	}
 	assertTreeUnchanged(t, tmpDir, before)
@@ -162,7 +162,7 @@ func TestMirrorRefreshDryRunWritesNothing(t *testing.T) {
 		"would write 2 issue file(s)",
 		"would overwrite " + filepath.Join(localDir, "TEST-1.md"),
 		"would create " + filepath.Join(localDir, "TEST-2.md"),
-		"to run it for real: jirafs mirror refresh my-issues",
+		"to run it for real: jirafs pull my-issues",
 	} {
 		if !strings.Contains(stdout.String(), want) {
 			t.Errorf("stdout missing %q:\n%s", want, stdout.String())
@@ -176,9 +176,9 @@ func TestMirrorRefreshDryRunErrors(t *testing.T) {
 	writeMirrorWithScopes(t, tmpDir, "\nscopes:\n  - name: my-issues\n    type: jql\n    target: x\n")
 	fake := jira.NewFakeTransport()
 	fake.SetErr("search", errors.New("boom"))
-	withMirrorClientFactory(t, func(*config.Settings, *context.Context, string) (jira.Client, error) { return fake, nil })
-	_, stderr := withMirrorTestIO(t)
-	if exit := RunMirror([]string{"refresh", "--project", "test", "--dry-run", "my-issues"}); exit != 1 || !strings.Contains(stderr.String(), "boom") {
+	withPullClientFactory(t, func(*config.Settings, *context.Context, string) (jira.Client, error) { return fake, nil })
+	_, stderr := withPullTestIO(t)
+	if exit := RunPull([]string{"--project", "test", "--dry-run", "my-issues"}); exit != 1 || !strings.Contains(stderr.String(), "boom") {
 		t.Fatalf("exit = %d, stderr = %q", exit, stderr.String())
 	}
 
@@ -192,8 +192,8 @@ func TestMirrorRefreshDryRunErrors(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(settings, ".jirafs", "settings.toml"), []byte(toml), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	_, stderr = withMirrorTestIO(t)
-	if exit := RunMirror([]string{"refresh", "--project", "test", "--dry-run", "my-issues"}); exit != 1 || !strings.Contains(stderr.String(), "no local_dirs") {
+	_, stderr = withPullTestIO(t)
+	if exit := RunPull([]string{"--project", "test", "--dry-run", "my-issues"}); exit != 1 || !strings.Contains(stderr.String(), "no local_dirs") {
 		t.Fatalf("exit = %d, stderr = %q", exit, stderr.String())
 	}
 }
@@ -218,23 +218,23 @@ func TestArchiveSweepDryRun(t *testing.T) {
 	old := archiveServiceFactory
 	archiveServiceFactory = func(*config.Settings, *context.Context, string) (archive.Service, error) { return svc, nil }
 	t.Cleanup(func() { archiveServiceFactory = old })
-	stdout, stderr := withMirrorTestIO(t)
+	stdout, stderr := withArchiveTestIO(t)
 	before := snapshotTree(t, tmpDir)
 
-	if exit := RunMirror([]string{"archive-sweep", "--project", "test", "--dry-run"}); exit != 0 {
+	if exit := RunArchive([]string{"sweep", "--project", "test", "--dry-run"}); exit != 0 {
 		t.Fatalf("exit = %d, stderr = %q", exit, stderr.String())
 	}
 	assertTreeUnchanged(t, tmpDir, before)
 	if svc.calls != 0 {
 		t.Fatalf("archive service called %d times", svc.calls)
 	}
-	for _, want := range []string{"1 eligible issue(s)", "TEST-1", "to run it for real: jirafs mirror archive-sweep --apply"} {
+	for _, want := range []string{"1 eligible issue(s)", "TEST-1", "to run it for real: jirafs archive sweep --apply"} {
 		if !strings.Contains(stdout.String(), want) {
 			t.Errorf("stdout missing %q:\n%s", want, stdout.String())
 		}
 	}
 
-	if exit := RunMirror([]string{"archive-sweep", "--project", "test", "--dry-run", "--apply"}); exit != 2 {
+	if exit := RunArchive([]string{"sweep", "--project", "test", "--dry-run", "--apply"}); exit != 2 {
 		t.Fatalf("dry-run+apply exit = %d, want 2", exit)
 	}
 	if !strings.Contains(stderr.String(), "--dry-run and --apply cannot be used together") {
@@ -247,18 +247,18 @@ func TestExportIssueDryRun(t *testing.T) {
 	tmpDir := t.TempDir()
 	t.Setenv("HOME", writeSettings(t, tmpDir))
 	fake := exportFakeIssue("PROJ-7")
-	withExportClientFactory(t, func(*config.Settings, *context.Context, string) (jira.Client, error) { return fake, nil })
-	stdout, stderr := withExportTestIO(t)
+	withPullClientFactory(t, func(*config.Settings, *context.Context, string) (jira.Client, error) { return fake, nil })
+	stdout, stderr := withPullTestIO(t)
 	localDir := filepath.Join(tmpDir, "local")
 	dest := filepath.Join(localDir, "PROJ-7.md")
 
 	// Target missing: would create, and the directory is not created.
 	before := snapshotTree(t, tmpDir)
-	if exit := RunExport([]string{"issue", "--project", "test", "--dry-run", "PROJ-7"}); exit != 0 {
+	if exit := RunPull([]string{"--project", "test", "--dry-run", "PROJ-7"}); exit != 0 {
 		t.Fatalf("exit = %d, stderr = %q", exit, stderr.String())
 	}
 	assertTreeUnchanged(t, tmpDir, before)
-	if !strings.Contains(stdout.String(), "would create "+dest) || !strings.Contains(stdout.String(), "to run it for real: jirafs export issue PROJ-7") {
+	if !strings.Contains(stdout.String(), "would create "+dest) || !strings.Contains(stdout.String(), "to run it for real: jirafs pull PROJ-7") {
 		t.Fatalf("stdout = %q", stdout.String())
 	}
 
@@ -269,7 +269,7 @@ func TestExportIssueDryRun(t *testing.T) {
 	writeIssue(t, localDir, "PROJ-7.md", "precious\n")
 	stdout.Reset()
 	before = snapshotTree(t, tmpDir)
-	if exit := RunExport([]string{"issue", "--project", "test", "--dry-run", "PROJ-7"}); exit != 0 {
+	if exit := RunPull([]string{"--project", "test", "--dry-run", "PROJ-7"}); exit != 0 {
 		t.Fatalf("exit = %d, stderr = %q", exit, stderr.String())
 	}
 	assertTreeUnchanged(t, tmpDir, before)
