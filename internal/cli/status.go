@@ -245,7 +245,7 @@ func RunStatus(args []string) int {
 	fmt.Fprintf(statusStdout, "  exists: %v\n", snap.MirrorExists)
 	if snap.MirrorExists {
 		fmt.Fprintf(statusStdout, "  scopes:   %d\n", len(snap.MirrorScopes))
-		fmt.Fprintf(statusStdout, "  issues:   %d\n", snap.MirrorIssueCount)
+		fmt.Fprintf(statusStdout, "  explicitly imported: %d\n", snap.MirrorIssueCount)
 		fmt.Fprintf(statusStdout, "  scope members: %d\n", snap.MirrorScopeMemberCount)
 		if len(snap.MirrorScopes) > 0 {
 			fmt.Fprintln(statusStdout, "  scope names:")

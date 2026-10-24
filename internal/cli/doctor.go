@@ -220,7 +220,7 @@ func RunDoctor(args []string) int {
 		fmt.Fprintf(doctorStdout, "  exists:    %v\n", dsnap.MirrorExists)
 		if len(dsnap.MirrorScopes) > 0 {
 			fmt.Fprintf(doctorStdout, "  scopes:    %d\n", len(dsnap.MirrorScopes))
-			fmt.Fprintf(doctorStdout, "  issues:    %d\n", dsnap.MirrorIssueCount)
+			fmt.Fprintf(doctorStdout, "  explicitly imported: %d\n", dsnap.MirrorIssueCount)
 			fmt.Fprintf(doctorStdout, "  scope members: %d\n", dsnap.MirrorScopeMemberCount)
 		}
 		fmt.Fprintln(doctorStdout)
