@@ -94,7 +94,7 @@ scopes:
 
 func wantSince(t *testing.T) string {
 	t.Helper()
-	return time.Date(2026, 1, 2, 10, 29, 0, 0, time.UTC).Local().Format("2006/01/02 15:04")
+	return time.Date(2026, 1, 1, 22, 29, 0, 0, time.UTC).Format("2006/01/02 15:04")
 }
 
 func TestRunPull_IncrementalCursor(t *testing.T) {

@@ -3,6 +3,7 @@ package mirror
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
@@ -316,7 +317,7 @@ func TestBuiltinScope(t *testing.T) {
 
 func TestScopeSearchJQL(t *testing.T) {
 	cursor := time.Date(2026, 3, 4, 12, 5, 0, 0, time.UTC)
-	since := cursor.Add(-time.Minute).Local().Format("2006/01/02 15:04")
+	since := cursor.Add(-cursorOverlap).UTC().Format("2006/01/02 15:04")
 	stamp := cursor.Format(time.RFC3339)
 	tests := []struct {
 		name  string
@@ -358,4 +359,30 @@ func TestSetScopeLastSynced(t *testing.T) {
 	if c, ok := m.Scopes[1].Cursor(); !ok || !c.Equal(ts) {
 		t.Errorf("Cursor = %v, %v", c, ok)
 	}
+}
+
+func TestSearchJQLWindowCoversAllTimezones(t *testing.T) {
+	old := time.Local
+	t.Cleanup(func() { time.Local = old })
+	cursor := time.Date(2026, 3, 4, 12, 5, 30, 0, time.UTC)
+	scope := Scope{Name: "a", Type: ScopeTypeJQL, Target: "x = 1", LastSynced: cursor.Format(time.RFC3339)}
+	for machine := -12; machine <= 14; machine++ {
+		time.Local = time.FixedZone("machine", machine*3600)
+		jql, err := scope.SearchJQL()
+		if err != nil {
+			t.Fatal(err)
+		}
+		lit := jql[strings.Index(jql, `"`)+1 : strings.LastIndex(jql, `"`)]
+		for jiraZone := -12; jiraZone <= 14; jiraZone++ {
+			loc := time.FixedZone("jira", jiraZone*3600)
+			start, err := time.ParseInLocation(jqlTimeLayout, lit, loc)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if start.After(cursor) {
+				t.Errorf("machine UTC%+d jira UTC%+d: window starts %v after cursor %v", machine, jiraZone, start, cursor)
+			}
+		}
+	}
+	t.Logf("checked 27x27 machine/jira zone pairs")
 }

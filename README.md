@@ -74,8 +74,11 @@ issue, so a scope must not be named like an issue key.
 Refresh is incremental. After a refresh that finishes without failures, the
 scope records `last_synced` (RFC3339) in `mirror.yml`. The next refresh asks
 Jira only for `(<scope jql>) AND updated >= "yyyy/MM/dd HH:mm"` (the cursor
-minus a one minute overlap, in local time; a trailing `ORDER BY` stays outside
-the wrapper) and prints `fetched N, updated M, unchanged K`. Issue files whose
+minus a 12 hour one minute overlap, formatted in UTC; a trailing `ORDER BY`
+stays outside the wrapper). Jira reads that date in the Jira user's profile
+timezone (UTC-12 to UTC+14), which jirafs cannot know, so the overlap makes the
+window start no later than the real cursor in any zone; issues re-fetched
+inside the overlap are reported as `unchanged` and not rewritten) and prints `fetched N, updated M, unchanged K`. Issue files whose
 `updated` already matches Jira are not rewritten, and files with unsynced local
 edits are never overwritten (they are listed with a `jirafs status` hint).
 `--full` ignores the cursor and refetches the whole scope; `--dry-run` never

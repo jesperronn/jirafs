@@ -120,9 +120,13 @@ type Scope struct {
 	LastSynced string `yaml:"last_synced,omitempty"`
 }
 
-// cursorOverlap is subtracted from the cursor to tolerate clock skew between
-// this machine and Jira.
-const cursorOverlap = time.Minute
+// cursorOverlap is subtracted from the cursor so the query window never starts
+// after the true cursor. Jira reads the JQL date in the Jira user's profile
+// timezone (UTC-12..UTC+14), which this machine cannot know. The date is
+// formatted in UTC, so the Jira zone can shift the window start later by at
+// most 12 hours; one more minute covers clock skew. Re-fetching the overlap is
+// cheap because pull skips issues whose updated time is unchanged.
+const cursorOverlap = 12*time.Hour + time.Minute
 
 // jqlTimeLayout is the date format JQL accepts for "updated >= ...".
 const jqlTimeLayout = "2006/01/02 15:04"
@@ -141,7 +145,7 @@ func (s Scope) Cursor() (time.Time, bool) {
 }
 
 // SearchJQL returns the JQL a refresh sends: the scope JQL, narrowed to
-// issues updated since the cursor (minus a one minute overlap) when the scope
+// issues updated since the cursor (minus a 12 hour one minute overlap, in UTC) when the scope
 // has one. Any trailing ORDER BY clause is kept outside the wrapper.
 func (s Scope) SearchJQL() (string, error) {
 	jql, err := s.JQL()
@@ -153,7 +157,7 @@ func (s Scope) SearchJQL() (string, error) {
 		return jql, nil
 	}
 	cond, order := splitOrderBy(jql)
-	since := cursor.Add(-cursorOverlap).Local().Format(jqlTimeLayout)
+	since := cursor.Add(-cursorOverlap).UTC().Format(jqlTimeLayout)
 	out := "(" + cond + ") AND updated >= \"" + since + "\""
 	if order != "" {
 		out += " " + order
