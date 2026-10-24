@@ -141,7 +141,7 @@ func runPlanIssue(key, project, cwd string, settings *config.Settings) int {
 
 // readLocalIssue reads the local issue file from the project's local_dirs
 // and parses it using schema.ParseIssue. It returns the parsed issue and
-// the relative file path.
+// the file's path inside the matching local dir.
 func readLocalIssue(ctx *context.Context, settings *config.Settings, key string) (schema.Issue, string, error) {
 	proj, ok := settings.Projects[ctx.Name]
 	if !ok {
@@ -161,7 +161,7 @@ func readLocalIssue(ctx *context.Context, settings *config.Settings, key string)
 			continue
 		}
 		if string(issue.Identity.Key) == key {
-			return issue, fileName, nil
+			return issue, path, nil
 		}
 	}
 

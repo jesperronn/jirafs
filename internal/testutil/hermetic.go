@@ -16,14 +16,20 @@ import (
 // JIRAFS_ALLOW_LIVE_ENDPOINTS), runs the tests and cleans up, so no test can
 // read real user settings or resolve real credentials.
 func RunHermetic(m *testing.M) {
+	os.Exit(RunHermeticCode(m))
+}
+
+// RunHermeticCode is RunHermetic without the final os.Exit: it returns the
+// exit code so a TestMain can run extra checks after the tests finish.
+func RunHermeticCode(m *testing.M) int {
 	if os.Getenv("GO_WANT_HELPER_PROCESS") == "1" {
 		// Re-exec'd helper child: the parent already chose a hermetic HOME.
-		os.Exit(m.Run())
+		return m.Run()
 	}
 	dir, err := os.MkdirTemp("", "jirafs-test-home-")
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "testutil: cannot create temp HOME:", err)
-		os.Exit(1)
+		return 1
 	}
 	for _, kv := range os.Environ() {
 		if strings.HasPrefix(kv, "JIRAFS_") {
@@ -46,5 +52,5 @@ func RunHermetic(m *testing.M) {
 	os.Setenv("XDG_CONFIG_HOME", dir)
 	code := m.Run()
 	os.RemoveAll(dir)
-	os.Exit(code)
+	return code
 }

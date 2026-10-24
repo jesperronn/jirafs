@@ -492,9 +492,8 @@ type: story
 project:
   type: project
   value: PROJ
+summary: Local modified summary
 ---
-
-Summary: Local modified summary
 `
 	if err := os.WriteFile(filepath.Join(localDir, "PROJ-42.md"), []byte(issueContent), 0o644); err != nil {
 		t.Fatalf("WriteFile: %v", err)
@@ -676,5 +675,22 @@ func TestRunSync_NoKeyBlocked(t *testing.T) {
 	}
 	if stdout.Len() != 0 || built {
 		t.Fatalf("stdout = %q, built = %v; want nothing", stdout.String(), built)
+	}
+}
+
+// TestReadLocalIssueReturnsFullPath guards against returning the bare file
+// name, which made --apply write PROJ-42.md into the current directory.
+func TestReadLocalIssueReturnsFullPath(t *testing.T) {
+	localDir := t.TempDir()
+	writeIssue(t, localDir, "PROJ-42.md", "---\nkey: PROJ-42\ntype: story\nproject:\n  type: project\n  value: PROJ\n---\n\nSummary: S\n")
+	settings := &config.Settings{Projects: map[string]config.Project{
+		"test": {LocalDirs: []string{localDir}},
+	}}
+	_, path, err := readLocalIssue(&context.Context{Name: "test"}, settings, "PROJ-42")
+	if err != nil {
+		t.Fatalf("readLocalIssue: %v", err)
+	}
+	if want := filepath.Join(localDir, "PROJ-42.md"); path != want {
+		t.Fatalf("path = %q, want %q", path, want)
 	}
 }
