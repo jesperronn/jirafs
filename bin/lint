@@ -2,36 +2,38 @@
 
 set -euo pipefail
 
-# Usage: bin/lint [--help] [--verbose] [--autofix] [PATH]
+# Usage: bin/lint [--help] [--verbose] [--autofix] [PATH...]
 #
-#   --help      Print usage and exit.
+#   --help      Print usage to stdout and exit.
 #   --verbose   Print each check name as it runs.
-#   --autofix   Run `gofmt -w` on unformatted Go files in the linted scope.
-#   PATH        File or directory to scope go-toolchain linting to. When
-#               given, only `gofmt -l` and `go vet` are run against that
-#               scope (skipping the slower whole-repo docs/lint checks).
-#               No PATH → gofmt over the whole repo, then tools/lint_repo.py.
+#   --autofix   Run gofmt -w on unformatted Go files in the linted scope.
+#   PATH...     Any number of files or directories. Go files and directories
+#               get gofmt -l and go vet (skipping the slower whole-repo
+#               docs/lint checks). Other files are skipped with a note.
+#               No PATH: gofmt over the whole repo, then tools/lint_repo.py.
 
 usage() {
-    cat >&2 <<EOF
-Usage: $(basename "$0") [OPTIONS] [PATH]
+    cat <<EOF
+Usage: $(basename "$0") [OPTIONS] [PATH...]
 
 Options:
   --help      Show this help message and exit.
   --verbose   Print each check name as it runs.
-  --autofix   Rewrite unformatted Go files with `gofmt -w` instead of failing.
+  --autofix   Rewrite unformatted Go files with gofmt -w instead of failing.
 
 Positional:
-  PATH        Scope go-toolchain linting (gofmt, go vet) to PATH. When
-              omitted, runs gofmt over the whole repo, then the whole-repo
-              lint suite (tools/lint_repo.py).
+  PATH...     Any number of files or directories. Go files and directories
+              are checked with gofmt and go vet; non-Go files are skipped
+              with a note. Exits non-zero if any path fails. When omitted,
+              runs gofmt over the whole repo, then the whole-repo lint
+              suite (tools/lint_repo.py).
 EOF
     exit 0
 }
 
 VERBOSE=0
 AUTOFIX=0
-POSITIONAL=""
+POSITIONAL=()
 
 while [ $# -gt 0 ]; do
     case "$1" in
@@ -46,6 +48,7 @@ while [ $# -gt 0 ]; do
             ;;
         --)
             shift
+            POSITIONAL+=("$@")
             break
             ;;
         -*)
@@ -53,11 +56,7 @@ while [ $# -gt 0 ]; do
             exit 1
             ;;
         *)
-            if [ -n "${POSITIONAL}" ]; then
-                echo "error: only one PATH argument is allowed" >&2
-                exit 1
-            fi
-            POSITIONAL="$1"
+            POSITIONAL+=("$1")
             ;;
     esac
     shift
@@ -97,28 +96,46 @@ check_gofmt() {
     exit 1
 }
 
-if [ -n "${POSITIONAL}" ]; then
-    target="${POSITIONAL}"
-    if [ -f "${target}" ]; then
-        scope_dir="$(dirname "${target}")"
-        scope_files=("${target}")
-    elif [ -d "${target}" ]; then
-        scope_dir="${target}"
-        # gofmt + go vet can both take a directory pattern.
-        scope_files=("${target}")
-    else
-        echo "error: ${POSITIONAL} is neither a file nor a directory" >&2
-        exit 1
+if [ "${#POSITIONAL[@]}" -gt 0 ]; then
+    go_targets=()
+    vet_patterns=()
+    for target in "${POSITIONAL[@]}"; do
+        if [ -d "${target}" ]; then
+            scope_dir="${target}"
+            go_targets+=("${target}")
+        elif [ -f "${target}" ]; then
+            case "${target}" in
+                *.go)
+                    scope_dir="$(dirname "${target}")"
+                    go_targets+=("${target}")
+                    ;;
+                *)
+                    echo "lint: skipping ${target} (not a Go file; no check applies)" >&2
+                    continue
+                    ;;
+            esac
+        else
+            echo "error: ${target} is neither a file nor a directory" >&2
+            exit 1
+        fi
+        scope_dir="${scope_dir#./}"
+        pattern="./${scope_dir}/..."
+        if [ "${scope_dir}" = "." ]; then
+            pattern="./..."
+        fi
+        case " ${vet_patterns[*]:-} " in
+            *" ${pattern} "*) ;;
+            *) vet_patterns+=("${pattern}") ;;
+        esac
+    done
+
+    if [ "${#go_targets[@]}" -gt 0 ]; then
+        check_gofmt "${go_targets[@]}"
+        log "go vet ${vet_patterns[*]}"
+        go vet "${vet_patterns[@]}"
     fi
-    scope_dir="${scope_dir#./}"
-    pkg_pattern="./${scope_dir}/..."
 
-    check_gofmt "${scope_files[@]}"
-
-    log "go vet ${pkg_pattern}"
-    go vet "${pkg_pattern}"
-
-    echo "lint: ok (${POSITIONAL})"
+    echo "lint: ok (${POSITIONAL[*]})"
     exit 0
 fi
 
