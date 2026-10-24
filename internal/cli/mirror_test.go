@@ -1663,3 +1663,61 @@ scopes:
 		t.Errorf("stderr = %q", stderr.String())
 	}
 }
+
+func TestRunMirrorRefresh_PerIssueFailureIsolated(t *testing.T) {
+	tmpDir := t.TempDir()
+	homeDir := writeSettings(t, tmpDir)
+	writeMirrorWithScopes(t, tmpDir, `
+scopes:
+  - name: my-issues
+    type: jql
+    target: assignee = currentUser()
+`)
+	t.Setenv("HOME", homeDir)
+
+	fake := jira.NewFakeTransport()
+	var list []*schema.Issue
+	for _, k := range []string{"TEST-1", "TEST-2", "TEST-3"} {
+		iss := &schema.Issue{
+			Identity:     schema.IssueIdentity{Key: schema.IssueKey(k), Type: "bug", Project: schema.TypedRef{Type: schema.RefProject, Value: "TEST"}},
+			MachineOwned: schema.MachineOwned{SchemaVersion: "1"},
+			Summary:      "Summary " + k,
+		}
+		fake.SetIssue(k, iss)
+		list = append(list, iss)
+	}
+	fake.SetIssuesByScope("my-issues", list)
+	// A directory squatting on TEST-2.md makes only that issue fail to write.
+	if err := os.MkdirAll(filepath.Join(tmpDir, "local", "TEST-2.md"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	withMirrorClientFactory(t, func(*config.Settings, *context.Context, string) (jira.Client, error) {
+		return fake, nil
+	})
+	stdout, stderr := withMirrorTestIO(t)
+
+	exit := RunMirror([]string{"refresh", "--project", "test", "my-issues"})
+	t.Logf("stdout: %q", stdout.String())
+	t.Logf("stderr: %q", stderr.String())
+	if exit != 1 {
+		t.Fatalf("exit = %d, want 1", exit)
+	}
+	for _, k := range []string{"TEST-1", "TEST-3"} {
+		if _, err := os.ReadFile(filepath.Join(tmpDir, "local", k+".md")); err != nil {
+			t.Errorf("%s.md not written: %v", k, err)
+		}
+	}
+	for _, want := range []string{"TEST-2: ", "refreshed 2, failed 1", "jirafs export issue TEST-2"} {
+		if !strings.Contains(stderr.String(), want) {
+			t.Errorf("stderr = %q, want %q", stderr.String(), want)
+		}
+	}
+	data, err := os.ReadFile(filepath.Join(tmpDir, "mirror", "mirror.yml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := string(data)
+	if !strings.Contains(got, "key: TEST-1") || !strings.Contains(got, "key: TEST-3") || strings.Contains(got, "key: TEST-2") {
+		t.Errorf("mirror.yml = %q, want members TEST-1 and TEST-3 only", got)
+	}
+}

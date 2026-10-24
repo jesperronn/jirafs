@@ -149,10 +149,25 @@ func runMirrorRefresh(cmdCtx stdcontext.Context, args []string, settings *config
 		return 1
 	}
 
-	if err := materializeScopeIssues(cmdCtx, client, settings, ctx, jql); err != nil {
+	failures, total, err := materializeScopeIssues(cmdCtx, client, settings, ctx, jql)
+	if err != nil {
 		fmt.Fprintf(mirrorStderr, "jirafs mirror refresh: cannot write issue snapshots: %v\n", err)
 		return 1
 	}
+	// Newly added members whose file failed to write are not recorded.
+	failedKeys := make(map[schema.IssueKey]bool, len(failures))
+	for _, f := range failures {
+		failedKeys[f.Key] = true
+	}
+	kept := added[:0]
+	for _, k := range added {
+		if failedKeys[k] {
+			m.RemoveScopeMember(k)
+			continue
+		}
+		kept = append(kept, k)
+	}
+	added = kept
 
 	if err := saveMirrorYAML(mirrorPath, m); err != nil {
 		fmt.Fprintf(mirrorStderr, "jirafs mirror refresh: cannot save mirror: %v\n", err)
@@ -164,14 +179,30 @@ func runMirrorRefresh(cmdCtx stdcontext.Context, args []string, settings *config
 	})
 	if len(added) == 0 {
 		fmt.Fprintf(mirrorStdout, "jirafs mirror refresh: no changed issue keys for scope %q in %q\n", scopeName, ctx.Name)
+	} else {
+		fmt.Fprintf(mirrorStdout, "jirafs mirror refresh: %d changed issue key(s) for scope %q in %q:\n", len(added), scopeName, ctx.Name)
+		for _, key := range added {
+			fmt.Fprintf(mirrorStdout, "  %s\n", key)
+		}
+	}
+	if len(failures) == 0 {
 		return 0
 	}
-
-	fmt.Fprintf(mirrorStdout, "jirafs mirror refresh: %d changed issue key(s) for scope %q in %q:\n", len(added), scopeName, ctx.Name)
-	for _, key := range added {
-		fmt.Fprintf(mirrorStdout, "  %s\n", key)
+	for _, f := range failures {
+		fmt.Fprintf(mirrorStderr, "%s: %s\n", f.Key, f.Reason)
 	}
-	return 0
+	fmt.Fprintf(mirrorStderr, "refreshed %d, failed %d\n", total-len(failures), len(failures))
+	fmt.Fprintln(mirrorStderr, "retry each failed issue:")
+	for _, f := range failures {
+		fmt.Fprintf(mirrorStderr, "  jirafs export issue %s\n", f.Key)
+	}
+	return 1
+}
+
+// refreshFailure records one issue that could not be written during a refresh.
+type refreshFailure struct {
+	Key    schema.IssueKey
+	Reason string
 }
 
 // mirrorRefreshDryRun lists the issue files a refresh of scopeName would
@@ -204,21 +235,25 @@ func mirrorRefreshDryRun(client jira.Client, settings *config.Settings, ctx *con
 	return 0
 }
 
-func materializeScopeIssues(ctx stdcontext.Context, client jira.Client, settings *config.Settings, projectCtx *context.Context, jql string) error {
+// materializeScopeIssues writes one file per issue matching jql. A failure
+// writing a single issue is recorded and processing continues; only fatal
+// errors (settings, directory creation, search) are returned as err. It
+// returns the per-issue failures and the number of issues attempted.
+func materializeScopeIssues(ctx stdcontext.Context, client jira.Client, settings *config.Settings, projectCtx *context.Context, jql string) ([]refreshFailure, int, error) {
 	proj, ok := settings.Projects[projectCtx.Name]
 	if !ok {
-		return fmt.Errorf("project %q not found in settings", projectCtx.Name)
+		return nil, 0, fmt.Errorf("project %q not found in settings", projectCtx.Name)
 	}
 	if len(proj.LocalDirs) == 0 {
-		return fmt.Errorf("project %q has no local_dirs configured", projectCtx.Name)
+		return nil, 0, fmt.Errorf("project %q has no local_dirs configured", projectCtx.Name)
 	}
 	if err := os.MkdirAll(proj.LocalDirs[0], 0o755); err != nil {
-		return fmt.Errorf("create local directory %s: %w", proj.LocalDirs[0], err)
+		return nil, 0, fmt.Errorf("create local directory %s: %w", proj.LocalDirs[0], err)
 	}
 
 	issues, _, err := client.SearchIssues(ctx, jql)
 	if err != nil {
-		return err
+		return nil, 0, err
 	}
 	// Only issues that will actually be written count towards progress.
 	writable := make([]*schema.Issue, 0, len(issues))
@@ -232,8 +267,9 @@ func materializeScopeIssues(ctx stdcontext.Context, client jira.Client, settings
 	if total == 0 {
 		writeMirrorProgress(mirrorStdout, "fetched", 0, total)
 		fmt.Fprintln(mirrorStdout)
-		return nil
+		return nil, 0, nil
 	}
+	var failures []refreshFailure
 	completed := 0
 	for _, issue := range writable {
 		renderIssue := issue
@@ -244,14 +280,17 @@ func materializeScopeIssues(ctx stdcontext.Context, client jira.Client, settings
 		jira.AttachComments(ctx, client, renderIssue, mirrorStderr)
 		dest := filepath.Join(proj.LocalDirs[0], string(renderIssue.Identity.Key)+".md")
 		if err := writeSyncedIssue(dest, projectCtx.MirrorDir, renderIssue); err != nil {
-			return fmt.Errorf("write issue file %s: %w", dest, err)
+			failures = append(failures, refreshFailure{
+				Key:    issue.Identity.Key,
+				Reason: fmt.Sprintf("write issue file %s: %v", dest, err),
+			})
 		}
 		completed++
 		writeMirrorProgress(mirrorStdout, "fetching", completed, total)
 	}
 	writeMirrorProgress(mirrorStdout, "fetched", total, total)
 	fmt.Fprintln(mirrorStdout)
-	return nil
+	return failures, total, nil
 }
 
 func writeMirrorProgress(w io.Writer, label string, current, total int) {

@@ -24,7 +24,7 @@ func TestMaterializeScopeIssues_WritesFilesAndSkipsInvalid(t *testing.T) {
 	fake.SetIssuesByScope("sc", []*schema.Issue{testIssue("A-1"), nil, testIssue(""), testIssue("A-2")})
 	out, _ := withMirrorTestIO(t)
 
-	err := materializeScopeIssues(context.Background(), fake, settings, &icontext.Context{Name: "p"}, "sc")
+	_, _, err := materializeScopeIssues(context.Background(), fake, settings, &icontext.Context{Name: "p"}, "sc")
 	if err != nil {
 		t.Fatalf("err = %v", err)
 	}
@@ -51,7 +51,7 @@ func TestMaterializeScopeIssues_EmptyScope(t *testing.T) {
 	out, _ := withMirrorTestIO(t)
 	fake := jira.NewFakeTransport()
 	fake.SetIssuesByScope("empty", []*schema.Issue{})
-	if err := materializeScopeIssues(context.Background(), fake, settings, &icontext.Context{Name: "p"}, "empty"); err != nil {
+	if _, _, err := materializeScopeIssues(context.Background(), fake, settings, &icontext.Context{Name: "p"}, "empty"); err != nil {
 		t.Fatal(err)
 	}
 	if !strings.Contains(out.String(), "fetched 0/0") {
@@ -84,7 +84,7 @@ func TestMaterializeScopeIssues_Errors(t *testing.T) {
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
 			withMirrorTestIO(t)
-			err := materializeScopeIssues(context.Background(), c.client, c.settings, &icontext.Context{Name: c.proj}, "sc")
+			_, _, err := materializeScopeIssues(context.Background(), c.client, c.settings, &icontext.Context{Name: c.proj}, "sc")
 			if err == nil || !strings.Contains(err.Error(), c.want) {
 				t.Errorf("err = %v, want containing %q", err, c.want)
 			}

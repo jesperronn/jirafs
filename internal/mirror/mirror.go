@@ -374,6 +374,22 @@ func (m Mirror) IsArchiveEligible(key schema.IssueKey, resolved ResolvedStatus, 
 	return resolved == ResolvedStatusResolved
 }
 
+// RemoveScopeMember removes any scope membership of key. It reports whether
+// a member was removed.
+func (m *Mirror) RemoveScopeMember(key schema.IssueKey) bool {
+	kept := m.ScopeMembers[:0]
+	removed := false
+	for _, mem := range m.ScopeMembers {
+		if mem.Key == key {
+			removed = true
+			continue
+		}
+		kept = append(kept, mem)
+	}
+	m.ScopeMembers = kept
+	return removed
+}
+
 // AddScopeMember adds a scope member to the mirror.
 // It returns true if the member was added, false if already present.
 func (m *Mirror) AddScopeMember(mem ScopeMember) bool {
