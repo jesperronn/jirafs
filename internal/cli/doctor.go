@@ -7,6 +7,7 @@ import (
 	"os"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/jirafs/jirafs/internal/color"
 	"github.com/jirafs/jirafs/internal/config"
@@ -223,6 +224,14 @@ func RunDoctor(args []string) int {
 			fmt.Fprintf(doctorStdout, "  scopes:    %d\n", len(dsnap.MirrorScopes))
 			fmt.Fprintf(doctorStdout, "  explicitly imported: %d\n", dsnap.MirrorIssueCount)
 			fmt.Fprintf(doctorStdout, "  scope members: %d\n", dsnap.MirrorScopeMemberCount)
+		}
+		fmt.Fprintln(doctorStdout)
+	}
+
+	if stale := staleIntents(dsnap.MirrorDir, time.Now()); len(stale) > 0 {
+		fmt.Fprintln(doctorStdout, "Stale create intents (a push may have been interrupted):")
+		for _, line := range stale {
+			fmt.Fprintf(doctorStdout, "  %s\n", line)
 		}
 		fmt.Fprintln(doctorStdout)
 	}

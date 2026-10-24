@@ -379,9 +379,38 @@ func (r *pushRun) createDraft(path, doc string) pushResult {
 		return pushResult{name, pushOK, "would create " + jira.IssueTypeName(string(issue.Identity.Type))}
 	}
 
-	key, err := client.CreateIssue(r.cmdCtx, issue)
-	if err != nil {
-		return pushFail(name, fmt.Sprintf("cannot create issue: %v", err))
+	// Write the intent record before the create call so a lost response
+	// cannot cause a duplicate: a retry searches for the token label first.
+	ipath := intentPath(ctx.MirrorDir, path)
+	intent, have := loadIntent(ipath)
+	if !have {
+		token, terr := newIntentToken()
+		if terr != nil {
+			return pushFail(name, fmt.Sprintf("cannot generate intent token: %v", terr))
+		}
+		intent = createIntent{Token: token, Project: issue.Identity.Project.Value, Summary: issue.Summary, Timestamp: pushNow().UTC()}
+		if err := saveIntent(ipath, intent); err != nil {
+			return pushFail(name, fmt.Sprintf("cannot write intent record %s: %v", ipath, err))
+		}
+	}
+	key, adopted := "", false
+	if have {
+		found, _, serr := client.SearchIssues(r.cmdCtx, intent.JQL())
+		if serr != nil {
+			return pushFail(name, fmt.Sprintf("cannot check for an issue created by an earlier attempt: %v", serr))
+		}
+		if len(found) > 0 {
+			key, adopted = string(found[0].Identity.Key), true
+		}
+	}
+	if !adopted {
+		toCreate := issue
+		toCreate.Labels = append(append([]string(nil), issue.Labels...), intent.Label())
+		var err error
+		key, err = client.CreateIssue(r.cmdCtx, toCreate)
+		if err != nil {
+			return pushFail(name, fmt.Sprintf("cannot create issue: %v", err))
+		}
 	}
 
 	issue.Identity.Key = schema.IssueKey(key)
@@ -395,6 +424,13 @@ func (r *pushRun) createDraft(path, doc string) pushResult {
 		if err := os.Remove(path); err != nil {
 			fmt.Fprintf(pushStderr, "jirafs push: created %s; cannot remove old draft %s: %v\n", key, path, err)
 		}
+	}
+	if err := os.Remove(ipath); err != nil && !os.IsNotExist(err) {
+		fmt.Fprintf(pushStderr, "jirafs push: cannot remove intent record %s: %v\n", ipath, err)
+	}
+	r.removeIntentLabel(client, key, intent.Label())
+	if adopted {
+		fmt.Fprintf(pushStdout, "found %s created by an earlier attempt; not creating a duplicate\n", key)
 	}
 	fmt.Fprintf(pushStdout, "jirafs: created %s\n  file: %s\n  url:  %s/browse/%s\n", key, newPath, baseURL, key)
 	return pushResult{key, pushOK, "created from " + path}
@@ -629,4 +665,28 @@ func formatMissingRequired(missing []jira.CreateMetaField, project, path string)
 		fmt.Fprintf(&sb, "  or to ~/.jirafs/settings.toml for every draft in the project:\n    [projects.%s.create_defaults]\n%s", project, tomlSnip.String())
 	}
 	return sb.String()
+}
+
+// removeIntentLabel strips the intent label from the created issue. It is
+// best effort: a failure only leaves a harmless label behind.
+func (r *pushRun) removeIntentLabel(client jira.Client, key, label string) {
+	remote, err := client.FetchIssue(r.cmdCtx, key)
+	if err != nil || remote == nil {
+		return
+	}
+	var kept []string
+	found := false
+	for _, l := range remote.Labels {
+		if l == label {
+			found = true
+			continue
+		}
+		kept = append(kept, l)
+	}
+	if !found {
+		return
+	}
+	updated := *remote
+	updated.Labels = kept
+	_, _ = client.UpdateIssue(r.cmdCtx, key, &updated)
 }

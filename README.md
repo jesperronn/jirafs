@@ -247,6 +247,24 @@ allowed values and a copy-pasteable `custom_fields:` / `create_defaults`
 snippet. `--apply` refuses to create until they are set. If createmeta cannot
 be reached, a warning is printed and the push continues.
 
+### Retrying a create is safe
+
+Before creating a draft, `push --apply` writes an intent record
+`<mirror_dir>/.jirafs/intents/<draft-name>.yml` (random token, project,
+summary, timestamp) and creates the issue with the label `jirafs-<token>`. If
+the response is lost (timeout, killed process) the draft stays a draft; the
+next `push --apply` searches Jira for `labels = "jirafs-<token>"` first and,
+when found, adopts that key instead of creating a duplicate:
+
+```
+found PROJ-7 created by an earlier attempt; not creating a duplicate
+```
+
+The intent record is deleted once the local `KEY.md` is written, and the label
+is removed from the issue (best effort). `jirafs doctor` reports intent records
+older than 7 days. Any future write that adds data (for example comments) must
+follow the same rule: record the intent, then verify before repeating.
+
 ## Initial Scope
 
 - Export Jira issues, sprints, and related metadata into a local filesystem.

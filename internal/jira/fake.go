@@ -3,6 +3,7 @@ package jira
 import (
 	"context"
 	"fmt"
+	"strings"
 	"sync"
 
 	"github.com/jirafs/jirafs/internal/config"
@@ -119,6 +120,18 @@ func (f *FakeTransport) SearchIssues(_ context.Context, scope string) ([]*schema
 	f.searches = append(f.searches, scope)
 	if f.errOn == "search" {
 		return nil, 0, f.err
+	}
+	if label, ok := labelQuery(scope); ok {
+		var found []*schema.Issue
+		for _, is := range f.issues {
+			for _, l := range is.Labels {
+				if l == label {
+					found = append(found, is)
+					break
+				}
+			}
+		}
+		return found, len(found), nil
 	}
 	if pages, ok := f.pagesByScope[scope]; ok {
 		var all []*schema.Issue
@@ -267,18 +280,23 @@ func (f *FakeTransport) UpdateIssue(_ context.Context, key string, issue *schema
 
 // CreateIssue registers a copy of issue under a generated key
 // (<PROJECT>-<n>, starting at 1) and returns it. SetErr("create", err)
-// makes it fail.
+// makes it fail; SetErr("create-lost", err) registers the issue and then
+// returns err, simulating a lost response.
 func (f *FakeTransport) CreateIssue(_ context.Context, issue *schema.Issue) (string, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	if f.errOn == "create" {
 		return "", f.err
 	}
+	lost := f.errOn == "create-lost"
 	f.created++
 	key := fmt.Sprintf("%s-%d", issue.Identity.Project.Value, f.created)
 	c := *issue
 	c.Identity.Key = schema.IssueKey(key)
 	f.issues[key] = &c
+	if lost {
+		return "", f.err
+	}
 	return key, nil
 }
 
@@ -410,4 +428,20 @@ func (f *FakeTransport) DoTransition(_ context.Context, key, id string, fields m
 		}
 	}
 	return NewNotFoundError("transition " + id)
+}
+
+// labelQuery extracts L from the JQL `labels = "L"`.
+func labelQuery(jql string) (string, bool) {
+	const prefix = `labels = "`
+	if !strings.HasPrefix(jql, prefix) || !strings.HasSuffix(jql, `"`) {
+		return "", false
+	}
+	return jql[len(prefix) : len(jql)-1], true
+}
+
+// Created returns how many issues CreateIssue has registered.
+func (f *FakeTransport) Created() int {
+	f.mu.RLock()
+	defer f.mu.RUnlock()
+	return f.created
 }
