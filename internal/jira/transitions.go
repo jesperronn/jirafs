@@ -59,7 +59,7 @@ func (c *JiraClient) FetchTransitions(ctx context.Context, key string) ([]Transi
 	}
 	resp, err := c.do(req)
 	if err != nil {
-		return nil, NewTransportError("transitions request failed: " + err.Error())
+		return nil, newTransportCause("transitions request failed: ", err)
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode == http.StatusNotFound {
@@ -108,7 +108,7 @@ func (c *JiraClient) DoTransition(ctx context.Context, key, transitionID string,
 	}
 	resp, err := c.do(req)
 	if err != nil {
-		return NewTransportError("transition request failed: " + err.Error())
+		return newTransportCause("transition request failed: ", err)
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode == http.StatusNotFound {

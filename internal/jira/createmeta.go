@@ -70,7 +70,7 @@ func (c *JiraClient) getJSON(ctx context.Context, url string, target interface{}
 	}
 	resp, err := c.do(req)
 	if err != nil {
-		return 0, NewTransportError("request failed: " + err.Error())
+		return 0, newTransportCause("request failed: ", err)
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden {

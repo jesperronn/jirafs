@@ -187,8 +187,8 @@ func decodeJSONResponse(resp *http.Response, target interface{}, contextLabel st
 // structured ClientError, preferring Jira error details when available.
 func mapHTTPErr(resp *http.Response) *ClientError {
 	err := mapHTTPErrBody(resp)
-	if n := resp.Header.Get(attemptsHeader); n != "" {
-		err.Message += " (after " + n + " attempts)"
+	if b, ok := resp.Body.(*attemptsBody); ok {
+		err.Message += " (after " + strconv.Itoa(b.attempts) + " attempts)"
 	}
 	return err
 }
@@ -296,9 +296,13 @@ const MaxAttempts = 4
 // maxRetryWait caps any single wait, including a server supplied Retry-After.
 const maxRetryWait = 60 * time.Second
 
-// attemptsHeader is set on a final retryable response that was returned after
-// more than one attempt, so mapHTTPErr can say how many attempts were made.
-const attemptsHeader = "X-Jirafs-Attempts"
+// attemptsBody wraps the body of a final retryable response that was returned
+// after more than one attempt, so mapHTTPErr can say how many attempts were
+// made without touching the response headers.
+type attemptsBody struct {
+	io.ReadCloser
+	attempts int
+}
 
 // SleepFunc waits for d or until ctx is done, returning ctx.Err() in the latter case.
 type SleepFunc func(ctx context.Context, d time.Duration) error
@@ -403,7 +407,7 @@ func (c *JiraClient) do(req *http.Request) (*http.Response, error) {
 		}
 		if last {
 			if attempt > 1 {
-				resp.Header.Set(attemptsHeader, strconv.Itoa(attempt))
+				resp.Body = &attemptsBody{ReadCloser: resp.Body, attempts: attempt}
 			}
 			return resp, nil
 		}
@@ -494,7 +498,7 @@ func (c *JiraClient) FetchIssue(ctx context.Context, key string) (*schema.Issue,
 
 	resp, err := c.do(req)
 	if err != nil {
-		return nil, NewTransportError("request failed: " + err.Error())
+		return nil, newTransportCause("request failed: ", err)
 	}
 	defer resp.Body.Close()
 
@@ -672,7 +676,7 @@ func (c *JiraClient) postSearch(ctx context.Context, path, jql string, body map[
 	}
 	resp, err := c.do(req)
 	if err != nil {
-		return nil, 0, NewTransportError("search request failed: " + err.Error())
+		return nil, 0, newTransportCause("search request failed: ", err)
 	}
 	defer resp.Body.Close()
 
@@ -735,7 +739,7 @@ func (c *JiraClient) CurrentUser(ctx context.Context) (*User, error) {
 
 	resp, err := c.do(req)
 	if err != nil {
-		return nil, NewTransportError("request failed: " + err.Error())
+		return nil, newTransportCause("request failed: ", err)
 	}
 	defer resp.Body.Close()
 
@@ -773,7 +777,7 @@ func (c *JiraClient) FetchStatuses(ctx context.Context) ([]StatusEntry, error) {
 
 	resp, err := c.do(req)
 	if err != nil {
-		return nil, NewTransportError("status request failed: " + err.Error())
+		return nil, newTransportCause("status request failed: ", err)
 	}
 	defer resp.Body.Close()
 
@@ -815,7 +819,7 @@ func (c *JiraClient) FetchSprints(ctx context.Context, projectKey string) ([]Spr
 
 	resp, err := c.do(req)
 	if err != nil {
-		return nil, NewTransportError("sprint request failed: " + err.Error())
+		return nil, newTransportCause("sprint request failed: ", err)
 	}
 	defer resp.Body.Close()
 
@@ -885,7 +889,7 @@ func (c *JiraClient) UpdateIssue(ctx context.Context, key string, issue *schema.
 
 	resp, err := c.do(req)
 	if err != nil {
-		return nil, NewTransportError("update request failed: " + err.Error())
+		return nil, newTransportCause("update request failed: ", err)
 	}
 	defer resp.Body.Close()
 
@@ -917,7 +921,7 @@ func (c *JiraClient) FetchFixVersions(ctx context.Context, projectKey string) ([
 
 	resp, err := c.do(req)
 	if err != nil {
-		return nil, NewTransportError("version request failed: " + err.Error())
+		return nil, newTransportCause("version request failed: ", err)
 	}
 	defer resp.Body.Close()
 
@@ -987,7 +991,7 @@ func (c *JiraClient) CreateIssue(ctx context.Context, issue *schema.Issue) (stri
 	}
 	resp, err := c.do(req)
 	if err != nil {
-		return "", NewTransportError("create request failed: " + err.Error())
+		return "", newTransportCause("create request failed: ", err)
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden {

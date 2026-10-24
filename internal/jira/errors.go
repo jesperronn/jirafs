@@ -24,7 +24,12 @@ type ClientError struct {
 	Message  string
 	HTTPCode int
 	URL      string
+	// Cause is the underlying error, if any, exposed through Unwrap.
+	Cause error
 }
+
+// Unwrap returns the underlying cause, so errors.Is sees through a ClientError.
+func (e *ClientError) Unwrap() error { return e.Cause }
 
 // Error implements the error interface.
 func (e *ClientError) Error() string {
@@ -97,6 +102,12 @@ func NewNotFoundError(key string) *ClientError {
 // NewTransportError returns a new transport error.
 func NewTransportError(msg string) *ClientError {
 	return &ClientError{Code: ErrTransport, Message: msg}
+}
+
+// newTransportCause returns a transport error whose message is prefix plus
+// cause's text and which unwraps to cause.
+func newTransportCause(prefix string, cause error) *ClientError {
+	return &ClientError{Code: ErrTransport, Message: prefix + cause.Error(), Cause: cause}
 }
 
 // NewHTTPErr returns a new HTTP error with the given status code and message.

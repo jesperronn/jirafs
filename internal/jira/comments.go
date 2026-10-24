@@ -45,7 +45,7 @@ func (c *JiraClient) FetchComments(ctx context.Context, key string, limit int) (
 	}
 	resp, err := c.do(req)
 	if err != nil {
-		return nil, 0, NewTransportError("request failed: " + err.Error())
+		return nil, 0, newTransportCause("request failed: ", err)
 	}
 	defer resp.Body.Close()
 

@@ -2173,3 +2173,38 @@ func TestSearchIssuesNotFoundOnBothEndpoints(t *testing.T) {
 		t.Errorf("err = %v", err)
 	}
 }
+
+func TestRetryIgnoresServerSentAttemptsHeader(t *testing.T) {
+	rt := &stubRT{statuses: []int{503}, headers: map[string]string{"X-Jirafs-Attempts": "99"}}
+	var slept []time.Duration
+	_, err := retryClient(rt, &slept).FetchIssue(context.Background(), "A-1")
+	if err == nil || strings.Contains(err.Error(), "99") || !strings.Contains(err.Error(), "after 4 attempts") {
+		t.Fatalf("err = %v, want 4 attempts and no 99", err)
+	}
+	rt = &stubRT{statuses: []int{429}, headers: map[string]string{"X-Jirafs-Attempts": "99"}}
+	c := NewJiraClient("http://jira.test", WithTransport(rt), WithSleep(func(context.Context, time.Duration) error { return nil }))
+	req, _ := http.NewRequest(http.MethodPost, "http://jira.test/rest/api/2/issue", nil)
+	resp, err := c.do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if e := mapHTTPErr(resp); strings.Contains(e.Message, "attempts") {
+		t.Fatalf("message = %q, header must not matter", e.Message)
+	}
+}
+
+func TestRetryCancelDuringWaitIsContextCanceled(t *testing.T) {
+	rt := &stubRT{statuses: []int{503}}
+	ctx, cancel := context.WithCancel(context.Background())
+	c := NewJiraClient("http://jira.test", WithTransport(rt), WithSleep(func(ctx context.Context, d time.Duration) error {
+		cancel()
+		return ctx.Err()
+	}))
+	_, err := c.FetchIssue(ctx, "A-1")
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("err = %v, want context.Canceled", err)
+	}
+	if !strings.Contains(err.Error(), "request failed: context canceled") || !IsClientError(err, ErrTransport) {
+		t.Fatalf("err = %v, message or code changed", err)
+	}
+}
