@@ -42,8 +42,9 @@ func RunSync(args []string) int {
 	fs := quietFlagSet("sync")
 	projectFlag := fs.String("project", "", "project key or name to use")
 	fs.String("cwd", "", "ignored; sync resolves the project from the current directory")
-	applyFlag := fs.Bool("apply", false, "write the updated remote to the local issue file")
-	dryRunFlag := fs.Bool("dry-run", false, "print the plan; update neither Jira nor the local file")
+	applyFlag := fs.Bool("apply", false, "perform the Jira writes (without it, sync is a dry run)")
+	writeLocalFlag := fs.Bool("write-local", false, "after a successful --apply, write the refreshed remote to the local issue file")
+	dryRunFlag := fs.Bool("dry-run", false, "print the plan; update neither Jira nor the local file (the default without --apply)")
 	if err := parseFlags(fs, args); err != nil {
 		return flagError(syncStderr, "jirafs sync", err)
 	}
@@ -66,14 +67,34 @@ func RunSync(args []string) int {
 	// Parse flags to extract --project and --cwd regardless of whether
 	// an issue key is provided. This allows "jirafs sync --project TEST"
 	// (no key) to resolve the project and list pending syncs.
-	return runSyncIssue(cmdCtx, fs.Args(), settings, context.NewResolver(settings, *projectFlag), *applyFlag, *dryRunFlag)
+	return runSyncIssue(cmdCtx, fs.Args(), settings, context.NewResolver(settings, *projectFlag), syncOptions{apply: *applyFlag, writeLocal: *writeLocalFlag, project: *projectFlag})
+}
+
+// syncOptions are the mutation flags of one `jirafs sync` run. Jira is only
+// written when apply is set; otherwise the run is a dry run.
+type syncOptions struct {
+	apply      bool
+	writeLocal bool
+	project    string
+}
+
+// realCommand builds the exact command that performs the run for real.
+func (o syncOptions) realCommand(key string) string {
+	parts := []string{"jirafs", "sync", shellQuote(key), "--apply"}
+	if o.writeLocal {
+		parts = append(parts, "--write-local")
+	}
+	if o.project != "" {
+		parts = append(parts, "--project", shellQuote(o.project))
+	}
+	return strings.Join(parts, " ")
 }
 
 // runSyncIssue handles `jirafs sync KEY`. It resolves the project context,
 // fetches the remote issue from Jira through the real service path, reads
 // the local issue from the file system, builds and validates a plan,
 // applies the plan, and pushes the updated remote back to Jira.
-func runSyncIssue(cmdCtx stdcontext.Context, args []string, settings *config.Settings, resolver *context.Resolver, apply, dryRun bool) int {
+func runSyncIssue(cmdCtx stdcontext.Context, args []string, settings *config.Settings, resolver *context.Resolver, opts syncOptions) int {
 	if len(args) == 0 {
 		fmt.Fprintln(syncStderr, "jirafs sync: missing issue key")
 		return 1
@@ -200,8 +221,8 @@ func runSyncIssue(cmdCtx stdcontext.Context, args []string, settings *config.Set
 		fmt.Fprintf(syncStdout, "  %s %s = %s\n", op.Type, op.Field, op.Value)
 	}
 
-	if dryRun {
-		dryRunDone(syncStdout, "jirafs sync "+key)
+	if !opts.apply {
+		dryRunDone(syncStdout, opts.realCommand(key))
 		return 0
 	}
 
@@ -222,7 +243,7 @@ func runSyncIssue(cmdCtx stdcontext.Context, args []string, settings *config.Set
 	// Update the remote metadata in the result with the updated remote.
 	result.Remote.RemoteMetadata = updatedRemote.RemoteMetadata
 
-	if apply {
+	if opts.writeLocal {
 		// Write the updated remote back to the local issue file.
 		if err := writeUpdatedLocalIssue(localPath, ctx.MirrorDir, result.Remote); err != nil {
 			fmt.Fprintf(syncStderr, "jirafs sync: cannot write updated local issue: %v\n", err)
@@ -321,8 +342,9 @@ func printSyncHelp() {
 
 	fmt.Fprintf(syncStdout, "%s:\n", color.BoldGreen(syncStdout, "Flags"))
 	fmt.Fprintf(syncStdout, "  %s KEY    %s\n", color.Yellow(syncStdout, "--project"), color.Dim(syncStdout, "project key or name to use"))
-	fmt.Fprintf(syncStdout, "  %s        %s\n", color.Yellow(syncStdout, "--apply"), color.Dim(syncStdout, "write the updated remote to the local issue file"))
-	fmt.Fprintf(syncStdout, "  %s      %s\n\n", color.Yellow(syncStdout, "--dry-run"), color.Dim(syncStdout, "print the plan; no Jira update and no local write"))
+	fmt.Fprintf(syncStdout, "  %s        %s\n", color.Yellow(syncStdout, "--apply"), color.Dim(syncStdout, "perform the Jira writes; without it sync is a dry run"))
+	fmt.Fprintf(syncStdout, "  %s  %s\n", color.Yellow(syncStdout, "--write-local"), color.Dim(syncStdout, "after a successful --apply, write the refreshed remote to the local file"))
+	fmt.Fprintf(syncStdout, "  %s      %s\n\n", color.Yellow(syncStdout, "--dry-run"), color.Dim(syncStdout, "print the plan and write nothing (the default without --apply)"))
 
 	fmt.Fprintf(syncStdout, "%s\n", color.Cyan(syncStdout, `Run "jirafs sync --help" for more information about flags.`))
 }

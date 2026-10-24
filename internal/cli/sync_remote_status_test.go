@@ -148,7 +148,7 @@ func TestRunSync_GatedTransitionWithValueSendsFields(t *testing.T) {
 	fake, _ := setupStatusEnv(t, "status: Done\ncustom_fields:\n  customfield_900: Bug in login\n", "New summary", "Open")
 	fake.SetTransitions("PROJ-42", gatedTransition())
 	_, stderr := withSyncTestIO(t)
-	if exit := RunSync([]string{"--project", "test", "PROJ-42"}); exit != 0 {
+	if exit := RunSync([]string{"--project", "test", "--apply", "PROJ-42"}); exit != 0 {
 		t.Fatalf("exit = %d, stderr = %q", exit, stderr.String())
 	}
 	if got := fake.DoneTransitions(); len(got) != 1 || got[0] != "PROJ-42:21" {

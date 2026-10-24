@@ -104,7 +104,7 @@ func TestSmokeExportEditPlanSyncReexport(t *testing.T) {
 
 	// Step 4: Sync (push changes to Jira and apply locally).
 	_, syncStderr := withSyncTestIO(t)
-	exit = RunSync([]string{"--project", "test", "--apply", "PROJ-42"})
+	exit = RunSync([]string{"--project", "test", "--apply", "--write-local", "PROJ-42"})
 	if exit != 0 {
 		t.Fatalf("RunSync([\"--project\", \"test\", \"--apply\", \"PROJ-42\"]) = %d, stderr = %q", exit, syncStderr.String())
 	}
@@ -211,7 +211,7 @@ func TestSmokeExportEditPlanSyncReexport_MinimalIssue(t *testing.T) {
 
 	// Step 4: Sync.
 	_, syncStderr := withSyncTestIO(t)
-	exit = RunSync([]string{"--project", "test", "--apply", "DRF-1"})
+	exit = RunSync([]string{"--project", "test", "--apply", "--write-local", "DRF-1"})
 	if exit != 0 {
 		t.Fatalf("RunSync minimal = %d, stderr = %q", exit, syncStderr.String())
 	}

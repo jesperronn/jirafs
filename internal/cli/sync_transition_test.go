@@ -59,7 +59,7 @@ func TestRunSync_StatusTransitionApplied(t *testing.T) {
 	fake.SetTransitions("PROJ-42", startTransition())
 	stdout, stderr := withSyncTestIO(t)
 
-	if exit := RunSync([]string{"--project", "test", "PROJ-42"}); exit != 0 {
+	if exit := RunSync([]string{"--project", "test", "--apply", "PROJ-42"}); exit != 0 {
 		t.Fatalf("exit = %d, stderr = %q", exit, stderr.String())
 	}
 	if !strings.Contains(stdout.String(), `transition status: Open → In Progress (via "Start")`) {
@@ -116,7 +116,7 @@ func TestRunSync_StatusTransitionErrors(t *testing.T) {
 		t.Errorf("fetch error: exit=%d stderr=%q", exit, stderr.String())
 	}
 	fake.SetErr("transition", jira.NewUnknownErr("boom"))
-	if exit := RunSync([]string{"--project", "test", "PROJ-42"}); exit != 1 || !strings.Contains(stderr.String(), "status transition") {
+	if exit := RunSync([]string{"--project", "test", "--apply", "PROJ-42"}); exit != 1 || !strings.Contains(stderr.String(), "status transition") {
 		t.Errorf("do error: exit=%d stderr=%q", exit, stderr.String())
 	}
 }

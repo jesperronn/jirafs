@@ -267,7 +267,7 @@ local_dirs = ["` + localDir + `"]
 	})
 	stdout, stderr := withSyncTestIO(t)
 
-	exit := RunSync([]string{"--project", "test", "PROJ-42"})
+	exit := RunSync([]string{"--project", "test", "--apply", "PROJ-42"})
 	if exit != 0 {
 		t.Fatalf("RunSync([\"PROJ-42\"]) = %d, stderr = %q", exit, stderr.String())
 	}
@@ -467,7 +467,7 @@ local_dirs = ["` + localDir + `"]
 	})
 	_, stderr := withSyncTestIO(t)
 
-	exit := RunSync([]string{"--project", "test", "PROJ-42"})
+	exit := RunSync([]string{"--project", "test", "--apply", "PROJ-42"})
 	if exit != 1 {
 		t.Fatalf("RunSync([\"PROJ-42\"]) = %d, want 1", exit)
 	}
@@ -539,7 +539,7 @@ local_dirs = ["` + localDir + `"]
 	})
 	stdout, stderr := withSyncTestIO(t)
 
-	exit := RunSync([]string{"--project", "test", "--apply", "PROJ-42"})
+	exit := RunSync([]string{"--project", "test", "--apply", "--write-local", "PROJ-42"})
 	if exit != 0 {
 		t.Fatalf("RunSync([\"--project\", \"test\", \"--apply\", \"PROJ-42\"]) = %d, stderr = %q", exit, stderr.String())
 	}
@@ -746,7 +746,7 @@ func TestRunSyncIssue_CancelledContext(t *testing.T) {
 
 	ctx, cancel := stdcontext.WithCancel(stdcontext.Background())
 	cancel()
-	exit := runSyncIssue(ctx, []string{"PROJ-42"}, settings, context.NewResolver(settings, "test"), true, false)
+	exit := runSyncIssue(ctx, []string{"PROJ-42"}, settings, context.NewResolver(settings, "test"), syncOptions{apply: true, writeLocal: true})
 	if exit != 1 {
 		t.Fatalf("runSyncIssue with cancelled context = %d, want 1; stderr = %q", exit, stderr.String())
 	}

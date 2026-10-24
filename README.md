@@ -16,7 +16,7 @@ The current CLI is usable as a narrow operator workflow:
 4. Export or inspect one issue locally with `jirafs export issue`.
 5. Edit the mirrored Markdown file.
 6. Review the planned write-back with `jirafs plan`.
-7. Apply the write path with `jirafs sync`.
+7. Apply the write path with `jirafs sync KEY --apply` (plain `jirafs sync KEY` is a dry run).
 
 Example:
 
@@ -36,8 +36,18 @@ jirafs mirror refresh my-issues
 jirafs export issue PLAT-123            # writes <local_dir>/PLAT-123.md
 jirafs export issue PLAT-123 --stdout > /tmp/PLAT-123.md
 jirafs plan PLAT-123
-jirafs sync PLAT-123
+jirafs sync PLAT-123                    # dry run: prints the plan, writes nothing
+jirafs sync PLAT-123 --apply            # writes to Jira
+jirafs sync PLAT-123 --apply --write-local   # ...and refreshes the local file
 ```
+
+Behaviour change: `jirafs sync KEY` no longer writes to Jira. Every command
+that writes to Jira (`sync`, `push`) is a dry run unless you pass `--apply`;
+scripts that relied on `jirafs sync KEY` writing must add `--apply`. The old
+meaning of `sync --apply` (write the refreshed remote to the local file) is now
+`--write-local`, which only has an effect together with `--apply`. `--apply`
+with `--dry-run` is rejected (exit 2). Each dry run ends with the exact command
+to run it for real.
 
 ## Mirror scopes
 

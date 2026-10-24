@@ -150,7 +150,7 @@ func RunPush(args []string) int {
 	if !*applyFlag {
 		fmt.Fprintf(pushStdout, "jirafs push: would create %s in project %s: %s\n", jira.IssueTypeName(string(issue.Identity.Type)), issue.Identity.Project.Value, issue.Summary)
 		fmt.Fprintf(pushStdout, "  POST %s/rest/api/2/issue\n  %s\n", baseURL, payload)
-		fmt.Fprintf(pushStdout, "dry run: nothing was created; to create it run: %s\n", pushApplyHint(path, *projectFlag, *cwdFlag))
+		dryRunDone(pushStdout, pushApplyHint(path, *projectFlag, *cwdFlag))
 		return 0
 	}
 

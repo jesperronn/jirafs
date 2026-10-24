@@ -296,7 +296,7 @@ func TestPushDryRunFlag(t *testing.T) {
 	if client.writes != 0 {
 		t.Fatalf("remote writes = %d", client.writes)
 	}
-	if !strings.Contains(out.String(), "dry run: nothing was created; to create it run: jirafs push "+p+" --apply") {
+	if !strings.Contains(out.String(), "dry run: nothing was written; to run it for real: jirafs push "+p+" --apply") {
 		t.Fatalf("stdout = %q", out.String())
 	}
 
@@ -391,5 +391,103 @@ func TestArchiveIssueDryRunReportsIneligible(t *testing.T) {
 	}
 	if strings.Contains(stdout.String(), "would archive") {
 		t.Errorf("must not claim it would archive:\n%s", stdout)
+	}
+}
+
+// setupSyncWriteCount prepares a changed local issue and a write-counting
+// fake client; it returns the client, the temp root and the local file path.
+func setupSyncWriteCount(t *testing.T) (*writeCountingClient, string, string) {
+	t.Helper()
+	tmpDir := t.TempDir()
+	t.Setenv("HOME", writeSettings(t, tmpDir))
+	localDir := filepath.Join(tmpDir, "local")
+	if err := os.MkdirAll(localDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	localPath := filepath.Join(localDir, "PROJ-42.md")
+	local := "---\nkey: PROJ-42\ntype: story\nproject:\n  type: project\n  value: PROJ\n---\n\nSummary: Local modified summary\n"
+	if err := os.WriteFile(localPath, []byte(local), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	fake := jira.NewFakeTransport()
+	fake.SetIssue("PROJ-42", &schema.Issue{
+		Identity: schema.IssueIdentity{Key: "PROJ-42", Type: "story", Project: schema.TypedRef{Type: schema.RefProject, Value: "PROJ"}},
+		Summary:  "Remote original summary",
+	})
+	client := &writeCountingClient{Client: fake}
+	withSyncClientFactory(t, func(*config.Settings, *context.Context, string) (jira.Client, error) { return client, nil })
+	return client, tmpDir, localPath
+}
+
+func TestSyncWithoutApplyIsDryRun(t *testing.T) {
+	client, tmpDir, _ := setupSyncWriteCount(t)
+	stdout, stderr := withSyncTestIO(t)
+	before := snapshotTree(t, tmpDir)
+
+	if exit := RunSync([]string{"PROJ-42", "--project", "test"}); exit != 0 {
+		t.Fatalf("exit = %d, stderr = %q", exit, stderr.String())
+	}
+	if client.writes != 0 {
+		t.Fatalf("remote writes = %d, want 0", client.writes)
+	}
+	assertTreeUnchanged(t, tmpDir, before)
+	want := "to run it for real: jirafs sync PROJ-42 --apply --project test"
+	if !strings.Contains(stdout.String(), want) {
+		t.Fatalf("stdout missing %q:\n%s", want, stdout.String())
+	}
+	if strings.Contains(stdout.String(), "applied") {
+		t.Fatalf("stdout claims applied:\n%s", stdout.String())
+	}
+}
+
+func TestSyncApplyWithDryRunIsUsageError(t *testing.T) {
+	client, tmpDir, _ := setupSyncWriteCount(t)
+	_, stderr := withSyncTestIO(t)
+	before := snapshotTree(t, tmpDir)
+
+	if exit := RunSync([]string{"--project", "test", "--apply", "--dry-run", "PROJ-42"}); exit != 2 {
+		t.Fatalf("exit = %d, want 2", exit)
+	}
+	if !strings.Contains(stderr.String(), "jirafs sync: --dry-run and --apply cannot be used together") {
+		t.Fatalf("stderr = %q", stderr.String())
+	}
+	if client.writes != 0 {
+		t.Fatalf("remote writes = %d", client.writes)
+	}
+	assertTreeUnchanged(t, tmpDir, before)
+}
+
+func TestSyncWriteLocalHasNoEffectInDryRun(t *testing.T) {
+	client, tmpDir, _ := setupSyncWriteCount(t)
+	stdout, stderr := withSyncTestIO(t)
+	before := snapshotTree(t, tmpDir)
+
+	if exit := RunSync([]string{"--project", "test", "--write-local", "PROJ-42"}); exit != 0 {
+		t.Fatalf("exit = %d, stderr = %q", exit, stderr.String())
+	}
+	if client.writes != 0 {
+		t.Fatalf("remote writes = %d, want 0", client.writes)
+	}
+	assertTreeUnchanged(t, tmpDir, before)
+	want := "jirafs sync PROJ-42 --apply --write-local --project test"
+	if !strings.Contains(stdout.String(), want) {
+		t.Fatalf("stdout missing %q:\n%s", want, stdout.String())
+	}
+}
+
+func TestSyncApplyWithoutWriteLocalLeavesLocalFile(t *testing.T) {
+	client, _, localPath := setupSyncWriteCount(t)
+	_, stderr := withSyncTestIO(t)
+	before, _ := os.ReadFile(localPath)
+
+	if exit := RunSync([]string{"--project", "test", "--apply", "PROJ-42"}); exit != 0 {
+		t.Fatalf("exit = %d, stderr = %q", exit, stderr.String())
+	}
+	if client.writes == 0 {
+		t.Fatal("--apply performed no Jira writes")
+	}
+	after, _ := os.ReadFile(localPath)
+	if string(before) != string(after) {
+		t.Fatalf("local file changed without --write-local:\n%s", after)
 	}
 }
