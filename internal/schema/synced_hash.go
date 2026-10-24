@@ -152,3 +152,40 @@ func AppendFrontmatter(doc, block string) string {
 	}
 	return "---\n" + strings.Join(front, "") + block + "---\n" + body
 }
+
+// FrontmatterText returns the YAML between the "---" delimiters of doc, and
+// false when doc has no well-formed frontmatter.
+func FrontmatterText(doc string) (string, bool) {
+	front, _, ok := splitDocument(doc)
+	if !ok {
+		return "", false
+	}
+	return strings.Join(front, ""), true
+}
+
+// RemoveFrontmatterKey returns doc without the top-level frontmatter key and
+// its nested lines (indented lines and list items). Documents without
+// frontmatter, or without the key, are returned unchanged.
+func RemoveFrontmatterKey(doc, key string) string {
+	front, body, ok := splitDocument(doc)
+	if !ok {
+		return doc
+	}
+	var sb strings.Builder
+	sb.WriteString("---\n")
+	skipping := false
+	for _, l := range front {
+		switch {
+		case strings.HasPrefix(l, key+":"):
+			skipping = true
+			continue
+		case skipping && (strings.HasPrefix(l, " ") || strings.HasPrefix(l, "\t") || strings.HasPrefix(l, "- ")):
+			continue
+		}
+		skipping = false
+		sb.WriteString(l)
+	}
+	sb.WriteString("---\n")
+	sb.WriteString(body)
+	return sb.String()
+}

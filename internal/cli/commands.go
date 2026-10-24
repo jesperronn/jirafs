@@ -111,6 +111,33 @@ var commandDocs = []CommandDoc{
 		},
 	},
 	{
+		Name:    "resolve",
+		Summary: "resolve a conflict that pull recorded in an issue file",
+		Usage: Usage{
+			Synopsis: []string{"resolve KEY --keep local|remote [--field NAME] [flags]"},
+			Description: []string{
+				"Resolves the conflicts that pull recorded under conflicts: in an issue",
+				"file. --keep local keeps the local value and drops the recorded remote",
+				"value. --keep remote first saves the local file to .jirafs/backup/, then",
+				"takes the recorded remote value. --field NAME (comma-separated) limits",
+				"it to some fields; the rest stay conflicted. Removing the last conflict",
+				"clears the conflicts: key, and push accepts the file again.",
+				"Dry run by default; --apply writes. In a git-backed mirror resolve does",
+				"not commit: the file stays a local edit until push --apply commits it.",
+				"Deleting the conflicts: block by hand is also accepted, but does not",
+				"update the base snapshot the way resolve does.",
+			},
+			Sections: []UsageSection{flags(
+				flagProject, flagCwd,
+				[2]string{"--keep local|remote", "which value to keep (required)"},
+				[2]string{"--field NAME", "resolve only these conflicted fields (comma-separated)"},
+				[2]string{"--apply", "write the resolution (default is a dry run)"},
+				[2]string{"--dry-run", "show what would be written (the default)"},
+			)},
+			Footer: footerFor("resolve"),
+		},
+	},
+	{
 		Name:    "status",
 		Summary: "show workspace status and next-step hints",
 		Usage: Usage{

@@ -14,6 +14,7 @@ It must be usable without Codex or another agent layer.
 | `jirafs init` | configure a Jira instance and project, and create its mirror directory |
 | `jirafs pull` | fetch Jira issues into local Markdown files (one issue or a scope) |
 | `jirafs diff` | show what push would change in Jira (read-only) |
+| `jirafs resolve` | resolve a conflict that pull recorded in an issue file |
 | `jirafs status` | show workspace status and next-step hints |
 | `jirafs doctor` | run health checks on config, credentials, and live connectivity |
 | `jirafs new` | create a new issue from a template |
@@ -94,6 +95,26 @@ Flags:
 - `--project NAME`: name of a configured project
 - `--cwd DIR`: working directory for project resolution
 - `--exit-code`: exit 1 when any issue differs (default exit 0)
+- `--help, -h`: show this help message
+
+### `jirafs resolve`
+
+resolve a conflict that pull recorded in an issue file
+
+```text
+jirafs resolve KEY --keep local|remote [--field NAME] [flags]
+```
+
+Resolves the conflicts that pull recorded under conflicts: in an issue file. --keep local keeps the local value and drops the recorded remote value. --keep remote first saves the local file to .jirafs/backup/, then takes the recorded remote value. --field NAME (comma-separated) limits it to some fields; the rest stay conflicted. Removing the last conflict clears the conflicts: key, and push accepts the file again. Dry run by default; --apply writes. In a git-backed mirror resolve does not commit: the file stays a local edit until push --apply commits it. Deleting the conflicts: block by hand is also accepted, but does not update the base snapshot the way resolve does.
+
+Flags:
+
+- `--project NAME`: name of a configured project (default: resolved from --cwd or the remembered project)
+- `--cwd DIR`: working directory to resolve the project from (default: current directory)
+- `--keep local|remote`: which value to keep (required)
+- `--field NAME`: resolve only these conflicted fields (comma-separated)
+- `--apply`: write the resolution (default is a dry run)
+- `--dry-run`: show what would be written (the default)
 - `--help, -h`: show this help message
 
 ### `jirafs status`

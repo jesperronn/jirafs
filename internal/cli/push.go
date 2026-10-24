@@ -57,6 +57,9 @@ type pushResult struct {
 	// nothing was written to Jira) and files the paths that write changed.
 	summary string
 	files   []string
+	// recorded is true when the target was refused because its file records
+	// unresolved `conflicts:` (as opposed to a remote that moved on).
+	recorded bool
 }
 
 // pushRun carries the state shared by all targets of one invocation.
@@ -151,7 +154,11 @@ func RunPush(args []string) int {
 		}
 		for _, c := range changes {
 			if c.State == ChangeConflicted {
-				results = append(results, conflictResult(c.Key))
+				if len(c.Fields) > 0 {
+					results = append(results, recordedConflictResult(c.Key, c.Fields))
+				} else {
+					results = append(results, conflictResult(c.Key))
+				}
 				continue
 			}
 			label := c.Key
@@ -167,6 +174,13 @@ func RunPush(args []string) int {
 	}
 
 	failed := printPushSummary(results)
+	if run.opts.apply && len(targets) > 0 {
+		for _, r := range results {
+			if r.recorded {
+				failed++
+			}
+		}
+	}
 	gitState.commitPush(results, hostOf(settings.Instances[ctx.Instance].BaseURL), pushNow(), pushStdout, pushStderr)
 	if !run.opts.apply {
 		dryRunDone(pushStdout, run.realCommand(targets, *cwdFlag))
@@ -180,6 +194,15 @@ func RunPush(args []string) int {
 // conflictResult is the result of a file whose remote copy moved on.
 func conflictResult(key string) pushResult {
 	return pushResult{name: key, status: pushSkipped, reason: "remote changed since the last pull; review it: jirafs diff " + key}
+}
+
+// recordedConflictResult is the result of a file that records unresolved
+// conflicts in its frontmatter; push never sends such a file.
+func recordedConflictResult(key string, fields []string) pushResult {
+	return pushResult{
+		name: key, status: pushSkipped, recorded: true,
+		reason: fmt.Sprintf("unresolved conflict on %s; run: jirafs resolve %s --keep local|remote (review: jirafs diff %s)", strings.Join(fields, ", "), key, key),
+	}
 }
 
 // printPushSummary prints one line per target and a closing count, and
@@ -298,6 +321,9 @@ func (r *pushRun) pushTarget(arg, label string) pushResult {
 		return pushFail(name, fmt.Sprintf("%s has no issue key and is not a draft, so there is nothing to push", path))
 	}
 	key := string(issue.Identity.Key)
+	if fields := conflictFieldNames(docConflicts(doc)); len(fields) > 0 {
+		return recordedConflictResult(key, fields)
+	}
 	if synced := schema.SyncedHash(doc); (synced == "" || synced != schema.ContentHash(doc)) &&
 		remoteAhead(r.mirror.RemoteUpdatedFor(issue.Identity.Key), issue.Context.Updated) {
 		return conflictResult(key)

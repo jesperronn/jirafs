@@ -87,6 +87,8 @@ type LocalChange struct {
 	Key     string
 	Path    string
 	Command string
+	// Fields lists the fields recorded under `conflicts:` in the file.
+	Fields []string
 }
 
 // IsZero reports whether s is the zero value.
@@ -183,9 +185,12 @@ func collectLocalChanges(dirs []string, m mirror.Mirror) []LocalChange {
 			if key == "" {
 				key = strings.TrimSuffix(e.Name(), ".md")
 			}
+			recorded := conflictFieldNames(docConflicts(doc))
 			switch {
+			case len(recorded) > 0 && issue.RemoteMetadata.State() != schema.StateDraft && issue.RemoteMetadata.State() != schema.StateArchived:
+				changes = append(changes, LocalChange{ChangeConflicted, key, path, "jirafs resolve " + key + " --keep local|remote [--field NAME]", recorded})
 			case issue.RemoteMetadata.State() == schema.StateDraft:
-				changes = append(changes, LocalChange{ChangeDraft, key, path, "jirafs push " + path})
+				changes = append(changes, LocalChange{State: ChangeDraft, Key: key, Path: path, Command: "jirafs push " + path})
 			case issue.RemoteMetadata.State() == schema.StateArchived:
 			default:
 				synced := schema.SyncedHash(doc)
@@ -200,7 +205,7 @@ func collectLocalChanges(dirs []string, m mirror.Mirror) []LocalChange {
 				if state == ChangeConflicted {
 					cmd = "jirafs diff " + key
 				}
-				changes = append(changes, LocalChange{state, key, path, cmd})
+				changes = append(changes, LocalChange{State: state, Key: key, Path: path, Command: cmd})
 			}
 		}
 	}
@@ -427,7 +432,11 @@ func RunStatus(args []string) int {
 		}
 		fmt.Fprintf(statusStdout, "  %s:\n", st)
 		for _, c := range group {
-			fmt.Fprintf(statusStdout, "    %s  %s\n      run: %s\n", c.Key, c.Path, c.Command)
+			fmt.Fprintf(statusStdout, "    %s  %s\n", c.Key, c.Path)
+			if len(c.Fields) > 0 {
+				fmt.Fprintf(statusStdout, "      fields: %s\n      review: jirafs diff %s\n", strings.Join(c.Fields, ", "), c.Key)
+			}
+			fmt.Fprintf(statusStdout, "      run: %s\n", c.Command)
 		}
 	}
 	fmt.Fprintln(statusStdout)

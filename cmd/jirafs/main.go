@@ -51,6 +51,8 @@ func run(args []string, stdout, stderr io.Writer) int {
 		return cli.RunPull(rest)
 	case "diff":
 		return cli.RunDiff(rest)
+	case "resolve":
+		return cli.RunResolve(rest)
 	case "status":
 		return cli.RunStatus(rest)
 	case "doctor":

@@ -58,8 +58,11 @@ TEST-2  ok  applied 2 operation(s)
 TEST-1  ok  created from jira/add-dark-mode.md
 ```
 
-A conflicted file (remote changed since its last pull) is skipped and
-reported, never overwritten. The exit code is 1 when any issue failed.
+A conflicted file (remote changed since its last pull, or a `conflicts:` block
+recorded by `pull`) is skipped and reported, never overwritten. A file with a
+recorded `conflicts:` block is refused whatever its timestamps say; when it is
+named explicitly with `--apply` the exit code is 1. The exit code is also 1
+when any issue failed.
 
 ## Mirror scopes
 
@@ -136,6 +139,34 @@ base snapshot every differing field is conflicted. The merged file still counts
 as locally modified. Before any merge or conflict the local file is saved to
 `.jirafs/backup/KEY-<timestamp>.md`, so no local edit is lost. If the remote has
 not changed since the last pull, the edited file is left as it is.
+
+### Resolving conflicts
+
+`jirafs status` lists every file with a `conflicts:` block as `conflicted`,
+with its fields, `jirafs diff KEY` to review it and the resolve command;
+`jirafs status --porcelain` prints `conflicted` lines. `push` refuses such
+files until they are resolved:
+
+```text
+jirafs resolve PLAT-2 --keep local            # keep my values, drop the remote ones
+jirafs resolve PLAT-2 --keep remote           # take the remote values (local saved first)
+jirafs resolve PLAT-2 --keep remote --field summary   # only one field (comma-separated)
+```
+
+`--keep local` keeps the local value and advances the base snapshot for the
+field to the remote value, so the next `push` sends the local value on
+purpose. `--keep remote` first saves the local file to `.jirafs/backup/`,
+then takes the recorded remote value. Resolved entries are removed from
+`conflicts:`; the other fields stay conflicted, and removing the last entry
+clears the key. Like every write command it is a dry run until `--apply`. In a
+git-backed mirror `resolve` does not commit: it edits a local file you are still
+working on, exactly like editing it by hand, and `push --apply` commits it once
+it reached Jira.
+
+Editing the file by hand and deleting the `conflicts:` block is also accepted;
+`status` and `push` then treat it as a normal modified file. Prefer `resolve`:
+it also advances the base snapshot, which a hand edit does not, so after a hand
+edit `push` may still report the same fields as changed on both sides.
 
 ## Current Status
 
@@ -220,6 +251,7 @@ command registry; edit `internal/cli/commands.go` and run `bin/gendocs`.
 | `jirafs init` | configure a Jira instance and project, and create its mirror directory |
 | `jirafs pull` | fetch Jira issues into local Markdown files (one issue or a scope) |
 | `jirafs diff` | show what push would change in Jira (read-only) |
+| `jirafs resolve` | resolve a conflict that pull recorded in an issue file |
 | `jirafs status` | show workspace status and next-step hints |
 | `jirafs doctor` | run health checks on config, credentials, and live connectivity |
 | `jirafs new` | create a new issue from a template |
