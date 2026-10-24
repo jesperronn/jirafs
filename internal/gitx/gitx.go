@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"os/exec"
+	"path/filepath"
 	"strings"
 )
 
@@ -118,4 +119,66 @@ func Commit(dir string, paths []string, msg string) error {
 		return err
 	}
 	return nil
+}
+
+// SyncSubjectPattern matches the subjects of the commits jirafs makes after a
+// pull (`sync from <host> ...`) or a push (`push to <host> ...`).
+const SyncSubjectPattern = `^\(sync from\|push to\) `
+
+// LastSyncCommit returns the full hash of the newest commit on the current
+// branch whose subject starts with `sync from ` or `push to `, or "" when
+// there is none (including a repository without commits). Reading is safe on
+// a detached HEAD and in a shallow clone.
+func LastSyncCommit(dir string) (string, error) {
+	if _, err := Run(dir, "rev-parse", "--verify", "-q", "HEAD"); err != nil {
+		return "", nil // unborn branch: no commits yet
+	}
+	out, err := Run(dir, "log", "--grep", SyncSubjectPattern, "-n", "1", "--format=%H")
+	if err != nil {
+		return "", err
+	}
+	return strings.TrimSpace(out), nil
+}
+
+// ShowFile returns the content of the file at path (absolute, or relative to
+// dir) as of commit. ok is false when the commit or the file does not exist
+// there, for instance after history was rewritten or for a file added later.
+func ShowFile(dir, commit, path string) (content string, ok bool) {
+	if !filepath.IsAbs(path) {
+		path = filepath.Join(dir, path)
+	}
+	fileDir := filepath.Dir(path)
+	out, err := Run(fileDir, "show", commit+":./"+filepath.Base(path))
+	if err != nil {
+		return "", false
+	}
+	return out, true
+}
+
+// CommitsSince returns the commits reachable from HEAD but not from commit that touch pathspec (the
+// whole tree when empty), newest first.
+func CommitsSince(dir, commit, pathspec string) ([]LogEntry, error) {
+	args := []string{"log", "--format=%H%x00%s", commit + "..HEAD"}
+	if pathspec != "" {
+		args = append(args, "--", pathspec)
+	}
+	out, err := Run(dir, args...)
+	if err != nil {
+		return nil, err
+	}
+	var commits []LogEntry
+	for _, line := range strings.Split(out, "\n") {
+		if line == "" {
+			continue
+		}
+		hash, subject, _ := strings.Cut(line, "\x00")
+		commits = append(commits, LogEntry{Hash: hash, Subject: subject})
+	}
+	return commits, nil
+}
+
+// LogEntry identifies one commit in a log.
+type LogEntry struct {
+	Hash    string
+	Subject string
 }

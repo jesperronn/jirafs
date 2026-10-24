@@ -446,7 +446,7 @@ func (r *pushRun) updateIssue(key string, localIssue schema.Issue, localPath str
 		fmt.Fprintf(pushStderr, "jirafs push: warning: remote status of %s is unknown; not changing status\n", key)
 	}
 
-	base, haveBase := mirror.LoadBase(r.ctx.MirrorDir, schema.IssueKey(key))
+	base, haveBase := loadMergeBase(r.ctx.MirrorDir, schema.IssueKey(key), localPath)
 	if !haveBase {
 		base = nil
 	}

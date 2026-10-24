@@ -61,6 +61,9 @@ type StatusSnapshot struct {
 	// Changes lists local issue files with unsynced edits, sorted by group
 	// (conflicted, modified, draft) and then key.
 	Changes []LocalChange
+
+	// Git is the git-mode summary; nil when git mode is off.
+	Git *GitStatus
 }
 
 // ChangeState is the group a locally changed file belongs to.
@@ -142,6 +145,8 @@ func BuildStatusSnapshotFor(settings *config.Settings, cwd, project string) Stat
 		}
 		snap.Changes = collectLocalChanges(proj.LocalDirs, m)
 	}
+
+	snap.Git = buildGitStatus(snap.MirrorDir)
 
 	// Determine missing onboarding steps.
 	snap.MissingSteps = missingOnboardingSteps(settings, snap)
@@ -369,6 +374,7 @@ func RunStatus(args []string) int {
 		for _, c := range snap.Changes {
 			fmt.Fprintf(statusStdout, "%s\t%s\t%s\n", c.State, c.Key, c.Path)
 		}
+		snap.Git.printPorcelain(statusStdout)
 		return 0
 	}
 
@@ -425,6 +431,8 @@ func RunStatus(args []string) int {
 		}
 	}
 	fmt.Fprintln(statusStdout)
+
+	snap.Git.print(statusStdout)
 
 	// Onboarding / next-step hint.
 	fmt.Fprintln(statusStdout, "Onboarding:")

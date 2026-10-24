@@ -104,13 +104,13 @@ show workspace status and next-step hints
 jirafs status [flags]
 ```
 
-Reports the current state of a jirafs workspace: config, mirror files, scopes, local changes (modified, draft, conflicted; offline), and a next-step hint for onboarding.
+Reports the current state of a jirafs workspace: config, mirror files, scopes, local changes (modified, draft, conflicted; offline), and a next-step hint for onboarding. With `git: true` it also reports local commits since the last sync/push commit and files with uncommitted edits.
 
 Flags:
 
 - `--project NAME`: name of a configured project (default: resolved from --cwd or the remembered project)
 - `--cwd DIR`: working directory to resolve the project from (default: current directory)
-- `--porcelain`: print STATE<TAB>KEY<TAB>PATH lines only, for scripts
+- `--porcelain`: print STATE<TAB>KEY<TAB>PATH lines only (plus unpushed-commit<TAB>SHA<TAB>SUBJECT in git mode), for scripts
 - `--help, -h`: show this help message
 
 ### `jirafs doctor`

@@ -499,3 +499,24 @@ edits were just pushed); files you did not push stay untouched. Dry runs, no
 remote success, a detached HEAD, a rebase or merge in progress, or a locked
 index make no commit. A failing commit never fails the push: jirafs prints
 `push ok, git commit failed: ...` followed by `git -C <dir> status`.
+
+### Git mode: merge base and `status`
+
+With `git: true`, the merge base of an issue file (used by `pull`'s three-way
+merge and by `push`'s conflict check) is the file as of the newest commit whose
+subject starts with `sync from ` or `push to ` (`gitx.LastSyncCommit`), because
+that commit is the last known remote state. The same code path falls back to
+the stored `.jirafs/base/KEY.md`, and to "no base", when the base cannot be read
+from git:
+
+- Commits you made after the sync/push commit never move the base; they count as
+  local edits.
+- Rewritten history, a missing commit, a file added after the sync commit, or
+  unparseable content: the stored base is used.
+- Shallow clones and a detached HEAD are fine; only reading is done.
+
+`jirafs status` (offline) adds a `Git:` section with `N local commits not
+pushed` (commits after the last sync/push commit touching the mirror) and `N
+files with uncommitted edits`, plus `git -C <dir> log --oneline <sha>..HEAD` and
+`jirafs push`. With `--porcelain`, unpushed commits appear as
+`unpushed-commit<TAB>SHA<TAB>SUBJECT` rows after the `STATE<TAB>KEY<TAB>PATH` rows.

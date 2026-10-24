@@ -118,11 +118,12 @@ var commandDocs = []CommandDoc{
 			Description: []string{
 				"Reports the current state of a jirafs workspace: config, mirror files,",
 				"scopes, local changes (modified, draft, conflicted; offline), and a",
-				"next-step hint for onboarding.",
+				"next-step hint for onboarding. With `git: true` it also reports local",
+				"commits since the last sync/push commit and files with uncommitted edits.",
 			},
 			Sections: []UsageSection{flags(
 				flagProject, flagCwd,
-				[2]string{"--porcelain", "print STATE<TAB>KEY<TAB>PATH lines only, for scripts"},
+				[2]string{"--porcelain", "print STATE<TAB>KEY<TAB>PATH lines only (plus unpushed-commit<TAB>SHA<TAB>SUBJECT in git mode), for scripts"},
 			)},
 		},
 	},

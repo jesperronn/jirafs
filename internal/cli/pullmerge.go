@@ -79,7 +79,7 @@ func mergeEditedFile(dest, mirrorDir string, remote *schema.Issue, now time.Time
 		return mergeReport{Kind: mergeConflicted, Fields: []string{"file"}, Backup: backup}, nil
 	}
 
-	base, haveBase := mirror.LoadBase(mirrorDir, remote.Identity.Key)
+	base, haveBase := loadMergeBase(mirrorDir, remote.Identity.Key, dest)
 	if !haveBase {
 		base = nil
 	}
