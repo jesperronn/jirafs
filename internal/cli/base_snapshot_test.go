@@ -67,7 +67,7 @@ func TestPullWritesBaseSnapshot(t *testing.T) {
 func TestPushUpdatesBaseAndFailedPushKeepsOld(t *testing.T) {
 	setupLocalPush(t)
 	mirrorDir := mirrorDirFromHome(t)
-	if err := mirror.SaveBase(mirrorDir, base42("Old base")); err != nil {
+	if err := mirror.SaveBase(mirrorDir, base42("Remote original summary")); err != nil {
 		t.Fatal(err)
 	}
 	fake := jira.NewFakeTransport()
@@ -80,7 +80,7 @@ func TestPushUpdatesBaseAndFailedPushKeepsOld(t *testing.T) {
 		t.Fatalf("failed push exit = %d, want 1", exit)
 	}
 	got, ok := mirror.LoadBase(mirrorDir, "PROJ-42")
-	if !ok || got.Summary != "Old base" {
+	if !ok || got.Summary != "Remote original summary" {
 		t.Fatalf("failed push changed base: %+v, %v", got, ok)
 	}
 
@@ -89,7 +89,7 @@ func TestPushUpdatesBaseAndFailedPushKeepsOld(t *testing.T) {
 		t.Fatalf("push exit = %d, want 0", exit)
 	}
 	got, ok = mirror.LoadBase(mirrorDir, "PROJ-42")
-	if !ok || got.Summary == "Old base" {
+	if !ok || got.Summary == "Remote original summary" {
 		t.Fatalf("successful push did not update base: %+v, %v", got, ok)
 	}
 }

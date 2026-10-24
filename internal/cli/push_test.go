@@ -21,7 +21,10 @@ func withPushTestIO(t *testing.T, fake *jira.FakeTransport) (*bytes.Buffer, *byt
 	oo, oe, of, on := pushStdout, pushStderr, pushClientFactory, pushNow
 	out, errBuf := &bytes.Buffer{}, &bytes.Buffer{}
 	pushStdout, pushStderr = out, errBuf
-	pushClientFactory = func(*config.Settings, *context.Context, string) (jira.Client, error) { return fake, nil }
+	pushClientFactory = func(_ *config.Settings, c *context.Context, _ string) (jira.Client, error) {
+		seedBases(c, fake)
+		return fake, nil
+	}
 	pushNow = func() time.Time { return time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC) }
 	t.Cleanup(func() { pushStdout, pushStderr, pushClientFactory, pushNow = oo, oe, of, on })
 	return out, errBuf

@@ -4,7 +4,6 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/jirafs/jirafs/internal/codec"
 	"github.com/jirafs/jirafs/internal/schema"
 )
 
@@ -58,7 +57,8 @@ func SaveBase(mirrorDir string, issue *schema.Issue) error {
 }
 
 // LoadBase returns the stored base snapshot of key. A missing or unparseable
-// base yields (nil, false); it is never an error.
+// base yields (nil, false); it is never an error. The snapshot is parsed the
+// way a local issue file is, so the two compare field by field.
 func LoadBase(mirrorDir string, key schema.IssueKey) (*schema.Issue, bool) {
 	if mirrorDir == "" {
 		return nil, false
@@ -67,9 +67,9 @@ func LoadBase(mirrorDir string, key schema.IssueKey) (*schema.Issue, bool) {
 	if err != nil {
 		return nil, false
 	}
-	issue, perr := codec.ParseIssue(string(data))
-	if perr != nil || issue == nil {
+	issue, perr := schema.ParseIssue(string(data))
+	if perr != nil {
 		return nil, false
 	}
-	return issue, true
+	return &issue, true
 }

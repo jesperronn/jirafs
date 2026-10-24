@@ -107,6 +107,7 @@ func TestSyncDryRunWritesNothing(t *testing.T) {
 	client := &writeCountingClient{Client: fake}
 	withPushClientFactory(t, func(*config.Settings, *context.Context, string) (jira.Client, error) { return client, nil })
 	stdout, stderr := withPushIO(t)
+	seedBases(&context.Context{MirrorDir: mirrorDirFromHome(t)}, fake)
 	before := snapshotTree(t, tmpDir)
 
 	if exit := RunPush([]string{"--project", "test", "--dry-run", "PROJ-42"}); exit != 0 {
@@ -416,6 +417,7 @@ func setupSyncWriteCount(t *testing.T) (*writeCountingClient, string, string) {
 	})
 	client := &writeCountingClient{Client: fake}
 	withPushClientFactory(t, func(*config.Settings, *context.Context, string) (jira.Client, error) { return client, nil })
+	seedBases(&context.Context{MirrorDir: mirrorDirFromHome(t)}, fake)
 	return client, tmpDir, localPath
 }
 

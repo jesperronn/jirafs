@@ -54,6 +54,17 @@ func (f *FakeTransport) SetIssue(key string, issue *schema.Issue) {
 	f.issues[key] = issue
 }
 
+// Issues returns every issue registered with SetIssue, in no fixed order.
+func (f *FakeTransport) Issues() []*schema.Issue {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	out := make([]*schema.Issue, 0, len(f.issues))
+	for _, is := range f.issues {
+		out = append(out, is)
+	}
+	return out
+}
+
 // SetIssuesByScope registers issues for a search scope.
 func (f *FakeTransport) SetIssuesByScope(scope string, issues []*schema.Issue) {
 	f.mu.Lock()

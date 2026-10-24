@@ -11,6 +11,7 @@ import (
 	"github.com/jirafs/jirafs/internal/config"
 	"github.com/jirafs/jirafs/internal/context"
 	"github.com/jirafs/jirafs/internal/jira"
+	"github.com/jirafs/jirafs/internal/mirror"
 	"github.com/jirafs/jirafs/internal/schema"
 )
 
@@ -49,7 +50,13 @@ func withPushIO(t *testing.T) (*bytes.Buffer, *bytes.Buffer) {
 func withPushClientFactory(t *testing.T, factory func(*config.Settings, *context.Context, string) (jira.Client, error)) {
 	t.Helper()
 	oldFactory := pushClientFactory
-	pushClientFactory = factory
+	pushClientFactory = func(s *config.Settings, c *context.Context, name string) (jira.Client, error) {
+		client, err := factory(s, c, name)
+		if fake, ok := client.(*jira.FakeTransport); ok && err == nil {
+			seedBases(c, fake)
+		}
+		return client, err
+	}
 	t.Cleanup(func() {
 		pushClientFactory = oldFactory
 	})
@@ -773,5 +780,24 @@ func TestPushTarget_CancelledContext(t *testing.T) {
 	}
 	if !strings.Contains(stderr.String(), "canceled") {
 		t.Fatalf("stderr = %q, want cancellation message", stderr.String())
+	}
+}
+
+// seedBases stores every issue of fake as the base snapshot in the mirror of
+// ctx, as an earlier pull would have, unless a base already exists. Tests that
+// hand-write local files rely on it so the remote counts as unchanged since
+// the last pull.
+func seedBases(ctx *context.Context, fake *jira.FakeTransport) {
+	if ctx == nil {
+		return
+	}
+	for _, is := range fake.Issues() {
+		if _, ok := mirror.LoadBase(ctx.MirrorDir, is.Identity.Key); !ok {
+			snap := *is
+			if snap.Context.Status == "" {
+				snap.Context.Status = snap.Status
+			}
+			_ = mirror.SaveBase(ctx.MirrorDir, &snap)
+		}
 	}
 }

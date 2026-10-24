@@ -437,7 +437,11 @@ func (r *pushRun) updateIssue(key string, localIssue schema.Issue, localPath str
 		fmt.Fprintf(pushStderr, "jirafs push: warning: remote status of %s is unknown; not changing status\n", key)
 	}
 
-	ops, _, err := plan.BuildPlan(localIssue, *remote)
+	base, haveBase := mirror.LoadBase(r.ctx.MirrorDir, schema.IssueKey(key))
+	if !haveBase {
+		base = nil
+	}
+	ops, _, err := plan.BuildPlanWithBase(base, localIssue, *remote)
 	if err != nil {
 		return pushFail(key, err.Error())
 	}
@@ -448,13 +452,22 @@ func (r *pushRun) updateIssue(key string, localIssue schema.Issue, localPath str
 
 	// Validate and apply the plan through the sync service. A temp directory
 	// stands in for the archive path to avoid validation errors.
-	result := sync.Sync(localIssue, *remote, ops, os.TempDir())
+	result := sync.Sync(base, localIssue, *remote, ops, os.TempDir())
 	if len(result.Conflicts) > 0 {
 		fmt.Fprintln(pushStdout, "jirafs push: conflicts detected, no changes applied:")
 		for _, c := range result.Conflicts {
-			fmt.Fprintf(pushStdout, "  %s: %s (local=%q, remote=%q)\n",
-				c.Type, c.Field, c.LocalValue, c.RemoteValue)
+			if haveBase {
+				fmt.Fprintf(pushStdout, "  conflict: %s changed locally and remotely (local=%q, remote=%q)\n",
+					c.Field, c.LocalValue, c.RemoteValue)
+			} else {
+				fmt.Fprintf(pushStdout, "  conflict: %s differs locally and remotely, and no base snapshot exists (local=%q, remote=%q)\n",
+					c.Field, c.LocalValue, c.RemoteValue)
+			}
 		}
+		if !haveBase {
+			fmt.Fprintf(pushStdout, "  no base snapshot; first run: jirafs pull %s\n", key)
+		}
+		fmt.Fprintf(pushStdout, "  review: jirafs diff %s\n", key)
 		return pushResult{key, pushSkipped, "local and remote changed the same fields; review it: jirafs diff " + key}
 	}
 

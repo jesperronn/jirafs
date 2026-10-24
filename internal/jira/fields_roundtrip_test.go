@@ -83,7 +83,7 @@ func TestFetchExportsCustomFieldsProjectAndNames(t *testing.T) {
 	local.Labels = nil
 	local.FixVersions = nil
 	ops, _, _ := plan.BuildPlan(local, *issue)
-	res := sync.Sync(local, *issue, ops, t.TempDir())
+	res := sync.Sync(issue, local, *issue, ops, t.TempDir())
 	if len(res.Conflicts) > 0 {
 		t.Fatal(res.Conflicts)
 	}

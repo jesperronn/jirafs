@@ -108,6 +108,78 @@ func BuildPlan(local, remote schema.Issue) ([]schema.PlanOperation, []schema.Con
 	return ops, conflicts, nil
 }
 
+// FieldValue returns the comparable string form of one editable field of
+// issue: lists are sorted and comma-joined, an unset assignee is empty, and
+// custom_fields is the JSON object of all custom fields. Fields without a
+// value in this model (parent, epic) yield "".
+func FieldValue(issue schema.Issue, field schema.EditableField) string {
+	switch field {
+	case schema.EditableFieldSummary:
+		return issue.Summary
+	case schema.EditableFieldDescription:
+		return issue.Description
+	case schema.EditableFieldLabels:
+		return labelsToString(issue.Labels)
+	case schema.EditableFieldAssignee:
+		return assigneeString(issue.Assignee)
+	case schema.EditableFieldStatus:
+		if issue.Status != "" {
+			return issue.Status
+		}
+		return issue.Context.Status
+	case schema.EditableFieldSprint:
+		return issue.Sprint
+	case schema.EditableFieldFixVersions:
+		return fixVersionsToString(issue.FixVersions)
+	case schema.EditableFieldPriority:
+		return issue.Context.Priority
+	case schema.EditableFieldCustomFields:
+		b, err := json.Marshal(issue.CustomFields)
+		if err != nil {
+			return ""
+		}
+		return string(b)
+	}
+	return ""
+}
+
+// BuildPlanWithBase is BuildPlan limited to what the local side changed: a
+// field whose local value equals base is left out, so a change made only on
+// the remote is never overwritten. A nil base builds the plain BuildPlan.
+func BuildPlanWithBase(base *schema.Issue, local, remote schema.Issue) ([]schema.PlanOperation, []schema.Conflict, error) {
+	ops, conflicts, err := BuildPlan(local, remote)
+	if err != nil || base == nil {
+		return ops, conflicts, err
+	}
+	kept := ops[:0]
+	for _, op := range ops {
+		if op.Field == schema.EditableFieldCustomFields {
+			changed := ChangedCustomFields(ChangedCustomFields(local.CustomFields, base.CustomFields), remote.CustomFields)
+			if len(changed) == 0 {
+				continue
+			}
+			b, merr := json.Marshal(changed)
+			if merr != nil {
+				return nil, nil, merr
+			}
+			op.Value = string(b)
+		} else if SameFieldValue(op.Field, FieldValue(local, op.Field), FieldValue(*base, op.Field)) {
+			continue
+		}
+		kept = append(kept, op)
+	}
+	return kept, conflicts, nil
+}
+
+// SameFieldValue reports whether two FieldValue strings of field are equal;
+// status compares case-insensitively like BuildPlan does.
+func SameFieldValue(field schema.EditableField, a, b string) bool {
+	if field == schema.EditableFieldStatus {
+		return strings.EqualFold(a, b)
+	}
+	return a == b
+}
+
 // ChangedCustomFields returns the entries of local whose JSON form differs
 // from the same key in remote. Nil when nothing changed.
 func ChangedCustomFields(local, remote map[string]interface{}) map[string]interface{} {

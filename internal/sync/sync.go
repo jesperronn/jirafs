@@ -24,12 +24,15 @@ type ApplyResult struct {
 // For a no-op plan (zero operations), Sync returns the remote unchanged
 // without mutation.
 //
+// base is the last synced snapshot of the issue (nil when there is none): a
+// field is a conflict only when local and remote both changed it from base.
+//
 // Before any mutation, Sync validates the archive path and checks that all
 // references in the issue are resolved. If either check fails, Sync returns
 // conflicts and does not apply the plan.
-func Sync(local, remote schema.Issue, plan []schema.PlanOperation, archivePath string) ApplyResult {
+func Sync(base *schema.Issue, local, remote schema.Issue, plan []schema.PlanOperation, archivePath string) ApplyResult {
 	// Validate the plan against current state.
-	if conflicts := validatePlan(local, remote, plan); len(conflicts) > 0 {
+	if conflicts := validatePlan(base, local, remote, plan); len(conflicts) > 0 {
 		return ApplyResult{
 			Remote:    &remote,
 			Conflicts: conflicts,
@@ -74,31 +77,9 @@ func Sync(local, remote schema.Issue, plan []schema.PlanOperation, archivePath s
 
 // validatePlan checks that the plan is still valid given the current remote
 // state. Returns conflicts if the plan is stale or invalid.
-func validatePlan(local, remote schema.Issue, ops []schema.PlanOperation) []schema.Conflict {
-	if local.RemoteMetadata.RemoteVersion != "" &&
-		remote.RemoteMetadata.RemoteVersion != "" &&
-		local.RemoteMetadata.RemoteVersion != remote.RemoteMetadata.RemoteVersion {
-		return []schema.Conflict{
-			{
-				Field:       schema.EditableFieldSummary,
-				Type:        schema.ConflictBothEdited,
-				LocalValue:  local.RemoteMetadata.RemoteVersion,
-				RemoteValue: remote.RemoteMetadata.RemoteVersion,
-			},
-		}
-	}
-
-	if local.RemoteMetadata.ContentHash != "" &&
-		remote.RemoteMetadata.ContentHash != "" &&
-		local.RemoteMetadata.ContentHash != remote.RemoteMetadata.ContentHash {
-		return []schema.Conflict{
-			{
-				Field:       schema.EditableFieldSummary,
-				Type:        schema.ConflictBothEdited,
-				LocalValue:  local.RemoteMetadata.ContentHash,
-				RemoteValue: remote.RemoteMetadata.ContentHash,
-			},
-		}
+func validatePlan(base *schema.Issue, local, remote schema.Issue, ops []schema.PlanOperation) []schema.Conflict {
+	if conflicts := DetectConflicts(base, local, remote); len(conflicts) > 0 {
+		return conflicts
 	}
 
 	if len(ops) == 0 {
@@ -106,7 +87,7 @@ func validatePlan(local, remote schema.Issue, ops []schema.PlanOperation) []sche
 	}
 
 	// Re-run the plan builder to detect conflicts.
-	_, conflicts, err := plan.BuildPlan(local, remote)
+	_, conflicts, err := plan.BuildPlanWithBase(base, local, remote)
 	if err != nil {
 		return []schema.Conflict{
 			{
@@ -123,7 +104,7 @@ func validatePlan(local, remote schema.Issue, ops []schema.PlanOperation) []sche
 	}
 
 	// Verify each operation still matches the diff.
-	computed, _, _ := plan.BuildPlan(local, remote)
+	computed, _, _ := plan.BuildPlanWithBase(base, local, remote)
 	if len(computed) != len(ops) {
 		return []schema.Conflict{
 			{
