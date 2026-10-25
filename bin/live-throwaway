@@ -1,0 +1,860 @@
+#!/usr/bin/env bash
+
+set -uo pipefail
+
+# Usage: bin/live-throwaway [--help] [--yes] [--fix-version NAME]
+#        [--custom-field ID[=VALUE]] [--priority NAME] [--assignee NAME] [KEY]
+#
+# End-to-end lifecycle test of jirafs against ONE existing throwaway Jira
+# story. Run it by hand; it writes to your LIVE Jira and restores the issue.
+
+usage() {
+    cat <<EOF
+Usage: $(basename "$0") [OPTIONS] [KEY]
+
+Round-trips these fields on ONE throwaway Jira story with jirafs, in batches
+(edit locally -> diff --exit-code -> push dry run -> push --apply -> pull ->
+assert), then restores the original values and verifies them after a pull:
+summary, label, fix version, description, Acceptkriterie-style custom field,
+comment (probed, see below), priority and assignee (opt-in), and status
+(done-like transition, then reopen back to the original status).
+
+It touches only that one issue and never calls push without an explicit key.
+Re-runnable: it starts from whatever state the story is in (an existing label
+or fix version is reused, not an error) and restores exactly what it found.
+
+Positional:
+  KEY    Issue to modify. Default: \$JIRAFS_THROWAWAY_KEY, else SKOLELOGIN-18655.
+
+Options:
+  --help, -h               Show this help message and exit.
+  --yes, -y                Skip the y/N confirmation before the first --apply.
+  --fix-version NAME       Fix version to add then remove. Default: the first
+                           unreleased, unarchived one in the fix_versions
+                           registry; skipped with a note if there is none.
+  --custom-field ID[=VALUE]
+                           Text custom field to overwrite then restore
+                           (e.g. customfield_12345). Default: the field whose
+                           name in custom_field_names matches "accept". The
+                           original entry is restored byte for byte.
+  --priority NAME          Also round-trip priority through NAME (opt-in).
+  --assignee NAME          Also round-trip assignee through NAME (opt-in).
+
+Environment:
+  JIRAFS_BIN               jirafs binary to test (default: build this repo
+                           into a temp dir).
+  JIRAFS_PROJECT           Passed as --project NAME to every jirafs command.
+  JIRAFS_CWD               Passed as --cwd DIR to every jirafs command.
+  JIRAFS_THROWAWAY_KEY     Default issue key.
+
+Result states per step/field: PASS, FAIL, UNSUPPORTED (jirafs has no such
+capability; not faked), SKIPPED (not applicable here, reason printed).
+Comment: the script writes a marked line under "## Comments To Add" and checks
+whether diff reports it; if jirafs ignores it, the check is UNSUPPORTED and
+the text is removed again. A comment that does get pushed stays on the issue.
+On error/interrupt after step 5 the restore is attempted automatically; if it
+fails, original values and a copy-pasteable recovery sequence are printed.
+Exit: 0 all passed; 1 any FAIL; 3 no FAIL but some UNSUPPORTED.
+EOF
+    exit 0
+}
+
+KEY="${JIRAFS_THROWAWAY_KEY:-SKOLELOGIN-18655}"
+YES=0
+FIXVER=""
+CF_ID=""
+CF_VAL=""
+PRI_NEW=""
+ASG_NEW=""
+KEY_GIVEN=0
+
+while [ $# -gt 0 ]; do
+    case "$1" in
+        --help|-h) usage ;;
+        --yes|-y) YES=1 ;;
+        --fix-version)
+            [ $# -ge 2 ] || { echo "error: --fix-version needs a NAME" >&2; exit 2; }
+            FIXVER="$2"; shift ;;
+        --priority)
+            [ $# -ge 2 ] || { echo "error: --priority needs a NAME" >&2; exit 2; }
+            PRI_NEW="$2"; shift ;;
+        --assignee)
+            [ $# -ge 2 ] || { echo "error: --assignee needs a NAME" >&2; exit 2; }
+            ASG_NEW="$2"; shift ;;
+        --custom-field)
+            [ $# -ge 2 ] || { echo "error: --custom-field needs customfield_NNNNN[=VALUE]" >&2; exit 2; }
+            case "$2" in
+                customfield_[0-9]*=*) CF_ID="${2%%=*}"; CF_VAL="${2#*=}" ;;
+                customfield_[0-9]*) CF_ID="$2" ;;
+                *) echo "error: --custom-field must look like customfield_12345[=VALUE]" >&2; exit 2 ;;
+            esac
+            shift ;;
+        -*) echo "error: unknown argument: $1" >&2; exit 2 ;;
+        *)
+            if [ "${KEY_GIVEN}" -eq 1 ]; then echo "error: only one KEY allowed" >&2; exit 2; fi
+            KEY="$1"; KEY_GIVEN=1 ;;
+    esac
+    shift
+done
+
+case "${KEY}" in
+    [A-Z][A-Z0-9_]*-[0-9]*) ;;
+    *) echo "error: ${KEY} does not look like an issue key (PROJ-123)" >&2; exit 2 ;;
+esac
+
+REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+TMP="$(mktemp -d "${TMPDIR:-/tmp}/jirafs-live.XXXXXX")" || exit 1
+SNAPSHOT="${TMP}/${KEY}.snapshot.md"
+EDITOR_PY="${TMP}/fm.py"
+TS="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+TEST_LABEL="jirafs-live-test"
+MARK="[jirafs live test ${TS}]"
+
+SCOPE=()
+[ -n "${JIRAFS_PROJECT:-}" ] && SCOPE+=(--project "${JIRAFS_PROJECT}")
+[ -n "${JIRAFS_CWD:-}" ] && SCOPE+=(--cwd "${JIRAFS_CWD}")
+
+APPLIED=0
+RESTORE_TRIED=0
+RESTORE_OK=0
+NSTEP=0
+STEP_FAILED=0
+N_UNSUP=0
+N_SKIP=0
+SUMMARY_PRINTED=0
+KEEP_TMP=0
+ISSUE_FILE=""
+STEP_NAMES=()
+STEP_RESULTS=()
+FIELD_ROWS=()
+OUT=""
+RC=0
+ORIG_SUMMARY=""
+ORIG_LABELS=""
+ORIG_FIXV=""
+ORIG_STATUS=""
+ORIG_PRI=""
+ORIG_ASG=""
+ORIG_PRI_PRESENT=0
+ORIG_ASG_PRESENT=0
+ORIG_CF_PRESENT=0
+DO_FIXV=0
+DO_CF=0
+DO_PRI=0
+DO_ASG=0
+COMMENT_SUPPORTED=0
+STATUS_TOUCHED=0
+COMMENT_MARK="${MARK} note from the live test run"
+NEW_SUMMARY=""
+NEW_DESC_PARA="${MARK} marked paragraph appended by bin/live-throwaway"
+
+# Frontmatter/section editor (stdlib only). It handles exactly what jirafs
+# renders: top-level `key: 'single quoted'` scalars, `- 'item'` lists at column
+# 0, `## Section` headings, and a `custom_fields:` block indented two spaces.
+cat >"${EDITOR_PY}" <<'PY'
+import json, re, sys
+
+KEYRE = re.compile(r'^([A-Za-z_][A-Za-z0-9_]*):(.*)$')
+NUM = re.compile(r'-?\d+(\.\d+)?')
+SECS = ["Description", "Acceptance Criteria", "Definition of Ready", "Notes",
+        "Comments To Add", "Remote Comments", "Comments"]
+CONT = re.compile(r'^(   |  - )')
+
+def unq(s):
+    s = s.strip()
+    if len(s) >= 2 and s[0] == "'" and s[-1] == "'":
+        return s[1:-1].replace("''", "'")
+    if len(s) >= 2 and s[0] == '"' and s[-1] == '"':
+        return json.loads(s)
+    return s
+
+def sq(s):
+    return "'" + s.replace("'", "''") + "'"
+
+def blocks(fm):
+    out, cur = [], None
+    for ln in fm:
+        m = KEYRE.match(ln)
+        if m:
+            cur = [m.group(1), [ln]]
+            out.append(cur)
+        elif cur is not None:
+            cur[1].append(ln)
+        else:
+            out.append([None, [ln]])
+    return out
+
+def block(bl, key):
+    for b in bl:
+        if b[0] == key:
+            return b
+    return None
+
+def items(b):
+    return [unq(l[2:]) for l in b[1][1:] if l.startswith("- ")] if b else []
+
+def cf_entry(b, cid):
+    """(start, end) indexes into the custom_fields body lines, or None."""
+    ls = b[1][1:] if b else []
+    for i, l in enumerate(ls):
+        if re.match(r'^  ' + re.escape(cid) + r':', l):
+            j = i + 1
+            while j < len(ls) and CONT.match(ls[j]):
+                j += 1
+            return ls, i, j
+    return None
+
+path_ = None
+
+def split(path):
+    lines = open(path, encoding="utf-8").read().split("\n")
+    if lines[0] != "---":
+        sys.exit("no frontmatter in " + path)
+    end = lines.index("---", 1)
+    return lines, end
+
+def write_fm(path, lines, end, bl):
+    fm = [l for b in bl for l in b[1]]
+    open(path, "w", encoding="utf-8").write("\n".join(["---"] + fm + lines[end:]))
+
+def sec_range(lines, end, name):
+    h = next((i for i in range(end, len(lines)) if lines[i] == "## " + name), None)
+    if h is None:
+        return None
+    heads = {"## " + s for s in SECS}
+    n = next((i for i in range(h + 1, len(lines)) if lines[i] in heads), len(lines))
+    return h, n
+
+cmd, path = sys.argv[1], sys.argv[2]
+lines, end = split(path)
+bl = blocks(lines[1:end])
+
+def put_block(key, new):
+    b = block(bl, key)
+    if b:
+        b[1] = new
+    elif new:
+        i = next((n for n, x in enumerate(bl) if x[0] == "custom_fields"), len(bl))
+        bl.insert(i, [key, new])
+    write_fm(path, lines, end, [x for x in bl if x[1]])
+
+if cmd == "get":
+    f = sys.argv[3]
+    if f in ("labels", "fix_versions"):
+        for v in items(block(bl, f)):
+            print(v)
+    elif f.startswith("cf:"):
+        r = cf_entry(block(bl, "custom_fields"), f[3:])
+        if r is None:
+            sys.exit(3)
+        print(unq(r[0][r[1]].split(":", 1)[1]))
+    elif f == "conflicts":
+        sys.exit(0 if block(bl, "conflicts") else 1)
+    else:  # plain top-level scalar (summary, status, priority, assignee)
+        b = block(bl, f)
+        if not b:
+            sys.exit(3)
+        print(unq(b[1][0].split(":", 1)[1]))
+elif cmd == "set":
+    f, vals = sys.argv[3], sys.argv[4:]
+    if f in ("labels", "fix_versions"):
+        put_block(f, ([f + ":"] + ["- " + sq(v) for v in vals]) if vals else [])
+    else:
+        put_block(f, [f + ": " + sq(vals[0])])
+elif cmd == "del":
+    put_block(sys.argv[3], [])
+elif cmd == "cfname":  # id of the custom field whose name matches a regex
+    b = block(bl, "custom_field_names")
+    for l in (b[1][1:] if b else []):
+        m = re.match(r'^  (customfield_\d+):(.*)$', l)
+        if m and re.search(sys.argv[3], unq(m.group(2)), re.I):
+            print(m.group(1))
+            break
+elif cmd == "cfraw":
+    r = cf_entry(block(bl, "custom_fields"), sys.argv[3])
+    if r is None:
+        sys.exit(3)
+    sys.stdout.write("\n".join(r[0][r[1]:r[2]]))
+elif cmd == "setcfraw" or cmd == "setcf":
+    cid = sys.argv[3]
+    if cmd == "setcfraw":
+        raw = open(sys.argv[4], encoding="utf-8").read()
+        new = raw.split("\n") if raw else []
+    elif len(sys.argv) > 4:
+        v = sys.argv[4]
+        new = ["  %s: %s" % (cid, v if NUM.fullmatch(v) else sq(v))]
+    else:
+        new = []
+    b = block(bl, "custom_fields")
+    body = list(b[1][1:]) if b else []
+    r = cf_entry(b, cid)
+    if r:
+        body[r[1]:r[2]] = new
+    else:
+        body += new
+    put_block("custom_fields", (["custom_fields:"] + body) if body else [])
+elif cmd == "getsec":
+    r = sec_range(lines, end, sys.argv[3])
+    if r is None:
+        sys.exit(3)
+    sys.stdout.write("\n".join(lines[r[0] + 1:r[1]]))
+elif cmd in ("setsec", "appendsec"):
+    name = sys.argv[3]
+    r = sec_range(lines, end, name)
+    if r is None:
+        lines += ["## " + name, ""]
+        r = (len(lines) - 2, len(lines))
+    h, n = r
+    if cmd == "setsec":
+        body = open(sys.argv[4], encoding="utf-8").read().split("\n")
+    else:
+        body = lines[h + 1:n]
+        t = 0
+        while body and body[-1] == "":
+            body.pop()
+            t += 1
+        body = body + (["", sys.argv[4]] if body else [sys.argv[4]]) + [""] * max(t, 1)
+    lines[h + 1:n] = body
+    open(path, "w", encoding="utf-8").write("\n".join(lines))
+else:
+    sys.exit("unknown command " + cmd)
+PY
+
+fm() { python3 -I "${EDITOR_PY}" "$@"; }
+
+jf() {
+    local sub="$1"; shift
+    "${JF}" "${sub}" ${SCOPE[@]+"${SCOPE[@]}"} "$@"
+}
+
+cleanup() {
+    if [ "${KEEP_TMP}" -eq 0 ]; then rm -rf "${TMP}"; fi
+}
+
+step() {
+    NSTEP=$((NSTEP + 1))
+    STEP_FAILED=0
+    echo
+    echo "== step ${NSTEP}: $* =="
+}
+
+pass() {
+    echo "PASS step ${NSTEP}"
+    STEP_NAMES+=("${NSTEP}")
+    STEP_RESULTS+=("PASS")
+}
+
+fail() {
+    echo "FAIL step ${NSTEP}: $*" >&2
+    STEP_NAMES+=("${NSTEP}")
+    STEP_RESULTS+=("FAIL")
+    exit 1
+}
+
+# end_step: PASS the step unless a field check inside it failed.
+end_step() {
+    [ "${STEP_FAILED}" -eq 0 ] || fail "one or more checks failed (see [FAIL] lines)"
+    pass
+}
+
+# frow FIELD STATE [NOTE]: record and print one per-field result.
+frow() {
+    FIELD_ROWS+=("$(printf '%-5s %-26s %-12s %s' "${NSTEP}" "$1" "$2" "${3:-}")")
+    case "$2" in
+        FAIL) STEP_FAILED=1 ;;
+        UNSUPPORTED) N_UNSUP=$((N_UNSUP + 1)) ;;
+        SKIPPED) N_SKIP=$((N_SKIP + 1)) ;;
+    esac
+    echo "  [$2] $1${3:+ - $3}"
+}
+
+# pull_issue: runs `jirafs pull KEY`, sets ISSUE_FILE from the "wrote" line.
+pull_issue() {
+    OUT="$(jf pull "${KEY}" 2>&1)" || { echo "${OUT}"; return 1; }
+    echo "${OUT}"
+    local p
+    p="$(printf '%s\n' "${OUT}" | sed -n 's/^wrote .* → //p' | tail -n 1)"
+    if [ -z "${p}" ] || [ ! -f "${p}" ]; then
+        echo "cannot find the pulled file in the output of: jirafs pull ${KEY}" >&2
+        return 1
+    fi
+    ISSUE_FILE="${p}"
+}
+
+same_list() {
+    [ "$(printf '%s\n' "$1" | sort)" = "$(printf '%s\n' "$2" | sort)" ]
+}
+
+# lines_to_array NAME TEXT: fill the global array NAME from non-empty lines.
+lines_to_array() {
+    local name="$1" l
+    eval "${name}=()"
+    while IFS= read -r l; do
+        # shellcheck disable=SC2294
+        [ -n "${l}" ] && eval "${name}+=(\"\${l}\")"
+    done <<<"$2"
+}
+
+flat() { printf '%s' "$1" | tr '\n' ' '; }
+
+has_line() { printf '%s\n' "$1" | grep -qxF -- "$2"; }
+
+# add_unique LIST ITEM: newline-joined list with ITEM appended unless present.
+add_unique() {
+    if has_line "$1" "$2"; then printf '%s' "$1"; else
+        if [ -n "$1" ]; then printf '%s\n%s' "$1" "$2"; else printf '%s' "$2"; fi
+    fi
+}
+
+summary_table() {
+    [ "${SUMMARY_PRINTED}" -eq 0 ] || return 0
+    SUMMARY_PRINTED=1
+    echo
+    echo "== summary =="
+    printf '%-6s %s\n' "STEP" "RESULT"
+    local i
+    for i in "${!STEP_NAMES[@]}"; do
+        printf '%-6s %s\n' "${STEP_NAMES[$i]}" "${STEP_RESULTS[$i]}"
+    done
+    echo
+    printf '%-5s %-26s %-12s %s\n' "STEP" "FIELD" "RESULT" "NOTE"
+    for i in "${!FIELD_ROWS[@]}"; do echo "${FIELD_ROWS[$i]}"; done
+    echo
+    printf 'issue: %s   restored: %s   unsupported: %s   skipped: %s\n' "${KEY}" \
+        "$([ "${RESTORE_OK}" -eq 1 ] && echo yes || echo "no/not needed")" "${N_UNSUP}" "${N_SKIP}"
+    if [ "${N_UNSUP}" -gt 0 ]; then
+        echo "UNSUPPORTED means jirafs lacks the capability; it was not faked."
+    fi
+}
+
+recovery_hint() {
+    KEEP_TMP=1
+    {
+        echo
+        echo "RESTORE FAILED. ${KEY} may still carry test edits. Original values:"
+        echo "  summary:      ${ORIG_SUMMARY:-?}"
+        echo "  labels:       $(flat "${ORIG_LABELS}")"
+        echo "  fix_versions: $(flat "${ORIG_FIXV}")"
+        echo "  status:       ${ORIG_STATUS:-?}"
+        echo "  (description, custom field, priority, assignee: see snapshot)"
+        echo "Recover (copy-paste); the original pulled file is kept as a snapshot:"
+        echo "  '${JF}' pull ${SCOPE[*]:-} ${KEY}"
+        echo "  cp '${SNAPSHOT}' '${ISSUE_FILE:-<issue file>}'"
+        echo "  '${JF}' diff ${SCOPE[*]:-} ${KEY}"
+        echo "  '${JF}' push ${SCOPE[*]:-} ${KEY} --apply"
+        echo "  '${JF}' pull ${SCOPE[*]:-} ${KEY}"
+        echo "(if the cp makes push report a conflict, edit the fields back by hand using the values above, then push.)"
+    } >&2
+}
+
+# probe_targets: list the statuses reachable from the current one (TARGETS)
+# by dry-running a push with an impossible status; writes nothing.
+probe_targets() {
+    local bak="${TMP}/status.bak" pout
+    cp "${ISSUE_FILE}" "${bak}"
+    fm set "${ISSUE_FILE}" status "jirafs-probe-nonexistent-status"
+    pout="$(jf push "${KEY}" 2>&1)"
+    cp "${bak}" "${ISSUE_FILE}"
+    TARGETS="$(printf '%s\n' "${pout}" | sed -n 's/^[[:space:]]*\(.*[^[:space:]]\)[[:space:]]*(via ".*").*$/\1/p')"
+}
+
+# set_originals: rewrite the issue file with the original values.
+set_originals() {
+    local -a labs fvs
+    lines_to_array labs "${ORIG_LABELS}"
+    fm set "${ISSUE_FILE}" summary "${ORIG_SUMMARY}" || return 1
+    fm set "${ISSUE_FILE}" labels ${labs[@]+"${labs[@]}"} || return 1
+    if [ "${DO_FIXV}" -eq 1 ]; then
+        lines_to_array fvs "${ORIG_FIXV}"
+        fm set "${ISSUE_FILE}" fix_versions ${fvs[@]+"${fvs[@]}"} || return 1
+    fi
+    fm setsec "${ISSUE_FILE}" Description "${TMP}/orig_desc" || return 1
+    if [ "${DO_CF}" -eq 1 ]; then
+        if [ "${ORIG_CF_PRESENT}" -eq 1 ]; then
+            fm setcfraw "${ISSUE_FILE}" "${CF_ID}" "${TMP}/orig_cf" || return 1
+        else
+            fm setcf "${ISSUE_FILE}" "${CF_ID}" || return 1
+        fi
+    fi
+    if [ "${DO_PRI}" -eq 1 ]; then fm set "${ISSUE_FILE}" priority "${ORIG_PRI}" || return 1; fi
+    if [ "${DO_ASG}" -eq 1 ]; then
+        if [ "${ORIG_ASG_PRESENT}" -eq 1 ]; then fm set "${ISSUE_FILE}" assignee "${ORIG_ASG}" || return 1
+        else fm del "${ISSUE_FILE}" assignee || return 1; fi
+    fi
+    if [ "${STATUS_TOUCHED}" -eq 1 ] && [ -n "${ORIG_STATUS}" ]; then
+        fm set "${ISSUE_FILE}" status "${ORIG_STATUS}" || return 1
+    fi
+    if [ "${COMMENT_SUPPORTED}" -eq 0 ]; then
+        fm setsec "${ISSUE_FILE}" "Comments To Add" "${TMP}/orig_cta" || return 1
+    fi
+}
+
+# verify_originals: with ISSUE_FILE freshly pulled, check the originals are
+# back; records one row per field and returns non-zero if any differs.
+verify_originals() {
+    local ok=0 v
+    chk() { # chk NAME STATE-AS-0/1 NOTE
+        if [ "$2" -eq 0 ]; then frow "restore: $1" PASS; else frow "restore: $1" FAIL "$3"; ok=1; fi
+    }
+    v="$(fm get "${ISSUE_FILE}" summary)"
+    if [ "${v}" = "${ORIG_SUMMARY}" ]; then chk summary 0 "is '${v}'"; else chk summary 1 "is '${v}'"; fi
+    v="$(fm get "${ISSUE_FILE}" labels)"
+    if same_list "${v}" "${ORIG_LABELS}"; then chk "label removed" 0 "labels now [$(flat "${v}")]"; else chk "label removed" 1 "labels now [$(flat "${v}")]"; fi
+    if [ "${DO_FIXV}" -eq 1 ]; then
+        v="$(fm get "${ISSUE_FILE}" fix_versions)"
+        if same_list "${v}" "${ORIG_FIXV}"; then chk "fix version removed" 0 "now [$(flat "${v}")]"; else chk "fix version removed" 1 "now [$(flat "${v}")]"; fi
+    fi
+    if [ "$(fm getsec "${ISSUE_FILE}" Description)" = "$(cat "${TMP}/orig_desc")" ]; then chk description 0 "text differs"; else chk description 1 "text differs"; fi
+    if [ "${DO_CF}" -eq 1 ]; then
+        if [ "${ORIG_CF_PRESENT}" -eq 1 ]; then
+            [ "$(fm cfraw "${ISSUE_FILE}" "${CF_ID}")" = "$(cat "${TMP}/orig_cf")" ]; chk "${CF_ID}" $? "entry differs"
+        else
+            fm cfraw "${ISSUE_FILE}" "${CF_ID}" >/dev/null; [ $? -eq 3 ]; chk "${CF_ID}" $? "should be unset"
+        fi
+    fi
+    if [ "${DO_PRI}" -eq 1 ]; then
+        v="$(fm get "${ISSUE_FILE}" priority)"; [ "${v}" = "${ORIG_PRI}" ]; chk priority $? "is '${v}'"
+    fi
+    if [ "${DO_ASG}" -eq 1 ]; then
+        v="$(fm get "${ISSUE_FILE}" assignee)"; rc=$?
+        if [ "${ORIG_ASG_PRESENT}" -eq 1 ]; then [ "${v}" = "${ORIG_ASG}" ]; else [ "${rc}" -eq 3 ]; fi
+        chk assignee $? "is '${v}'"
+    fi
+    if [ -n "${ORIG_STATUS}" ]; then
+        v="$(fm get "${ISSUE_FILE}" status)"; [ "${v}" = "${ORIG_STATUS}" ]; chk status $? "is '${v}'"
+    fi
+    return "${ok}"
+}
+
+do_restore() {
+    RESTORE_TRIED=1
+    echo "-- restoring ${KEY} to its original values --"
+    { [ -n "${ISSUE_FILE}" ] && [ -f "${ISSUE_FILE}" ]; } || return 1
+    set_originals || return 1
+    jf push "${KEY}" --apply || return 1
+    pull_issue || return 1
+    verify_originals || return 1
+    RESTORE_OK=1
+}
+
+on_exit() {
+    RC=$?
+    trap - EXIT INT TERM
+    if [ "${RC}" -ne 0 ] && [ "${APPLIED}" -eq 1 ] && [ "${RESTORE_OK}" -eq 0 ]; then
+        if [ "${RESTORE_TRIED}" -eq 0 ]; then
+            echo >&2
+            echo "!! stopped at or after step 5; attempting restore of ${KEY} ..." >&2
+            do_restore || true
+        fi
+        if [ "${RESTORE_OK}" -eq 0 ]; then
+            recovery_hint
+        else
+            echo "restore succeeded; ${KEY} is back to its original values." >&2
+        fi
+    fi
+    if [ "${RC}" -ne 0 ] && [ "${NSTEP}" -gt 0 ]; then summary_table >&2; fi
+    cleanup
+    exit "${RC}"
+}
+trap on_exit EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM
+
+# ---- binary ----------------------------------------------------------------
+if [ -n "${JIRAFS_BIN:-}" ]; then
+    JF="${JIRAFS_BIN}"
+else
+    JF="${TMP}/jirafs"
+    echo "building jirafs from ${REPO_ROOT} ..."
+    (cd "${REPO_ROOT}" && go build -o "${JF}" ./cmd/jirafs) || { echo "error: go build failed" >&2; exit 1; }
+fi
+[ -x "${JF}" ] || { echo "error: ${JF} is not executable" >&2; exit 1; }
+
+# ---- preflight --------------------------------------------------------------
+echo "== preflight: jirafs doctor =="
+if ! jf doctor; then
+    echo >&2
+    echo "preflight failed: jirafs doctor reported a problem. Nothing was written." >&2
+    echo "Fix it, then re-run. See details with: '${JF}' doctor ${SCOPE[*]:-} --verbose" >&2
+    echo "To configure a project first: '${JF}' init --help" >&2
+    exit 1
+fi
+
+echo
+echo "== preflight: ${KEY} must have no local edits or conflicts =="
+if ! PORC="$(jf status --porcelain 2>&1)"; then
+    echo "${PORC}" >&2
+    echo "error: jirafs status failed. Try: '${JF}' status ${SCOPE[*]:-}" >&2
+    exit 1
+fi
+if printf '%s\n' "${PORC}" | awk -F'\t' -v k="${KEY}" '$2 == k { f = 1 } END { exit !f }'; then
+    echo "refusing: ${KEY} has local changes or conflicts:" >&2
+    printf '%s\n' "${PORC}" | awk -F'\t' -v k="${KEY}" '$2 == k' >&2
+    echo "Review them first. Try: '${JF}' diff ${SCOPE[*]:-} ${KEY}" >&2
+    exit 1
+fi
+echo "ok"
+
+# ---- step 1 ------------------------------------------------------------------
+step "pull ${KEY}, snapshot the original, discover fields"
+pull_issue || fail "jirafs pull ${KEY} failed"
+if fm get "${ISSUE_FILE}" conflicts; then
+    fail "${ISSUE_FILE} has recorded conflicts; resolve them first (jirafs resolve --help)"
+fi
+cp "${ISSUE_FILE}" "${SNAPSHOT}" || fail "cannot write snapshot"
+ORIG_SUMMARY="$(fm get "${ISSUE_FILE}" summary)" || fail "cannot read summary"
+[ -n "${ORIG_SUMMARY}" ] || fail "issue file has no summary"
+case "${ORIG_SUMMARY}" in
+    *"[jirafs live test "*) echo "note: summary already carries a jirafs live test marker (earlier run?); it is restored as found." ;;
+esac
+ORIG_LABELS="$(fm get "${ISSUE_FILE}" labels)"
+ORIG_FIXV="$(fm get "${ISSUE_FILE}" fix_versions)"
+ORIG_STATUS="$(fm get "${ISSUE_FILE}" status)"
+fm getsec "${ISSUE_FILE}" Description >"${TMP}/orig_desc" || : >"${TMP}/orig_desc"
+fm getsec "${ISSUE_FILE}" "Comments To Add" >"${TMP}/orig_cta" || : >"${TMP}/orig_cta"
+if ORIG_PRI="$(fm get "${ISSUE_FILE}" priority)"; then ORIG_PRI_PRESENT=1; fi
+if ORIG_ASG="$(fm get "${ISSUE_FILE}" assignee)"; then ORIG_ASG_PRESENT=1; fi
+
+# fix version: flag, else first unreleased/unarchived in the registry
+if [ -z "${FIXVER}" ]; then
+    FIXVER="$(jf registry show fix_versions --json 2>/dev/null | python3 -I -c '
+import json, sys
+try:
+    data = json.load(sys.stdin)
+except Exception:
+    sys.exit(0)
+def walk(o):
+    if isinstance(o, dict):
+        low = {k.lower(): v for k, v in o.items()}
+        if isinstance(low.get("name"), str):
+            yield low
+        for v in o.values():
+            yield from walk(v)
+    elif isinstance(o, list):
+        for v in o:
+            yield from walk(v)
+for e in walk(data):
+    if not e.get("released") and not e.get("archived"):
+        print(e["name"]); break
+')"
+fi
+if [ -n "${FIXVER}" ]; then DO_FIXV=1; fi
+# custom field: flag, else the one named like "accept"
+if [ -z "${CF_ID}" ]; then CF_ID="$(fm cfname "${ISSUE_FILE}" accept)"; fi
+if [ -n "${CF_ID}" ]; then
+    DO_CF=1
+    [ -n "${CF_VAL}" ] || CF_VAL="${MARK} marked text"
+    if fm cfraw "${ISSUE_FILE}" "${CF_ID}" >"${TMP}/orig_cf"; then ORIG_CF_PRESENT=1; fi
+fi
+if [ -n "${PRI_NEW}" ]; then
+    if [ "${ORIG_PRI_PRESENT}" -eq 1 ]; then DO_PRI=1; else echo "note: no priority in the file; priority round-trip skipped"; fi
+fi
+[ -n "${ASG_NEW}" ] && DO_ASG=1
+
+echo "file:         ${ISSUE_FILE}"
+echo "snapshot:     ${SNAPSHOT}"
+echo "summary:      ${ORIG_SUMMARY}"
+echo "status:       ${ORIG_STATUS:-<none>}"
+echo "labels:       $(flat "${ORIG_LABELS}")"
+echo "fix_versions: $(flat "${ORIG_FIXV}")"
+frow "discover" PASS "snapshot saved"
+if [ "${DO_FIXV}" -eq 0 ]; then
+    frow "fix version" SKIPPED "no --fix-version and no unreleased version in the registry (try: jirafs registry refresh fix_versions)"
+fi
+if [ "${DO_CF}" -eq 0 ]; then
+    frow "custom field" SKIPPED "no custom_field_names entry matching 'accept'; pass --custom-field customfield_NNNNN"
+fi
+[ -n "${PRI_NEW}" ] || frow "priority" SKIPPED "opt-in: pass --priority NAME"
+[ -n "${ASG_NEW}" ] || frow "assignee" SKIPPED "opt-in: pass --assignee NAME"
+end_step
+
+# ---- step 2 ------------------------------------------------------------------
+NEW_SUMMARY="${ORIG_SUMMARY} ${MARK}"
+step "edit locally: summary, label, fix version, description, custom field, comment text"
+lines_to_array labs "$(add_unique "${ORIG_LABELS}" "${TEST_LABEL}")"
+fm set "${ISSUE_FILE}" summary "${NEW_SUMMARY}" || fail "cannot edit summary"
+fm set "${ISSUE_FILE}" labels ${labs[@]+"${labs[@]}"} || fail "cannot edit labels"
+if [ "${DO_FIXV}" -eq 1 ]; then
+    lines_to_array fvs "$(add_unique "${ORIG_FIXV}" "${FIXVER}")"
+    fm set "${ISSUE_FILE}" fix_versions ${fvs[@]+"${fvs[@]}"} || fail "cannot edit fix_versions"
+fi
+fm appendsec "${ISSUE_FILE}" Description "${NEW_DESC_PARA}" || fail "cannot edit description"
+if [ "${DO_CF}" -eq 1 ]; then fm setcf "${ISSUE_FILE}" "${CF_ID}" "${CF_VAL}" || fail "cannot edit ${CF_ID}"; fi
+if [ "${DO_PRI}" -eq 1 ]; then fm set "${ISSUE_FILE}" priority "${PRI_NEW}" || fail "cannot edit priority"; fi
+if [ "${DO_ASG}" -eq 1 ]; then fm set "${ISSUE_FILE}" assignee "${ASG_NEW}" || fail "cannot edit assignee"; fi
+fm appendsec "${ISSUE_FILE}" "Comments To Add" "${COMMENT_MARK}" || fail "cannot edit comments section"
+diff -u "${SNAPSHOT}" "${ISSUE_FILE}" | sed -n '1,60p'
+pass
+
+# ---- step 3 ------------------------------------------------------------------
+step "jirafs diff ${KEY} --exit-code reports every edit"
+OUT="$(jf diff "${KEY}" --exit-code 2>&1)"; rc=$?
+echo "${OUT}"
+[ "${rc}" -eq 1 ] || fail "expected exit 1 from diff --exit-code, got ${rc}"
+dmention() { # dmention FIELD REGEX
+    if printf '%s\n' "${OUT}" | grep -qiE -- "$2"; then frow "diff: $1" PASS; else frow "diff: $1" FAIL "diff output does not mention it"; fi
+}
+dmention summary summary
+dmention label label
+dmention description description
+[ "${DO_FIXV}" -eq 0 ] || dmention "fix version" 'fix'
+[ "${DO_CF}" -eq 0 ] || dmention "${CF_ID}" "${CF_ID}|custom"
+[ "${DO_PRI}" -eq 0 ] || dmention priority priority
+[ "${DO_ASG}" -eq 0 ] || dmention assignee assignee
+if printf '%s\n' "${OUT}" | grep -qi 'comment'; then
+    COMMENT_SUPPORTED=1
+    frow "diff: comment" PASS "jirafs plans a comment write"
+else
+    COMMENT_SUPPORTED=0
+    frow "comment" UNSUPPORTED "diff ignores 'Comments To Add' (no comment write op in jirafs push); text removed again"
+    fm setsec "${ISSUE_FILE}" "Comments To Add" "${TMP}/orig_cta" || fail "cannot remove unsupported comment text"
+fi
+end_step
+
+# ---- step 4 ------------------------------------------------------------------
+step "jirafs push ${KEY} (dry run) writes nothing"
+BEFORE="$(cksum <"${ISSUE_FILE}")"
+OUT="$(jf push "${KEY}" 2>&1)"; rc=$?
+echo "${OUT}"
+[ "${rc}" -eq 0 ] || fail "dry-run push exited ${rc}"
+[ "$(cksum <"${ISSUE_FILE}")" = "${BEFORE}" ] || fail "dry run modified the local file"
+printf '%s\n' "${OUT}" | grep -q -- "--apply" || fail "dry run did not print the real-run command (with --apply)"
+jf diff "${KEY}" --exit-code >/dev/null 2>&1; rc=$?
+[ "${rc}" -eq 1 ] || fail "diff no longer reports changes after a dry run (exit ${rc})"
+pass
+
+# ---- confirmation ------------------------------------------------------------
+echo
+echo "About to MODIFY LIVE Jira issue ${KEY} (and only that issue):"
+echo "  summary:     '${ORIG_SUMMARY}' -> '${NEW_SUMMARY}'"
+echo "  labels:      + ${TEST_LABEL}"
+[ "${DO_FIXV}" -eq 0 ] || echo "  fix_versions: + ${FIXVER}"
+echo "  description: + marked paragraph"
+[ "${DO_CF}" -eq 0 ] || echo "  ${CF_ID}: replaced by marked text (original restored later)"
+[ "${DO_PRI}" -eq 0 ] || echo "  priority:    ${ORIG_PRI} -> ${PRI_NEW}"
+[ "${DO_ASG}" -eq 0 ] || echo "  assignee:    -> ${ASG_NEW}"
+[ "${COMMENT_SUPPORTED}" -eq 0 ] || echo "  comment:     + '${COMMENT_MARK}' (STAYS on the issue)"
+echo "  status:      later, ${ORIG_STATUS:-<unknown>} -> a done-like/reopen status -> back"
+echo "Everything except a comment is restored afterwards. Original snapshot: ${SNAPSHOT}"
+if [ "${YES}" -ne 1 ]; then
+    if [ ! -t 0 ]; then
+        echo "refusing: no terminal to confirm on; re-run with --yes" >&2
+        exit 1
+    fi
+    printf 'Proceed? [y/N] '
+    read -r ans
+    case "${ans}" in
+        y|Y|yes|YES) ;;
+        *) echo "aborted; nothing was written to Jira."; exit 1 ;;
+    esac
+fi
+
+# ---- step 5 ------------------------------------------------------------------
+step "jirafs push ${KEY} --apply"
+APPLIED=1   # set before the call: an interrupted push may already have written
+jf push "${KEY}" --apply || fail "push --apply failed"
+pass
+
+# ---- step 6 ------------------------------------------------------------------
+step "pull ${KEY}; every edit is in the pulled file; diff is clean"
+pull_issue || fail "jirafs pull ${KEY} failed"
+GOT="$(fm get "${ISSUE_FILE}" summary)"
+if [ "${GOT}" = "${NEW_SUMMARY}" ]; then frow "summary" PASS; else frow "summary" FAIL "remote is '${GOT}'"; fi
+if fm get "${ISSUE_FILE}" labels | grep -qxF -- "${TEST_LABEL}"; then frow "label" PASS; else frow "label" FAIL "label missing"; fi
+if [ "${DO_FIXV}" -eq 1 ]; then
+    if fm get "${ISSUE_FILE}" fix_versions | grep -qxF -- "${FIXVER}"; then frow "fix version" PASS "${FIXVER}"; else frow "fix version" FAIL "${FIXVER} missing"; fi
+fi
+if fm getsec "${ISSUE_FILE}" Description | grep -qF -- "${NEW_DESC_PARA}"; then frow "description" PASS; else frow "description" FAIL "marked paragraph missing"; fi
+if [ "${DO_CF}" -eq 1 ]; then
+    GOT="$(fm get "${ISSUE_FILE}" "cf:${CF_ID}")"
+    if [ "${GOT}" = "${CF_VAL}" ]; then frow "${CF_ID}" PASS; else frow "${CF_ID}" FAIL "is '${GOT}'"; fi
+fi
+if [ "${DO_PRI}" -eq 1 ]; then
+    GOT="$(fm get "${ISSUE_FILE}" priority)"
+    if [ "${GOT}" = "${PRI_NEW}" ]; then frow "priority" PASS; else frow "priority" FAIL "is '${GOT}'"; fi
+fi
+if [ "${DO_ASG}" -eq 1 ]; then
+    GOT="$(fm get "${ISSUE_FILE}" assignee)"
+    if [ "${GOT}" = "${ASG_NEW}" ]; then frow "assignee" PASS; else frow "assignee" FAIL "is '${GOT}'"; fi
+fi
+if [ "${COMMENT_SUPPORTED}" -eq 1 ]; then
+    if grep -qF -- "${COMMENT_MARK}" "${ISSUE_FILE}"; then frow "comment" PASS "stays on the issue"; else frow "comment" FAIL "marker not in pulled file"; fi
+fi
+jf diff "${KEY}" --exit-code >/dev/null 2>&1; rc=$?
+if [ "${rc}" -eq 0 ]; then frow "diff clean" PASS; else frow "diff clean" FAIL "diff --exit-code exited ${rc}"; fi
+end_step
+
+# ---- step 7 ------------------------------------------------------------------
+step "status: transition to a done-like status (or reopen first), then back"
+if [ -z "${ORIG_STATUS}" ]; then
+    frow "status" SKIPPED "no status in the issue file"
+else
+    DONE_RE='^(done|closed|resolved|complete|completed|finished|f.rdig|lukket|afsluttet)$'
+    OPEN_RE='(reopen|open|to do|todo|backlog|selected|ready|in progress|.ben|gen.bn)'
+    probe_targets
+    echo "reachable statuses from '${ORIG_STATUS}': $(flat "${TARGETS}")"
+    TARGET=""
+    if printf '%s\n' "${ORIG_STATUS}" | grep -qiE "${DONE_RE}"; then
+        echo "story is already done-like: reopening first, then restoring '${ORIG_STATUS}'"
+        while IFS= read -r t; do
+            [ -n "${t}" ] || continue
+            if printf '%s\n' "${t}" | grep -qiE "${OPEN_RE}" && [ "${t}" != "${ORIG_STATUS}" ]; then TARGET="${t}"; break; fi
+        done <<<"${TARGETS}"
+    else
+        while IFS= read -r t; do
+            [ -n "${t}" ] || continue
+            if printf '%s\n' "${t}" | grep -qiE "${DONE_RE}"; then TARGET="${t}"; break; fi
+        done <<<"${TARGETS}"
+    fi
+    if [ -z "${TARGET}" ]; then
+        frow "status" SKIPPED "no suitable transition from '${ORIG_STATUS}' (reachable: $(flat "${TARGETS}"))"
+    else
+        STATUS_TOUCHED=1
+        fm set "${ISSUE_FILE}" status "${TARGET}" || fail "cannot edit status"
+        OUT="$(jf diff "${KEY}" --exit-code 2>&1)"; rc=$?
+        echo "${OUT}"
+        if [ "${rc}" -eq 1 ] && printf '%s\n' "${OUT}" | grep -qi 'status'; then frow "status diff" PASS; else frow "status diff" FAIL "exit ${rc} or no status in diff"; fi
+        [ "${STEP_FAILED}" -eq 0 ] || fail "status edit not reported by diff"
+        jf push "${KEY}" --apply || fail "push --apply of status ${TARGET} failed"
+        pull_issue || fail "jirafs pull ${KEY} failed"
+        GOT="$(fm get "${ISSUE_FILE}" status)"
+        if [ "${GOT}" = "${TARGET}" ]; then frow "status ${ORIG_STATUS} -> ${TARGET}" PASS; else frow "status ${ORIG_STATUS} -> ${TARGET}" FAIL "is '${GOT}'"; fi
+        [ "${STEP_FAILED}" -eq 0 ] || fail "status did not change"
+        # Back to the original status; step through reopen-like statuses when
+        # the original is not directly reachable (bounded to 4 hops).
+        hops=0
+        CUR="$(fm get "${ISSUE_FILE}" status)"
+        while [ "${CUR}" != "${ORIG_STATUS}" ] && [ "${hops}" -lt 4 ]; do
+            hops=$((hops + 1))
+            probe_targets
+            NEXT=""
+            if has_line "${TARGETS}" "${ORIG_STATUS}"; then NEXT="${ORIG_STATUS}"; else
+                while IFS= read -r t; do
+                    [ -n "${t}" ] || continue
+                    if printf '%s\n' "${t}" | grep -qiE "${OPEN_RE}" && [ "${t}" != "${CUR}" ]; then NEXT="${t}"; break; fi
+                done <<<"${TARGETS}"
+            fi
+            [ -n "${NEXT}" ] || fail "no transition from '${CUR}' towards '${ORIG_STATUS}' (reachable: $(flat "${TARGETS}")); restore by hand in Jira"
+            echo "transition '${CUR}' -> '${NEXT}'"
+            fm set "${ISSUE_FILE}" status "${NEXT}" || fail "cannot edit status"
+            jf push "${KEY}" --apply || fail "push of status '${NEXT}' failed"
+            pull_issue || fail "jirafs pull ${KEY} failed"
+            CUR="$(fm get "${ISSUE_FILE}" status)"
+        done
+        if [ "${CUR}" = "${ORIG_STATUS}" ]; then frow "status ${TARGET} -> ${ORIG_STATUS}" PASS "${hops} hop(s)"; else frow "status ${TARGET} -> ${ORIG_STATUS}" FAIL "is '${CUR}'"; fi
+    fi
+fi
+end_step
+
+# ---- step 8 ------------------------------------------------------------------
+step "restore ${KEY} to its original values and verify after pull"
+do_restore || fail "restore failed (see [FAIL] lines)"
+STEP_FAILED=0
+pass
+
+summary_table
+if [ "${N_UNSUP}" -gt 0 ]; then
+    echo "exit 3: no failures, but ${N_UNSUP} step(s) UNSUPPORTED"
+    exit 3
+fi
+exit 0

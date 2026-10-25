@@ -235,6 +235,17 @@ otherwise.
 - if a live probe is genuinely required, state that in the task and the test
   name
 
+## Live testing
+
+`bin/live-throwaway [KEY]` runs the pull, edit, diff, push, pull and restore
+lifecycle against one existing throwaway story in your **live** Jira (default
+`SKOLELOGIN-18655`, or `$JIRAFS_THROWAWAY_KEY`). It touches only that issue,
+asks for confirmation before the first `push --apply` (`--yes` skips it), and
+restores the original values; step results are PASS, FAIL, UNSUPPORTED or
+SKIPPED. Run `bin/live-throwaway --help` for options (`--fix-version`,
+`--custom-field`, `--priority`, `--assignee`) and exit codes. It is manual
+only and is not part of `bin/verify`.
+
 ## TLS Certificates
 
 `jirafs` always verifies Jira server certificates against the system trust
