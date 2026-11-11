@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# verify — bin/lint, bin/gendocs --check and bin/test; the definition of done.
 
 set -euo pipefail
 

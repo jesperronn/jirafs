@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# verify-harness — self-tests of bin/ scripts (tests/fixtures/harness).
 
 set -euo pipefail
 

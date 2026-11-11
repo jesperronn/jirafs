@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# lint — gofmt and go vet for given paths; whole-repo gofmt and tools/lint_repo.py with none; --autofix.
 
 set -euo pipefail
 

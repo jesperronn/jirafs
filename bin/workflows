@@ -1,0 +1,90 @@
+#!/usr/bin/env bash
+# workflows — print the commands for each maintainer workflow. Prints only, runs nothing.
+set -euo pipefail
+
+usage() {
+    cat <<'USAGE'
+Usage: bin/workflows [commands|setup|test|lint|release]
+
+Print the commands for a workflow (no argument: all). Only prints; runs nothing.
+Exit: 0 ok, 2 unknown workflow.
+USAGE
+}
+
+# commands: list every script in bin/ with the description from its
+# "# <name> — <text>" line, so the list cannot go stale.
+commands() {
+    local dir f name desc
+    dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
+    echo "== commands =="
+    for f in "${dir}"/*; do
+        [[ -f "${f}" && -x "${f}" && "$(head -c 2 "${f}")" == "#!" ]] || continue
+        name="${f##*/}"
+        [[ "${name}" == *.test.sh ]] && continue
+        desc="$(grep -m1 "^# ${name} — " "${f}" | cut -d' ' -f4- || true)"
+        printf '  %-16s %s\n' "${name}" "${desc:-(no description line)}"
+    done
+}
+
+setup() {
+    cat <<'EOT'
+== setup ==
+  bin/setup --check          # verify go, python3, git; changes nothing
+  bin/setup                  # same checks, then go mod download; idempotent
+  bin/build                  # first check after setup: builds ./jirafs
+EOT
+}
+
+test_() {
+    cat <<'EOT'
+== test ==
+  bin/test                   # shell fixtures, Go tests, coverage gate, isolation proof
+  bin/test PATH              # one file or directory (Go package scope)
+  bin/test --no-coverage     # quick iteration; CI runs the full gate
+  bin/verify-harness         # self-tests of bin/ scripts
+EOT
+}
+
+lint() {
+    cat <<'EOT'
+== lint ==
+  bin/lint                   # whole repo: gofmt, then tools/lint_repo.py
+  bin/lint --autofix PATH... # gofmt -w the given Go paths
+  bin/gendocs                # regenerate generated doc regions; --check only diffs
+EOT
+}
+
+release() {
+    cat <<'EOT'
+== release and integration ==
+  bin/verify                 # lint + gendocs --check + test: the definition of done
+  bin/handoff                # rebase branch onto main, run bin/verify; never merges
+  bin/install [--prefix DIR] # install the binary to DIR/bin (default ~/go)
+  bin/live-throwaway KEY     # by hand only: writes to ONE live Jira story
+  release: none (no changelog, tagging or deploy scripts)
+EOT
+}
+
+main() {
+    case "${1-all}" in
+        -h | --help) usage ;;
+        commands) commands ;;
+        setup) setup ;;
+        test) test_ ;;
+        lint) lint ;;
+        release) release ;;
+        all)
+            commands
+            setup
+            test_
+            lint
+            release
+            ;;
+        *)
+            usage >&2
+            exit 2
+            ;;
+    esac
+}
+
+main "$@"

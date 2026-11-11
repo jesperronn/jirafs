@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# live-throwaway — manual end-to-end test against ONE throwaway story in your LIVE Jira; never run by agents.
 
 set -uo pipefail
 

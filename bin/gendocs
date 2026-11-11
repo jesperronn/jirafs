@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# gendocs — regenerate the generated README.md and docs/cli.md regions; --check fails when stale.
 
 set -euo pipefail
 

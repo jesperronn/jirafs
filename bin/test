@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# test — shell fixtures, Go tests and the coverage gate; PATH or --package narrows.
 
 set -euo pipefail
 
