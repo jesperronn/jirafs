@@ -380,6 +380,8 @@ follow the same rule: record the intent, then verify before repeating.
 
 ## Documents
 
+Full index by purpose: [docs/README.md](docs/README.md).
+
 - [Architecture](docs/architecture.md)
 - [Issue Format](docs/issue-format.md)
 - [Sync Model](docs/sync-model.md)
