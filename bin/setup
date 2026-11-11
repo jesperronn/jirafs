@@ -1,0 +1,71 @@
+#!/usr/bin/env bash
+# setup — check the tools jirafs needs, then download Go modules. Idempotent.
+set -euo pipefail
+
+usage() {
+    cat <<'USAGE'
+Usage: bin/setup [--check]
+
+Checks go (at least the version in go.mod) with gofmt, python3 and git. These
+cover bin/build, bin/lint, bin/test and tools/*.py (Python standard library
+only). Without --check it then runs `go mod download`. --check changes nothing.
+Exit: 0 ok, 1 a step failed, 9 a tool is missing or too old, 2 usage.
+USAGE
+}
+
+CHECK=0
+case "${1-}" in
+    "") ;;
+    --check) CHECK=1 ;;
+    -h | --help) usage; exit 0 ;;
+    *) usage >&2; exit 2 ;;
+esac
+[ $# -le 1 ] || { usage >&2; exit 2; }
+
+REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+cd "${REPO_ROOT}"
+
+missing=0
+ok() { printf '  ok       %s\n' "$1"; }
+bad() { printf '  MISSING  %s\n' "$1"; missing=1; }
+
+# version_ge A B: true when dotted version A >= B (numeric, up to 3 parts).
+version_ge() {
+    local IFS=. a b i
+    read -r -a a <<<"$1"
+    read -r -a b <<<"$2"
+    for i in 0 1 2; do
+        if [ "${a[i]:-0}" -gt "${b[i]:-0}" ]; then return 0; fi
+        if [ "${a[i]:-0}" -lt "${b[i]:-0}" ]; then return 1; fi
+    done
+    return 0
+}
+
+want_go="$(awk '$1 == "go" { print $2; exit }' go.mod)"
+
+if command -v go >/dev/null 2>&1; then
+    have_go="$(go version | awk '{ sub(/^go/, "", $3); print $3 }')"
+    if version_ge "${have_go%%[!0-9.]*}" "${want_go}"; then
+        ok "go ${have_go} (go.mod wants ${want_go})"
+    else
+        bad "go ${have_go} is older than ${want_go} from go.mod"
+    fi
+else
+    bad "go (need ${want_go} or newer)"
+fi
+for t in gofmt python3 git; do
+    if command -v "${t}" >/dev/null 2>&1; then ok "${t}"; else bad "${t}"; fi
+done
+
+if [ "${missing}" -ne 0 ]; then
+    echo "setup: install the missing tools above, then re-run bin/setup" >&2
+    exit 9
+fi
+if [ "${CHECK}" -eq 1 ]; then
+    echo "setup: tools ok (check only, nothing changed)"
+    exit 0
+fi
+
+echo "  run      go mod download"
+go mod download || { echo "setup: go mod download failed" >&2; exit 1; }
+echo "setup: done; next: bin/build, then bin/verify"
