@@ -39,7 +39,6 @@ MINIMAL_DOCS = {
 MINIMAL_SCRIPTS = {
     "bin/lint": "#!/usr/bin/env bash\n",
     "bin/test": "#!/usr/bin/env bash\n",
-    "bin/verify": "#!/usr/bin/env bash\n",
     "bin/handoff": "#!/usr/bin/env bash\n",
     "tools/repo_checks.py": "x = 1\n",
     "tools/lint_repo.py": "x = 1\n",
@@ -54,7 +53,7 @@ def build_repo(repo_root: Path) -> None:
         path = repo_root / relative_path
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(content, encoding="utf-8")
-        if relative_path in {"bin/lint", "bin/test", "bin/verify", "bin/handoff"}:
+        if relative_path in {"bin/lint", "bin/test", "bin/handoff"}:
             os.chmod(path, 0o755)
 
 

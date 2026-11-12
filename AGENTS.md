@@ -4,7 +4,7 @@
 
 ## Definition of done
 
-`bin/workflows` lists every command. Run `bin/verify` (lint, `gendocs --check`, tests) and show its output before saying "done".
+`bin/workflows` lists every command. Run `bin/lint` (includes `gendocs --check`) and `bin/test` and show its output before saying "done".
 
 Before reporting a task commit ready for integration, run `bin/handoff`. Report the task filename, commit hash, verify result, and the `clean|done|blocked` line it prints.
 
@@ -17,7 +17,7 @@ Before reporting a task commit ready for integration, run `bin/handoff`. Report 
 
 ## Hard rules
 
-- `bin/handoff` only rebases the branch onto `main` and runs `bin/verify`. Never merge or move `main`; the user or orchestrator merges.
+- `bin/handoff` only rebases the branch onto `main` and runs `bin/lint` and `bin/test`. Never merge or move `main`; the user or orchestrator merges.
 - `bin/live-throwaway` writes to a live Jira story: run by hand only.
 - Do not commit built binaries or caches (`jirafs`, `.gocache/`, `.jumbo/`).
 

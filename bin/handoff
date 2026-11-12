@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
-# handoff — rebase the branch onto main and run bin/verify; never merges. Last line: clean|done|blocked.
+# handoff — rebase the branch onto main and run bin/lint and bin/test; never merges. Last line: clean|done|blocked.
 
 set -euo pipefail
 
 # Prepare the current branch for integration: rebase it onto `main` and run
-# bin/verify. This script NEVER merges, fast-forwards, or updates the main
+# bin/lint and bin/test. This script NEVER merges, fast-forwards, or updates the main
 # ref; merging is done by the user or orchestrator.
 #
 # Final line is the status signal:
@@ -41,8 +41,8 @@ if ! git rebase main >/dev/null 2>&1; then
   exit 1
 fi
 
-if ! bin/verify; then
-  echo "blocked: bin/verify failed after rebase onto main; fix and re-run bin/handoff"
+if ! { bin/lint && bin/test; }; then
+  echo "blocked: bin/lint or bin/test failed after rebase onto main; fix and re-run bin/handoff"
   exit 1
 fi
 

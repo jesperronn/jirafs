@@ -33,7 +33,6 @@ DOC_FILES = [
 SCRIPT_FILES = [
     "bin/lint",
     "bin/test",
-    "bin/verify",
     "bin/handoff",
     "tools/repo_checks.py",
     "tools/lint_repo.py",

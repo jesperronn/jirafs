@@ -68,4 +68,4 @@ fi
 
 echo "  run      go mod download"
 go mod download || { echo "setup: go mod download failed" >&2; exit 1; }
-echo "setup: done; next: bin/build, then bin/verify"
+echo "setup: done; next: bin/build, then bin/lint and bin/test"

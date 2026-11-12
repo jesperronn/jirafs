@@ -11,8 +11,8 @@ git config user.email t@example.com
 git config user.name t
 mkdir bin
 cp "${REPO_ROOT}/bin/handoff" bin/handoff
-printf '#!/usr/bin/env bash\nexit 0\n' > bin/verify
-chmod +x bin/handoff bin/verify
+printf '#!/usr/bin/env bash\nexit 0\n' > bin/lint; cp bin/lint bin/test
+chmod +x bin/handoff bin/lint bin/test
 echo a > a; git add -A; git commit -qm base
 
 out="$(bin/handoff 2>&1 || true)"

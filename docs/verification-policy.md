@@ -142,7 +142,7 @@ or update the architecture docs in the same change set.
 
 ## Pre-Merge Checks
 
-`bin/handoff` rebases onto `main` and re-runs `bin/verify` but never merges;
+`bin/handoff` rebases onto `main` and re-runs `bin/lint` and `bin/test` but never merges;
 the user or orchestrator merges afterwards.
 
 Before merge, the change owner must confirm:

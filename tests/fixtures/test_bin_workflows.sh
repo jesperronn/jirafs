@@ -24,10 +24,10 @@ has "${out}" "nodesc           (no description line)" "fallback"; pass "flags a 
 case "${out}" in *beta*) fail "test.sh listed" ;; esac; pass "skips *.test.sh"
 
 all="$("${tmp}/bin/workflows")"
-for s in "== commands ==" "== setup ==" "== test ==" "== lint ==" "== release and integration ==" "bin/handoff" "bin/verify"; do
+for s in "== commands ==" "== setup ==" "== test ==" "== lint ==" "== release and integration ==" "bin/handoff" "bin/lint"; do
     has "${all}" "${s}" "section"
 done
-pass "default prints every section, with verify and handoff under release"
+pass "default prints every section, with handoff under release"
 
 "${tmp}/bin/workflows" --help >/dev/null || fail "--help exit"
 pass "--help exits 0"

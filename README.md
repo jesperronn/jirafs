@@ -244,7 +244,7 @@ asks for confirmation before the first `push --apply` (`--yes` skips it), and
 restores the original values; step results are PASS, FAIL, UNSUPPORTED or
 SKIPPED. Run `bin/live-throwaway --help` for options (`--fix-version`,
 `--custom-field`, `--priority`, `--assignee`) and exit codes. It is manual
-only and is not part of `bin/verify`.
+only and is not part of `bin/lint` or `bin/test`.
 
 ## TLS Certificates
 

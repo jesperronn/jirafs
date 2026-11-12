@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# lint — gofmt and go vet for given paths; whole-repo gofmt and tools/lint_repo.py with none; --autofix.
+# lint — gofmt and go vet for given paths; whole-repo gofmt, tools/lint_repo.py and gendocs --check with none; --autofix.
 
 set -euo pipefail
 
@@ -26,8 +26,8 @@ Positional:
   PATH...     Any number of files or directories. Go files and directories
               are checked with gofmt and go vet; non-Go files are skipped
               with a note. Exits non-zero if any path fails. When omitted,
-              runs gofmt over the whole repo, then the whole-repo lint
-              suite (tools/lint_repo.py).
+              runs gofmt over the whole repo, the whole-repo lint
+              suite (tools/lint_repo.py), then bin/gendocs --check.
 EOF
     exit 0
 }
@@ -146,3 +146,6 @@ check_gofmt .
 
 log "tools/lint_repo.py"
 python3 tools/lint_repo.py
+
+log "bin/gendocs --check"
+bin/gendocs --check

@@ -48,7 +48,7 @@ EOT
 lint() {
     cat <<'EOT'
 == lint ==
-  bin/lint                   # whole repo: gofmt, then tools/lint_repo.py
+  bin/lint                   # whole repo: gofmt, tools/lint_repo.py, gendocs --check
   bin/lint --autofix PATH... # gofmt -w the given Go paths
   bin/gendocs                # regenerate generated doc regions; --check only diffs
 EOT
@@ -57,8 +57,7 @@ EOT
 release() {
     cat <<'EOT'
 == release and integration ==
-  bin/verify                 # lint + gendocs --check + test: the definition of done
-  bin/handoff                # rebase branch onto main, run bin/verify; never merges
+  bin/handoff                # rebase onto main, run bin/lint + bin/test; never merges
   bin/install [--prefix DIR] # install the binary to DIR/bin (default ~/go)
   bin/live-throwaway KEY     # by hand only: writes to ONE live Jira story
   release: none (no changelog, tagging or deploy scripts)

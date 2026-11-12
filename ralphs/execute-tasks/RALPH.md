@@ -29,9 +29,9 @@ You are an autonomous coding agent. Each iteration starts fresh.
 
 1. If pending tasks is empty, print `no tasks remaining` and stop.
 2. Pick the first file. Read it. Implement it fully — no placeholders, no TODOs.
-3. Run `bin/verify`. Fix until it passes. Do not commit failing work.
+3. Run `bin/lint` and `bin/test`. Fix until it passes. Do not commit failing work.
 4. Commit with a conventional message. Move the task file to `tasks/done/` in the same commit.
-5. Run `bin/handoff` (rebase onto `main` + verify only; it never merges). If it prints `blocked`, report it and stop. Otherwise report its `ready to merge` command; do not merge yourself.
+5. Run `bin/handoff` (rebase onto `main` + `bin/lint` + `bin/test` only; it never merges). If it prints `blocked`, report it and stop. Otherwise report its `ready to merge` command; do not merge yourself.
 
 ## Rules
 
