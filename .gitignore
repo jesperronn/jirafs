@@ -1,7 +1,5 @@
 __pycache__/
-*.py[cod]
-/jirafs
 .gocache/
 .claude/
 .jumbo/
-/.bin/
+.bin/
