@@ -1,11 +1,13 @@
 #!/usr/bin/env bash
-# install — build and install jirafs to DIR/bin (default ~/go).
+# install — install a binary snapshot or --link the checkout launcher to DIR/bin.
 
 set -euo pipefail
 
-# Usage: bin/install [--help] [--prefix DIR]
+# Usage: bin/install [--help] [--prefix DIR] [--link] [--force]
 #   --help        Print usage and exit.
 #   --prefix DIR  Install to DIR/bin (default: ~/go).
+#   --link        Link the checkout launcher instead of installing a binary snapshot.
+#   --force       Replace an existing link or, in link mode, an existing binary.
 
 usage() {
     cat >&2 <<EOF
@@ -14,20 +16,30 @@ Usage: $(basename "$0") [OPTIONS]
 Options:
   --help        Show this help message and exit.
   --prefix DIR  Install to DIR/bin (default: ~/go).
+  --link        Link this checkout's launcher; requires Go each time it runs.
+  --force       Replace a conflicting symlink or an existing binary in link mode.
 EOF
     exit 0
 }
 
 PREFIX="${HOME}/go"
+LINK=0
+FORCE=0
 
 while [ $# -gt 0 ]; do
     case "$1" in
         --help|-h)
             usage
             ;;
+        --link)
+            LINK=1
+            ;;
+        --force)
+            FORCE=1
+            ;;
         --prefix)
             shift
-            if [ $# -eq 0 ] || [[ "$1" == -* ]]; then
+            if [ $# -eq 0 ] || [[ -z "$1" || "$1" == -* ]]; then
                 echo "error: --prefix requires a DIR argument" >&2
                 exit 1
             fi
@@ -41,8 +53,41 @@ while [ $# -gt 0 ]; do
     shift
 done
 
-REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-DEST="${PREFIX}/bin/jirafs"
+REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)"
+mkdir -p "${PREFIX}/bin"
+INSTALL_DIR="$(cd "${PREFIX}/bin" && pwd -P)"
+DEST="${INSTALL_DIR}/jirafs"
+LAUNCHER="${REPO_ROOT}/bin/jirafs"
 
-"${REPO_ROOT}/bin/build" --output "${DEST}"
+if [[ "${DEST}" == "${LAUNCHER}" ]]; then
+    echo "error: install destination is this checkout launcher; choose another --prefix" >&2
+    exit 1
+fi
+
+if [[ -d "${DEST}" && ! -L "${DEST}" ]]; then
+    echo "error: ${DEST} is a directory; choose another --prefix" >&2
+    exit 1
+fi
+if [[ "${LINK}" == 1 && -L "${DEST}" && "$(readlink "${DEST}")" == "${LAUNCHER}" ]]; then
+    echo "already linked → ${DEST}"
+    exit 0
+fi
+if [[ ( -L "${DEST}" || ( "${LINK}" == 1 && -e "${DEST}" ) ) && "${FORCE}" != 1 ]]; then
+    echo "error: ${DEST} already exists; rerun bin/install with --force to replace it" >&2
+    exit 1
+fi
+
+# Publish a complete snapshot or symlink without following an existing symlink.
+TEMPORARY="$(mktemp "${INSTALL_DIR}/.jirafs-install.XXXXXX")"
+trap 'rm -f "${TEMPORARY}"' EXIT
+if [[ "${LINK}" == 1 ]]; then
+    [[ -x "${LAUNCHER}" ]] || { echo "error: checkout launcher missing: ${LAUNCHER}" >&2; exit 1; }
+    rm -f "${TEMPORARY}"
+    ln -s "${LAUNCHER}" "${TEMPORARY}"
+else
+    "${REPO_ROOT}/bin/build" --output "${TEMPORARY}"
+fi
+# mv follows symlinks to directories; remove only the explicitly replaced link.
+if [[ -L "${DEST}" ]]; then rm -f "${DEST}"; fi
+mv -f "${TEMPORARY}" "${DEST}"
 echo "installed → ${DEST}"

@@ -30,8 +30,9 @@ setup() {
     cat <<'EOT'
 == setup ==
   bin/setup --check          # verify go, python3, git; changes nothing
-  bin/setup                  # same checks, then go mod download; idempotent
-  bin/build                  # first check after setup: builds ./jirafs
+  bin/setup                  # same checks, then offline vendor check; idempotent
+  bin/build                  # build a standalone ./jirafs snapshot
+  bin/jirafs --help           # run this checkout through the Go build cache
 EOT
 }
 
@@ -58,7 +59,8 @@ release() {
     cat <<'EOT'
 == release and integration ==
   bin/handoff                # rebase onto main, run bin/lint + bin/test; never merges
-  bin/install [--prefix DIR] # install the binary to DIR/bin (default ~/go)
+  bin/install [--prefix DIR] # install a binary snapshot to DIR/bin (default ~/go)
+  bin/install --link         # link the checkout launcher; --help covers replacements
   bin/live-throwaway KEY     # by hand only: writes to ONE live Jira story
   release: none (no changelog, tagging or deploy scripts)
 EOT

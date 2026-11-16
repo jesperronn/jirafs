@@ -6,6 +6,23 @@ The project goal is to make Jira issues editable as structured Markdown files,
 sync those files safely back to Jira, and retain a durable archive that can be
 used for analysis, agent workflows, and team process improvement.
 
+## Run from a checkout
+
+Use `bin/jirafs` to run the current checkout. To put that launcher on PATH:
+
+```sh
+bin/install --link
+```
+
+The launcher requires Go and an available checkout. Each invocation calls
+`bin/build`, using Go's cache to account for source, dependency and embedded-file
+changes, then atomically replaces the ignored `.bin/jirafs` executable. A failed
+build stops the launch; it never runs the previous binary. Build diagnostics go
+to stderr, and the application keeps your working directory and arguments.
+
+Plain `bin/install` keeps installing a standalone binary snapshot instead.
+Run `bin/install --help` for another prefix or replacing an existing install.
+
 ## Current Workflow
 
 The current CLI is usable as a narrow operator workflow:

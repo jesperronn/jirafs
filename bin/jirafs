@@ -1,0 +1,20 @@
+#!/usr/bin/env bash
+# jirafs — build through Go's cache, then run the current checkout from any directory.
+set -euo pipefail
+
+# Resolve installed symlinks without changing the application's working directory.
+launcher="${BASH_SOURCE[0]}"
+while [[ -L "$launcher" ]]; do
+    directory="$(cd -P "$(dirname "$launcher")" && pwd)"
+    target="$(readlink "$launcher")"
+    if [[ "$target" == /* ]]; then launcher="$target"; else launcher="$directory/$target"; fi
+done
+root="$(cd -P "$(dirname "$launcher")/.." && pwd)"
+mkdir -p "$root/.bin"
+temporary="$(mktemp "$root/.bin/.jirafs.XXXXXX")"
+trap 'rm -f "$temporary"' EXIT
+
+# Go owns source/dependency/embed freshness; never execute an old binary on failure.
+"$root/bin/build" --output "$temporary" >&2
+mv -f "$temporary" "$root/.bin/jirafs"
+exec "$root/.bin/jirafs" "$@"
