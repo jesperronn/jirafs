@@ -75,12 +75,24 @@ log() {
 }
 
 # check_gofmt SCOPE...
-# Fails (listing files) if gofmt -l reports unformatted Go files in SCOPE.
+# Fails if gofmt reports unformatted owned Go files; excludes vendor sources.
 # With --autofix, rewrites them with gofmt -w instead.
 check_gofmt() {
     log "gofmt -l $*"
-    local fmt_out
-    fmt_out="$(gofmt -l "$@" || true)"
+    local fmt_out scope file
+    local files=()
+    for scope in "$@"; do
+        case "/${scope#./}/" in */vendor/*) continue ;; esac
+        if [ -d "${scope}" ]; then
+            while IFS= read -r file; do files+=("${file}"); done < <(
+                find "${scope}" -type d -name vendor -prune -o -type f -name '*.go' -print
+            )
+        else
+            files+=("${scope}")
+        fi
+    done
+    [ "${#files[@]}" -gt 0 ] || return 0
+    fmt_out="$(gofmt -l "${files[@]}" || true)"
     if [ -z "${fmt_out}" ]; then
         return 0
     fi

@@ -1,0 +1,10 @@
+{
+  "base_url": "https://jira.example.test",
+  "auth_type": "bearer_token",
+  "credential_ref": "env://JIRA_TOKEN",
+  "credential_fallback_ref": "op://EXAMPLE_JIRA_TOKEN/token",
+  "custom_fields": [
+    "customfield_12345"
+  ],
+  "timeout": "30s"
+}

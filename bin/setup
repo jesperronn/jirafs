@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# setup — check the tools jirafs needs, then download Go modules. Idempotent.
+# setup — check tools and use vendored dependencies or download modules. Idempotent.
 set -euo pipefail
 
 usage() {
@@ -8,7 +8,8 @@ Usage: bin/setup [--check]
 
 Checks go (at least the version in go.mod) with gofmt, python3 and git. These
 cover bin/build, bin/lint, bin/test and tools/*.py (Python standard library
-only). Without --check it then runs `go mod download`. --check changes nothing.
+only). Without --check it checks vendored dependencies offline when present,
+otherwise runs `go mod download`. --check changes nothing.
 Exit: 0 ok, 1 a step failed, 9 a tool is missing or too old, 2 usage.
 USAGE
 }
@@ -66,6 +67,11 @@ if [ "${CHECK}" -eq 1 ]; then
     exit 0
 fi
 
-echo "  run      go mod download"
-go mod download || { echo "setup: go mod download failed" >&2; exit 1; }
+if [ -f vendor/modules.txt ]; then
+    echo "  run      go list -mod=vendor -deps ./..."
+    go list -mod=vendor -deps ./... >/dev/null || { echo "setup: vendored dependency check failed" >&2; exit 1; }
+else
+    echo "  run      go mod download"
+    go mod download || { echo "setup: go mod download failed" >&2; exit 1; }
+fi
 echo "setup: done; next: bin/build, then bin/lint and bin/test"

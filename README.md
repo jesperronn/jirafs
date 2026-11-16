@@ -64,6 +64,30 @@ recorded `conflicts:` block is refused whatever its timestamps say; when it is
 named explicitly with `--apply` the exit code is 1. The exit code is also 1
 when any issue failed.
 
+## Jira adapter
+
+The existing Jira adapter remains the default. Select the shared Data Center
+adapter for one invocation:
+
+```sh
+JIRAFS_JIRA_ADAPTER=jira-connect jirafs pull PLAT-123 --project platform
+```
+
+Set `JIRAFS_JIRA_ADAPTER=legacy`, or unset it, to use the original adapter.
+Unknown values fail before credential resolution. Both adapters use the existing
+instance credential references, project custom fields and epic-link setting.
+The shared adapter runs in process; no MCP server or connector config is needed.
+
+Writes retain the existing preview/`--apply` gates. If Jira accepts an update but
+its refresh fails, push reports the accepted write and stops before any planned
+status transition. An unknown write outcome is reported separately. Neither
+case retries the mutation or advances local/base state; use the printed read-only
+refresh command before deciding what to do next. No live writes were used to
+verify this integration.
+
+See [dependency maintenance](docs/development-rules.md) for
+the pinned connector source and offline build setup.
+
 ## Mirror scopes
 
 Scopes live in `<mirror_dir>/mirror.yml`. Pull one by name with

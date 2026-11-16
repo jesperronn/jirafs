@@ -26,7 +26,7 @@ func (g *gitTracker) commitPush(results []pushResult, host string, now time.Time
 		case r.status == pushOK && r.summary != "":
 			pushed = append(pushed, r)
 			attempted++
-		case r.status == pushFailed:
+		case r.status == pushFailed || r.status == pushAccepted || r.status == pushUnknown:
 			notPushed = append(notPushed, r)
 			failedKeys = append(failedKeys, r.name)
 			attempted++
@@ -54,7 +54,11 @@ func (g *gitTracker) commitPush(results []pushResult, host string, now time.Time
 			if r.status == pushSkipped {
 				reason = r.status
 			}
-			fmt.Fprintf(&b, "not pushed: %s (%s)\n", r.name, reason)
+			label := "not pushed"
+			if r.status == pushAccepted || r.status == pushUnknown {
+				label = "not synchronized"
+			}
+			fmt.Fprintf(&b, "%s: %s (%s)\n", label, r.name, reason)
 		}
 	}
 	paths = append(paths, g.mirrorFiles()...)

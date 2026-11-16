@@ -3,6 +3,7 @@ package cli
 import (
 	stdcontext "context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -11,10 +12,12 @@ import (
 	"strings"
 	"time"
 
+	connect "github.com/jesperronn/jira-connect"
 	"github.com/jirafs/jirafs/internal/codec"
 	"github.com/jirafs/jirafs/internal/config"
 	"github.com/jirafs/jirafs/internal/context"
 	"github.com/jirafs/jirafs/internal/jira"
+	"github.com/jirafs/jirafs/internal/jiraconnect"
 	"github.com/jirafs/jirafs/internal/mirror"
 	"github.com/jirafs/jirafs/internal/plan"
 	"github.com/jirafs/jirafs/internal/schema"
@@ -43,9 +46,11 @@ type pushOptions struct {
 
 // Result states of one pushed issue.
 const (
-	pushOK      = "ok"
-	pushSkipped = "skipped (conflict)"
-	pushFailed  = "failed"
+	pushOK       = "ok"
+	pushSkipped  = "skipped (conflict)"
+	pushFailed   = "failed"
+	pushAccepted = "accepted (refresh failed)"
+	pushUnknown  = "outcome unknown"
 )
 
 // pushResult is the outcome of one target: a line of the final summary.
@@ -92,6 +97,24 @@ func pushFail(name, msg string) pushResult {
 	fmt.Fprint(pushStderr, "jirafs push: "+msg)
 	first, _, _ := strings.Cut(msg, "\n")
 	return pushResult{name: name, status: pushFailed, reason: first}
+}
+
+// incompleteWrite reports an accepted/uncertain mutation without claiming it was
+// rejected or marking stale local content synchronized. It never retries writes.
+func (r *pushRun) incompleteWrite(name, key, status, message string) pushResult {
+	parts := []string{"jirafs", "pull"}
+	if key != "" {
+		parts = append(parts, shellQuote(key))
+	}
+	if r.opts.project != "" {
+		parts = append(parts, "--project", shellQuote(r.opts.project))
+	}
+	if r.opts.cwd != "" {
+		parts = append(parts, "--cwd", shellQuote(r.opts.cwd))
+	}
+	result := pushFail(name, message+"\nLocal file and base remain unchanged; inspect Jira before retrying any write.\nRefresh without writing: "+strings.Join(parts, " "))
+	result.status = status
+	return result
 }
 
 // RunPush implements `jirafs push [KEY|file...] [--apply]`.
@@ -419,6 +442,10 @@ func (r *pushRun) createDraft(path, doc string) pushResult {
 		var err error
 		key, err = client.CreateIssue(r.cmdCtx, toCreate)
 		if err != nil {
+			var unknown *connect.WriteOutcomeUnknownError
+			if errors.As(err, &unknown) {
+				return r.incompleteWrite(name, "", pushUnknown, "Create outcome unknown; draft and create intent retained. No automatic retry was made.")
+			}
 			return pushFail(name, fmt.Sprintf("cannot create issue: %v", err))
 		}
 	}
@@ -558,10 +585,26 @@ func (r *pushRun) updateIssue(key string, localIssue schema.Issue, localPath str
 
 	updatedRemote, err := client.UpdateIssue(r.cmdCtx, key, result.Remote)
 	if err != nil {
+		var refreshed *jiraconnect.RefreshAfterWriteError
+		if errors.As(err, &refreshed) {
+			message := "Jira accepted the field update, but the remote refresh failed: " + refreshed.Cause.Error()
+			if statusTr != nil {
+				message += "; planned status transition was not attempted"
+			}
+			return r.incompleteWrite(key, key, pushAccepted, message)
+		}
+		var unknown *connect.WriteOutcomeUnknownError
+		if errors.As(err, &unknown) {
+			return r.incompleteWrite(key, key, pushUnknown, "Update outcome unknown; Jira may already have applied it. No automatic retry or status transition was made.")
+		}
 		return pushFail(key, fmt.Sprintf("cannot update remote issue: %v", err))
 	}
 	if statusTr != nil {
 		if err := client.DoTransition(r.cmdCtx, key, statusTr.ID, transitionFields); err != nil {
+			var unknown *connect.WriteOutcomeUnknownError
+			if errors.As(err, &unknown) {
+				return r.incompleteWrite(key, key, pushUnknown, "Status transition outcome unknown; fields already applied. No automatic retry was made.")
+			}
 			return pushFail(key, fmt.Sprintf("fields updated, but status transition %q failed (the field update was already applied): %v", statusTr.Name, err))
 		}
 	}

@@ -38,3 +38,12 @@ bin/lint one two >/dev/null 2>&1 || { echo "tree should be clean after autofix";
 # --help goes to stdout.
 out="$(bin/lint --help 2>/dev/null)"
 case "${out}" in *"PATH..."*) ;; *) echo "help not on stdout: ${out}"; exit 1;; esac
+
+# Vendored sources retain upstream formatting in checks and autofix.
+mkdir vendor
+printf 'package vendored\nfunc Value() int {return 1}\n' > vendor/unformatted.go
+vendor_before="$(cat vendor/unformatted.go)"
+out="$(bin/lint . 2>&1)" || { echo "vendored sources should be excluded: ${out}"; exit 1; }
+bin/lint --autofix . >/dev/null 2>&1 || { echo "autofix with vendored sources should pass"; exit 1; }
+[ "$(cat vendor/unformatted.go)" = "${vendor_before}" ] || { echo "autofix changed upstream vendor formatting"; exit 1; }
+echo "[PASS] lint excludes vendor from formatting and autofix"

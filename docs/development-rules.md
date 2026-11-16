@@ -182,3 +182,31 @@ work.
 - do not interfere with unrelated in-flight work
 - keep Go dependencies conservative and justify every new external package
 - keep code simple enough to lint, test, refactor, and hand off easily
+
+## Connector dependency
+
+The optional adapter lives in `internal/jiraconnect`; it was adapted from
+`jira-connect/bridges/jirafs` at commit `f32949d6d7020e3c6884ff70df06b02472475751`.
+Consumer normalization, file sync, conflict detection and credentials stay here.
+The adapter's generic client is pinned in `go.mod` as
+`github.com/jesperronn/jira-connect v0.0.0-20261116075306-f32949d6d702`.
+
+Dependencies are committed under `vendor/`, so builds, lint and tests need no
+private-repository access or sibling checkout. `bin/setup` checks vendored
+packages without downloading modules. Lint excludes upstream vendor formatting.
+Do not edit vendored sources directly.
+
+To update the pin, use an authenticated development environment with access to
+the connector repository:
+
+```sh
+go get github.com/jesperronn/jira-connect@<reviewed-commit>
+go mod tidy
+go mod vendor
+bin/lint
+bin/test
+```
+
+Review the consumer bridge against the new connector contract, update its
+provenance when copying bridge changes, and commit the reviewed dependency
+files together. Never commit machine-local `replace` paths.

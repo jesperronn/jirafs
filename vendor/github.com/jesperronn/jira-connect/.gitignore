@@ -1,0 +1,12 @@
+/.gocache/
+/jira-connect
+/coverage.out
+/.env
+/.DS_Store
+/activity-examples/
+__pycache__/
+/.bin/
+/jira-connect-mcp
+/config.local.json
+/live-test.local.json
+/live-test-results/

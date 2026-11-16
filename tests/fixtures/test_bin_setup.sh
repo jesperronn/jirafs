@@ -46,6 +46,15 @@ run >/dev/null
 [ "$(grep -c 'mod download' "${tmp}/calls")" -eq 2 ] || fail "second run not repeatable"
 pass "plain run downloads modules and is repeatable"
 
+reset_stubs
+mkdir -p "${proj}/vendor"
+printf '# offline fixture\n' >"${proj}/vendor/modules.txt"
+rc=0; out="$(run)" || rc=$?
+[ "${rc}" -eq 0 ] || fail "vendored setup exit ${rc}: ${out}"
+grep -Fq 'go list -mod=vendor -deps ./...' "${tmp}/calls" || fail "vendored setup did not check offline dependencies"
+if grep -q 'mod download' "${tmp}/calls"; then fail "vendored setup tried to download private dependencies"; fi
+pass "vendored checkout checks dependencies without downloads"
+
 reset_stubs; rm "${tmp}/stubs/python3"
 rc=0; out="$(run --check)" || rc=$?
 [ "${rc}" -eq 9 ] || fail "missing python3 exit ${rc}"
