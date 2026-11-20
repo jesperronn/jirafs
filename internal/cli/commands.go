@@ -85,6 +85,7 @@ var commandDocs = []CommandDoc{
 					[2]string{"--project NAME", "name of a configured project (default: resolved from --cwd or the remembered project)"},
 					[2]string{"--cwd DIR", "working directory for project resolution"},
 					[2]string{"--full", "scope only: ignore the last-sync cursor and refetch every issue"},
+					[2]string{"--verbose", "report pull progress on stderr"},
 					[2]string{"--stdout", "KEY only: print the document and write no file"},
 					[2]string{"--dry-run", "print what would be fetched and the real command; write nothing"},
 				),

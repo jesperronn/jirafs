@@ -26,6 +26,18 @@ func TestRunPull_NoArgPullsEveryConfiguredScope(t *testing.T) {
 	}
 }
 
+func TestRunPull_VerboseReportsScopesOnStderr(t *testing.T) {
+	e := newIncrEnv(t, "  - name: team\n    type: jql\n    target: project = TEST\n")
+	if code := RunPull([]string{"--verbose", "--project", "test"}); code != 0 {
+		t.Fatalf("exit = %d, stderr = %q", code, e.stderr.String())
+	}
+	for _, progress := range []string{`processing scope "my-issues"`, `processing scope "team"`} {
+		if !strings.Contains(e.stderr.String(), progress) || strings.Contains(e.stdout.String(), progress) {
+			t.Errorf("expected %q only on stderr, got stdout %q and stderr %q", progress, e.stdout.String(), e.stderr.String())
+		}
+	}
+}
+
 // TestRunPull_NoArgDryRunPrintsOneRealCommand verifies that a bare dry run
 // lists every scope and ends with the single real command.
 func TestRunPull_NoArgDryRunPrintsOneRealCommand(t *testing.T) {

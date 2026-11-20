@@ -76,6 +76,7 @@ Flags:
 - `--project NAME`: name of a configured project (default: resolved from --cwd or the remembered project)
 - `--cwd DIR`: working directory for project resolution
 - `--full`: scope only: ignore the last-sync cursor and refetch every issue
+- `--verbose`: report pull progress on stderr
 - `--stdout`: KEY only: print the document and write no file
 - `--dry-run`: print what would be fetched and the real command; write nothing
 - `--help, -h`: show this help message

@@ -58,6 +58,7 @@ func RunPull(args []string) int {
 	stdoutFlag := fs.Bool("stdout", false, "print one issue to stdout and write no file")
 	dryRunFlag := fs.Bool("dry-run", false, "print what would be fetched and written; change nothing")
 	fullFlag := fs.Bool("full", false, "ignore the last-sync cursor and refetch every issue of the scope")
+	verboseFlag := fs.Bool("verbose", false, "report pull progress on stderr")
 	if err := parseFlags(fs, args); err != nil {
 		return flagError(pullStderr, "jirafs pull", err)
 	}
@@ -96,7 +97,7 @@ func RunPull(args []string) int {
 			fmt.Fprintf(pullStderr, "jirafs pull: %q is both an issue key and a scope name in mirror.yml; rename the scope in mirror.yml (e.g. %q) and re-run\n", arg, strings.ToLower(arg))
 			return 1
 		}
-		return runPullIssue(cmdCtx, arg, settings, ctx, m, mirrorPath, cwd, *stdoutFlag, *dryRunFlag)
+		return runPullIssue(cmdCtx, arg, settings, ctx, m, mirrorPath, cwd, *stdoutFlag, *dryRunFlag, *verboseFlag)
 	}
 
 	var names []string
@@ -127,6 +128,9 @@ func RunPull(args []string) int {
 	}
 	exit := 0
 	for _, name := range names {
+		if *verboseFlag {
+			fmt.Fprintf(pullStderr, "jirafs pull: processing scope %q in project %q\n", name, ctx.Name)
+		}
 		if code := runPullScope(cmdCtx, client, settings, ctx, m, mirrorPath, name, *fullFlag, *dryRunFlag); code != 0 {
 			exit = code
 		}
@@ -151,11 +155,15 @@ func realArgs(arg string, full bool) string {
 
 // runPullIssue pulls one issue: it fetches it from Jira and writes it to
 // <local_dirs[0]>/<KEY>.md, or prints it with --stdout.
-func runPullIssue(cmdCtx stdcontext.Context, arg string, settings *config.Settings, ctx *context.Context, m *mirror.Mirror, mirrorPath, cwd string, toStdout, dryRun bool) int {
+func runPullIssue(cmdCtx stdcontext.Context, arg string, settings *config.Settings, ctx *context.Context, m *mirror.Mirror, mirrorPath, cwd string, toStdout, dryRun, verbose bool) int {
 	key, err := jira.ParseIssueRef(arg, settings.Instances[ctx.Instance].BaseURL)
 	if err != nil {
 		fmt.Fprintf(pullStderr, "jirafs pull: %s\n", strings.ReplaceAll(err.Error(), "<name>", ctx.Name))
 		return 1
+	}
+
+	if verbose {
+		fmt.Fprintf(pullStderr, "jirafs pull: processing issue %q in project %q\n", key, ctx.Name)
 	}
 
 	client, err := pullClientFactory(settings, ctx, cwd)
